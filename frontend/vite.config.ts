@@ -16,6 +16,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // A real http origin so jsdom enables Web Storage (localStorage/sessionStorage).
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
     setupFiles: './src/test/setup.ts',
     css: true,
   },
