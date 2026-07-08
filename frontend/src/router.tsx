@@ -5,6 +5,8 @@ import PlaceholderPage from '@/pages/PlaceholderPage';
 import SplashPage from '@/pages/SplashPage';
 import LoginPage from '@/pages/LoginPage';
 import CompleteProfilePage from '@/pages/CompleteProfilePage';
+import HomePage from '@/pages/HomePage';
+import ProfilePage from '@/pages/ProfilePage';
 
 /**
  * Route table for the app. Public/auth routes are top-level; participant screens
@@ -22,8 +24,8 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       // Child paths are relative to '/app'.
-      { index: true, element: <PlaceholderPage title="Home" /> },
-      { path: 'profile', element: <PlaceholderPage title="Profile" /> },
+      { index: true, element: <HomePage /> },
+      { path: 'profile', element: <ProfilePage /> },
       { path: 'qr', element: <PlaceholderPage title="My QR ID" /> },
     ],
   },
