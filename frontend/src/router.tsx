@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import SplashPage from '@/pages/SplashPage';
 import LoginPage from '@/pages/LoginPage';
+import CompleteProfilePage from '@/pages/CompleteProfilePage';
 
 /**
  * Route table for the app. Public/auth routes are top-level; participant screens
@@ -13,7 +14,7 @@ import LoginPage from '@/pages/LoginPage';
 export const router = createBrowserRouter([
   { path: ROUTES.splash, element: <SplashPage /> },
   { path: ROUTES.login, element: <LoginPage /> },
-  { path: ROUTES.completeProfile, element: <PlaceholderPage title="Complete Your Profile" /> },
+  { path: ROUTES.completeProfile, element: <CompleteProfilePage /> },
 
   // Participant area — rendered inside the navigation shell.
   {
