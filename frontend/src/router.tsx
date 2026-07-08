@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
 import PlaceholderPage from '@/pages/PlaceholderPage';
+import SplashPage from '@/pages/SplashPage';
 
 /**
  * Route table for the app. Public/auth routes are top-level; participant screens
@@ -9,7 +10,7 @@ import PlaceholderPage from '@/pages/PlaceholderPage';
  * real screen as it lands.
  */
 export const router = createBrowserRouter([
-  { path: ROUTES.splash, element: <PlaceholderPage title="Splash / Role Landing" /> },
+  { path: ROUTES.splash, element: <SplashPage /> },
   { path: ROUTES.login, element: <PlaceholderPage title="Sign in with Google" /> },
   { path: ROUTES.completeProfile, element: <PlaceholderPage title="Complete Your Profile" /> },
 
