@@ -9,6 +9,8 @@ import LoginPage from '@/pages/LoginPage';
 import HomePage from '@/pages/HomePage';
 import ProfilePage from '@/pages/ProfilePage';
 import MyQrPage from '@/pages/MyQrPage';
+import ScannerPage from '@/pages/ScannerPage';
+import ScanResultPage from '@/pages/ScanResultPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
 // it so that dataset is split out of the main bundle — keeping the offline app
@@ -57,8 +59,8 @@ export const router = createBrowserRouter([
     ],
   },
 
-  { path: ROUTES.scanner, element: <PlaceholderPage title="QR Scanner" /> },
-  { path: ROUTES.scanResult, element: <PlaceholderPage title="Scan Result" /> },
+  { path: ROUTES.scanner, element: <ScannerPage /> },
+  { path: ROUTES.scanResult, element: <ScanResultPage /> },
 
   { path: ROUTES.users, element: <PlaceholderPage title="User Management" /> },
 
