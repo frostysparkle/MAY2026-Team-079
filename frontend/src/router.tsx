@@ -1,23 +1,49 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
+import { Spinner } from '@/components/ui';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import SplashPage from '@/pages/SplashPage';
 import LoginPage from '@/pages/LoginPage';
-import CompleteProfilePage from '@/pages/CompleteProfilePage';
 import HomePage from '@/pages/HomePage';
 import ProfilePage from '@/pages/ProfilePage';
 import MyQrPage from '@/pages/MyQrPage';
 
+// Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
+// it so that dataset is split out of the main bundle — keeping the offline app
+// shell (including My QR) small and precacheable by the service worker.
+const CompleteProfilePage = lazy(() => import('@/pages/CompleteProfilePage'));
+
+function Lazy({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-full items-center justify-center p-10">
+          <Spinner size={28} label="Loading" />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
+}
+
 /**
  * Route table for the app. Public/auth routes are top-level; participant screens
- * render inside the AppShell layout. Each route's `element` is swapped for the
- * real screen as it lands.
+ * render inside the AppShell layout.
  */
 export const router = createBrowserRouter([
   { path: ROUTES.splash, element: <SplashPage /> },
   { path: ROUTES.login, element: <LoginPage /> },
-  { path: ROUTES.completeProfile, element: <CompleteProfilePage /> },
+  {
+    path: ROUTES.completeProfile,
+    element: (
+      <Lazy>
+        <CompleteProfilePage />
+      </Lazy>
+    ),
+  },
 
   // Participant area — rendered inside the navigation shell.
   {
