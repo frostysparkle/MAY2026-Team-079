@@ -30,9 +30,7 @@ describe('LoginPage', () => {
 
   it('signs in a seeded admin and routes to User Management', async () => {
     renderLogin();
-    await userEvent.click(
-      screen.getByRole('button', { name: 'admin@es.study.iitm.ac.in' }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'admin@es.study.iitm.ac.in' }));
     expect(await screen.findByText('User Management')).toBeInTheDocument();
     expect(useAuthStore.getState().participant?.role).toBe('admin');
   });
