@@ -2,8 +2,8 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Spinner } from '@/components/ui';
-import PlaceholderPage from '@/pages/PlaceholderPage';
 import SplashPage from '@/pages/SplashPage';
 import LoginPage from '@/pages/LoginPage';
 import HomePage from '@/pages/HomePage';
@@ -11,6 +11,8 @@ import ProfilePage from '@/pages/ProfilePage';
 import MyQrPage from '@/pages/MyQrPage';
 import ScannerPage from '@/pages/ScannerPage';
 import ScanResultPage from '@/pages/ScanResultPage';
+import AccessDeniedPage from '@/pages/AccessDeniedPage';
+import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
 // it so that dataset is split out of the main bundle — keeping the offline app
@@ -32,38 +34,68 @@ function Lazy({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Route table for the app. Public/auth routes are top-level; participant screens
- * render inside the AppShell layout.
+ * Route table. Public/auth routes are top-level; everything else is gated by
+ * ProtectedRoute (auth, and a minimum role where relevant). Guards protect UI
+ * only — the backend enforces RBAC server-side.
  */
 export const router = createBrowserRouter([
   { path: ROUTES.splash, element: <SplashPage /> },
   { path: ROUTES.login, element: <LoginPage /> },
+  { path: ROUTES.accessDenied, element: <AccessDeniedPage /> },
+
   {
     path: ROUTES.completeProfile,
     element: (
-      <Lazy>
-        <CompleteProfilePage />
-      </Lazy>
+      <ProtectedRoute>
+        <Lazy>
+          <CompleteProfilePage />
+        </Lazy>
+      </ProtectedRoute>
     ),
   },
 
-  // Participant area — rendered inside the navigation shell.
+  // Participant area — any authenticated user, rendered inside the nav shell.
   {
     path: ROUTES.home,
-    element: <AppShell />,
+    element: (
+      <ProtectedRoute>
+        <AppShell />
+      </ProtectedRoute>
+    ),
     children: [
-      // Child paths are relative to '/app'.
       { index: true, element: <HomePage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'qr', element: <MyQrPage /> },
     ],
   },
 
-  { path: ROUTES.scanner, element: <ScannerPage /> },
-  { path: ROUTES.scanResult, element: <ScanResultPage /> },
+  // Staff scanning — organizer role or higher.
+  {
+    path: ROUTES.scanner,
+    element: (
+      <ProtectedRoute minRole="organizer">
+        <ScannerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.scanResult,
+    element: (
+      <ProtectedRoute minRole="organizer">
+        <ScanResultPage />
+      </ProtectedRoute>
+    ),
+  },
 
-  { path: ROUTES.users, element: <PlaceholderPage title="User Management" /> },
+  // Admin user management — admin role or higher.
+  {
+    path: ROUTES.users,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <PlaceholderPage title="User Management" />
+      </ProtectedRoute>
+    ),
+  },
 
-  { path: ROUTES.accessDenied, element: <PlaceholderPage title="Access Denied" /> },
   { path: '*', element: <PlaceholderPage title="Not Found" /> },
 ]);
