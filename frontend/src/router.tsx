@@ -12,6 +12,7 @@ import MyQrPage from '@/pages/MyQrPage';
 import ScannerPage from '@/pages/ScannerPage';
 import ScanResultPage from '@/pages/ScanResultPage';
 import AccessDeniedPage from '@/pages/AccessDeniedPage';
+import UsersPage from '@/pages/UsersPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -92,7 +93,7 @@ export const router = createBrowserRouter([
     path: ROUTES.users,
     element: (
       <ProtectedRoute minRole="admin">
-        <PlaceholderPage title="User Management" />
+        <UsersPage />
       </ProtectedRoute>
     ),
   },
