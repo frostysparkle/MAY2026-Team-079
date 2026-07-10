@@ -9,3 +9,4 @@ export { Skeleton } from './Skeleton';
 export { EmptyState } from './EmptyState';
 export { ErrorState } from './ErrorState';
 export { Card, ListItem } from './Card';
+export { ToastHost } from './ToastHost';
