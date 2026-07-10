@@ -1,0 +1,11 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Backend for the MAY2026-Team-079 project"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.139.0",
+    "pymongo>=4.17.0",
+    "uvicorn[standard]>=0.30.0",
+]
