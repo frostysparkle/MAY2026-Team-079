@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
+import { clearSecrets } from '@/lib/secretStore';
 import { cn } from '@/lib/cn';
 
 /** Bottom-nav tabs for the participant area. */
@@ -22,6 +23,9 @@ export function AppShell() {
   const navigate = useNavigate();
 
   const signOut = () => {
+    // Clear cached TOTP secrets too, so a shared/handed-over device can't keep
+    // generating this participant's codes.
+    void clearSecrets();
     clear();
     navigate(ROUTES.splash, { replace: true });
   };

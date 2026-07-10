@@ -10,13 +10,7 @@ import { roleRank, type Role } from '@/config/constants';
  * authenticated users lacking the required role get the Access Denied page (no
  * protected content renders behind it).
  */
-export function ProtectedRoute({
-  minRole,
-  children,
-}: {
-  minRole?: Role;
-  children: ReactNode;
-}) {
+export function ProtectedRoute({ minRole, children }: { minRole?: Role; children: ReactNode }) {
   const participant = useAuthStore((s) => s.participant);
 
   if (!participant) {

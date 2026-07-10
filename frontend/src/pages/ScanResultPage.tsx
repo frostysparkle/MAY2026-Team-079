@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '@/api';
 import type { VerifyScanResponse } from '@/api/types';
 import { ROUTES } from '@/config/routes';
@@ -41,8 +41,7 @@ export default function ScanResultPage() {
 
   // Direct navigation with no scan data → send back to the scanner.
   if (!scan) {
-    navigate(ROUTES.scanner, { replace: true });
-    return null;
+    return <Navigate to={ROUTES.scanner} replace />;
   }
 
   const display = response ? RESULT_DISPLAY[response.result] : null;

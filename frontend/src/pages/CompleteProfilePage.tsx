@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
 import type { CompleteProfileRequest, Gender, Program, CourseStage } from '@/api/types';
 import { ROUTES } from '@/config/routes';
@@ -65,8 +65,7 @@ export default function CompleteProfilePage() {
 
   // Session is required to complete a profile.
   if (!participant) {
-    navigate(ROUTES.splash, { replace: true });
-    return null;
+    return <Navigate to={ROUTES.splash} replace />;
   }
 
   const courseStage = watch('courseStage');

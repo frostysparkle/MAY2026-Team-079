@@ -34,7 +34,9 @@ export default function ScannerPage() {
   // Keep the latest checkpoint readable inside the scan callback without
   // restarting the camera each time it changes.
   const checkpointRef = useRef(checkpoint);
-  checkpointRef.current = checkpoint;
+  useEffect(() => {
+    checkpointRef.current = checkpoint;
+  }, [checkpoint]);
 
   function goToResult(scan: PendingScan) {
     navigate(ROUTES.scanResult, { state: scan });

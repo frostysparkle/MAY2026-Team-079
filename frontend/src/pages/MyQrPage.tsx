@@ -90,7 +90,9 @@ export default function MyQrPage() {
               <p className="text-xs text-muted">Refreshes in {remaining}s</p>
             </div>
             <div className="text-center">
-              <p className="font-semibold text-gray-900">{participant.fullName || participant.email}</p>
+              <p className="font-semibold text-gray-900">
+                {participant.fullName || participant.email}
+              </p>
               <p className="text-xs text-muted">ID: {participant.id}</p>
             </div>
           </>

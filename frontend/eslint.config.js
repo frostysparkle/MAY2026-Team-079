@@ -22,6 +22,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // Fetch-on-mount effects intentionally set a loading state; this rule is
+      // overly strict for that common data-loading pattern, so treat as a hint.
+      'react-hooks/set-state-in-effect': 'warn',
     },
   },
   // Prettier last so it can turn off any stylistic rules that would conflict.

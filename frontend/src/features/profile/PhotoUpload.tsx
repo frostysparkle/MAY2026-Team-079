@@ -41,7 +41,11 @@ export function PhotoUpload({
       <div className="flex items-center gap-4">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-gray-50 text-xs text-muted">
           {value ? (
-            <img src={value} alt="Selected profile preview" className="h-full w-full object-cover" />
+            <img
+              src={value}
+              alt="Selected profile preview"
+              className="h-full w-full object-cover"
+            />
           ) : (
             'No photo'
           )}
@@ -54,7 +58,9 @@ export function PhotoUpload({
           >
             {value ? 'Change photo' : 'Upload photo'}
           </button>
-          <p className="text-xs text-muted">JPG or PNG, up to {Math.round(PHOTO.maxBytes / 1024)} KB.</p>
+          <p className="text-xs text-muted">
+            JPG or PNG, up to {Math.round(PHOTO.maxBytes / 1024)} KB.
+          </p>
         </div>
       </div>
       <input

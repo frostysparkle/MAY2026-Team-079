@@ -72,9 +72,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      {status === 'error' && (
-        <ErrorState description="Could not load users." onRetry={load} />
-      )}
+      {status === 'error' && <ErrorState description="Could not load users." onRetry={load} />}
 
       {status === 'ready' &&
         (users.length === 0 ? (
