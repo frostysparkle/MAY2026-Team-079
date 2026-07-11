@@ -94,5 +94,7 @@ New users always start with the `participant` role.
 * `GET /ping-db` returns MongoDB reachability in the starter response format.
 * `GET /api/v1/health/live` confirms that FastAPI is running.
 * `GET /api/v1/health/ready` confirms that MongoDB is configured and reachable.
+* `GET /api/v1/health/google` confirms local Google/JWT configuration and checks
+  Google's OpenID Connect discovery endpoint without exposing credentials.
 
 `/live` works without MongoDB. `/ready` returns HTTP 503 until `MONGODB_URI` points to a reachable database.
