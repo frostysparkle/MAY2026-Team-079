@@ -24,12 +24,12 @@ each slice ship together so the mock and real paths stay in sync.
     - Accommodation "yes" ensures a `created` hostel payment; mess "yes" stores plan id. Wire router into `app/main.py`.
     - _Requirements: 2.3, 2.4, 2.5, 3.2, 3.3, 4.1, 4.3, 5.1, 5.2, 6.1_
 
-- [ ] 2. Backend: participant-side event registration
-  - [ ] 2.1 Registration service + capacity/duplicate rules
+- [x] 2. Backend: participant-side event registration
+  - [x] 2.1 Registration service + capacity/duplicate rules
     - `app/registrations/service.py`: register (published + not-full + idempotent), cancel (soft), list-with-event-details, count active per event.
     - Unit-test capacity, duplicate/idempotent, cancel/re-activate (Property 4, 5).
     - _Requirements: 7.2, 7.4, 7.5_
-  - [ ] 2.2 Registration routes + event read-field annotations
+  - [x] 2.2 Registration routes + event read-field annotations
     - `POST/DELETE /events/{id}/register`, `GET /me/registrations`.
     - Add `registered`, `registration_count`, `spots_left` to events list/detail responses (per caller).
     - _Requirements: 7.1, 7.3, 7.4, 7.6_

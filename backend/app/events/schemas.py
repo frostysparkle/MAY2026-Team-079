@@ -21,6 +21,10 @@ class EventOut(BaseModel):
     instructions: str
     status: EventStatus
     created_at: str | None
+    # Participant-side registration context (populated per caller; Task 2).
+    registered: bool | None = None
+    registration_count: int | None = None
+    spots_left: int | None = None
 
 
 class EventCreate(BaseModel):

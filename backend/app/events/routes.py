@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, status
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import PyMongoError
 
-from app.auth.dependencies import get_current_user, get_events_collection
+from app.auth.dependencies import (
+    get_current_user,
+    get_events_collection,
+    get_registrations_collection,
+)
 from app.auth.roles import effective_rank, require_role, role_rank
 from app.core.errors import ApiError
 from app.events.schemas import (
@@ -21,6 +25,7 @@ from app.events.service import (
     list_events,
     update_event,
 )
+from app.registrations.service import registration_info
 
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -40,18 +45,37 @@ def _db_error(exc: PyMongoError) -> ApiError:
     )
 
 
+async def _annotate(
+    doc: dict[str, Any],
+    registrations: AsyncCollection[dict[str, Any]],
+    user: dict[str, Any],
+) -> EventOut:
+    count, spots_left, registered = await registration_info(registrations, doc, user["_id"])
+    return serialize_event(doc).model_copy(
+        update={
+            "registered": registered,
+            "registration_count": count,
+            "spots_left": spots_left,
+        }
+    )
+
+
 @router.get("", response_model=EventListResponse, summary="List events")
 async def list_events_route(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
     events: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_events_collection)
     ],
+    registrations: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
+    ],
 ) -> EventListResponse:
     try:
         docs = await list_events(events, include_unpublished=_can_manage(current_user))
+        items = [await _annotate(d, registrations, current_user) for d in docs]
     except PyMongoError as exc:
         raise _db_error(exc) from exc
-    return EventListResponse(events=[serialize_event(d) for d in docs])
+    return EventListResponse(events=items)
 
 
 @router.get("/{event_id}", response_model=EventOut, summary="Get one event")
@@ -61,11 +85,15 @@ async def get_event_route(
     events: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_events_collection)
     ],
+    registrations: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
+    ],
 ) -> EventOut:
     try:
         doc = await get_event(
             events, event_id, include_unpublished=_can_manage(current_user)
         )
+        annotated = await _annotate(doc, registrations, current_user)
     except EventNotFoundError as exc:
         raise ApiError(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,7 +102,7 @@ async def get_event_route(
         ) from exc
     except PyMongoError as exc:
         raise _db_error(exc) from exc
-    return serialize_event(doc)
+    return annotated
 
 
 @router.post(

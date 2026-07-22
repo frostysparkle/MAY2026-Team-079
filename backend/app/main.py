@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.events.routes import router as events_router
 from app.hostel.routes import router as hostel_router
 from app.journey.routes import router as journey_router
+from app.registrations.routes import router as registrations_router
 from app.mess.routes import router as mess_router
 from app.overview.routes import router as overview_router
 from app.payments.routes import router as payments_router
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     application.include_router(overview_router, prefix="/api/v1")
     application.include_router(payments_router, prefix="/api/v1")
     application.include_router(journey_router, prefix="/api/v1")
+    application.include_router(registrations_router, prefix="/api/v1")
     application.state.environment = settings.app_env
     return application
 
