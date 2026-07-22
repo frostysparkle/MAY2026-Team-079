@@ -18,9 +18,11 @@ import EventDetailPage from '@/pages/EventDetailPage';
 import EventEditPage from '@/pages/EventEditPage';
 import HelpPage from '@/pages/HelpPage';
 import MessPage from '@/pages/MessPage';
+import HostelPage from '@/pages/HostelPage';
 import AdminQueriesPage from '@/pages/AdminQueriesPage';
 import AdminContactsPage from '@/pages/AdminContactsPage';
 import AdminMessPage from '@/pages/AdminMessPage';
+import AdminHostelPage from '@/pages/AdminHostelPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -79,6 +81,7 @@ export const router = createBrowserRouter([
       { path: 'events/:id', element: <EventDetailPage /> },
       { path: 'help', element: <HelpPage /> },
       { path: 'mess', element: <MessPage /> },
+      { path: 'hostel', element: <HostelPage /> },
     ],
   },
 
@@ -152,6 +155,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="organizer">
         <AdminMessPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Hostel allocation management — admin role or higher.
+  {
+    path: ROUTES.manageHostel,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <AdminHostelPage />
       </ProtectedRoute>
     ),
   },

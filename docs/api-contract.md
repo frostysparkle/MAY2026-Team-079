@@ -186,6 +186,22 @@ returns `not_eligible` for them.
 
 `MenuItemOut`: `{ id, location, meal, items, start_time, end_time }`.
 
+## Hostel (Epic 5)
+
+Allocations map `hostel_block`→`hostelBlock`, `checked_in`→`checkedIn`,
+`checked_in_at`→`checkedInAt`, `participant_id`→`participantId`. One allocation
+per participant. The hostel scan checkpoint records check-in: no allocation →
+`not_eligible`; otherwise `valid` with `detail` "Block · Room" and `checked_in`
+is set.
+
+### 27. `GET /hostel/allocation` *(auth)* — the caller's own `{ allocation | null }` (FR-5.1).
+### 28. `GET /hostel/allocations` *(admin+)* — all allocations, each enriched with `full_name`/`email`.
+### 29. `POST /hostel/allocations` *(admin+)* — `{ participant_id, hostel_block, room, instructions?, coordinator? }` → `201`. `409 allocation_conflict` if already allocated.
+### 30. `PATCH /hostel/allocations/{id}` *(admin+)* — partial update.
+### 31. `DELETE /hostel/allocations/{id}` *(admin+)* — `204`.
+
+`AllocationOut`: `{ id, participant_id, hostel_block, room, instructions, coordinator, checked_in, checked_in_at }`.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

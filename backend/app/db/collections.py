@@ -8,6 +8,7 @@ SCAN_LOGS = "scan_logs"
 QUERIES = "queries"
 CONTACTS = "contacts"
 MESS_MENU = "mess_menu"
+HOSTEL_ALLOCATIONS = "hostel_allocations"
 
 INITIAL_COLLECTIONS = (
     USERS,
@@ -20,4 +21,5 @@ INITIAL_COLLECTIONS = (
     QUERIES,
     CONTACTS,
     MESS_MENU,
+    HOSTEL_ALLOCATIONS,
 )

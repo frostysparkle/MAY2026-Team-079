@@ -56,6 +56,18 @@ export default function HomePage() {
         </Card>
       </Link>
 
+      <Link to={ROUTES.hostel} className="block">
+        <Card className="flex items-center gap-3 transition-colors hover:border-brand">
+          <span className="text-2xl" aria-hidden>
+            🏨
+          </span>
+          <div>
+            <p className="font-semibold text-gray-900">Hostel</p>
+            <p className="text-sm text-muted">Your allocation and check-in</p>
+          </div>
+        </Card>
+      </Link>
+
       <Link to={ROUTES.help} className="block">
         <Card className="flex items-center gap-3 transition-colors hover:border-brand">
           <span className="text-2xl" aria-hidden>
@@ -86,6 +98,7 @@ export default function HomePage() {
           {canOrganize && <ManageLink to={ROUTES.scanner} icon="📷" label="Scan QR" />}
           {canOrganize && <ManageLink to={ROUTES.events} icon="📅" label="Manage Events" />}
           {canOrganize && <ManageLink to={ROUTES.manageMess} icon="🍽️" label="Manage Mess" />}
+          {canAdmin && <ManageLink to={ROUTES.manageHostel} icon="🏨" label="Hostel Allocations" />}
           {canAdmin && <ManageLink to={ROUTES.users} icon="👥" label="User Management" />}
           {canAdmin && <ManageLink to={ROUTES.manageQueries} icon="🗂️" label="Query Triage" />}
           {canAdmin && <ManageLink to={ROUTES.manageContacts} icon="📇" label="Contact Directory" />}

@@ -15,6 +15,7 @@ export const ROUTES = {
   eventDetail: (id: string) => `/app/events/${id}`,
   help: '/app/help',
   mess: '/app/mess',
+  hostel: '/app/hostel',
 
   // Staff
   scanner: '/scan',
@@ -27,6 +28,7 @@ export const ROUTES = {
   manageQueries: '/admin/queries',
   manageContacts: '/admin/contacts',
   manageMess: '/admin/mess',
+  manageHostel: '/admin/hostel',
 
   accessDenied: '/access-denied',
 } as const;

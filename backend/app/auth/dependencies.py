@@ -17,6 +17,7 @@ from app.core.security import (
 from app.db.collections import (
     CONTACTS,
     EVENTS,
+    HOSTEL_ALLOCATIONS,
     MESS_MENU,
     PHOTOS,
     QR_SECRETS,
@@ -70,6 +71,12 @@ def get_mess_menu_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, MESS_MENU)
+
+
+def get_hostel_allocations_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, HOSTEL_ALLOCATIONS)
 
 
 def get_qr_secrets_collection(

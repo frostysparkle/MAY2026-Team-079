@@ -6,6 +6,7 @@ from pymongo.errors import PyMongoError
 
 from app.auth.dependencies import (
     get_current_user,
+    get_hostel_allocations_collection,
     get_photos_collection_optional,
     get_qr_secrets_collection,
     get_scan_logs_collection,
@@ -74,6 +75,9 @@ async def verify_scan_route(
     scan_logs: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_scan_logs_collection)
     ],
+    hostel_allocations: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_hostel_allocations_collection)
+    ],
     photos: Annotated[
         AsyncCollection[dict[str, Any]] | None,
         Depends(get_photos_collection_optional),
@@ -88,6 +92,7 @@ async def verify_scan_route(
             body.current_code,
             body.checkpoint_context,
             actor["_id"],
+            hostel_allocations=hostel_allocations,
         )
     except PyMongoError as exc:
         raise ApiError(

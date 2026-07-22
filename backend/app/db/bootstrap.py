@@ -10,6 +10,7 @@ from app.db.collections import (
     CONTACTS,
     EVENT_REGISTRATIONS,
     EVENTS,
+    HOSTEL_ALLOCATIONS,
     INITIAL_COLLECTIONS,
     MESS_MENU,
     PHOTOS,
@@ -194,6 +195,12 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
                 name="uq_mess_menu_location_meal",
             )
         ]
+    )
+
+    # Hostel allocations (Epic 5): one per participant — a participant cannot be
+    # allocated to two hostels simultaneously.
+    await database[HOSTEL_ALLOCATIONS].create_indexes(
+        [IndexModel([("user_id", ASCENDING)], unique=True, name="uq_hostel_alloc_user")]
     )
 
 

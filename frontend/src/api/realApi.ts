@@ -51,6 +51,12 @@ import type {
   MessEligibilityItem,
   MessEligibilityListResponse,
   MessStats,
+  HostelAllocation,
+  HostelAllocationWithParticipant,
+  MyAllocationResponse,
+  AllocationListResponse,
+  CreateAllocationRequest,
+  UpdateAllocationRequest,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -261,6 +267,40 @@ interface BackendEligibility {
 
 function toEligibility(e: BackendEligibility): MessEligibilityItem {
   return { id: e.id, fullName: e.full_name, email: e.email, eligible: e.eligible };
+}
+
+interface BackendAllocation {
+  id: string;
+  participant_id: string;
+  hostel_block: string;
+  room: string;
+  instructions: string;
+  coordinator: string | null;
+  checked_in: boolean;
+  checked_in_at: string | null;
+  full_name?: string | null;
+  email?: string | null;
+}
+
+function toAllocation(a: BackendAllocation): HostelAllocation {
+  return {
+    id: a.id,
+    participantId: a.participant_id,
+    hostelBlock: a.hostel_block,
+    room: a.room,
+    instructions: a.instructions,
+    coordinator: a.coordinator,
+    checkedIn: a.checked_in,
+    checkedInAt: a.checked_in_at,
+  };
+}
+
+function toAllocationWithParticipant(a: BackendAllocation): HostelAllocationWithParticipant {
+  return {
+    ...toAllocation(a),
+    fullName: a.full_name ?? null,
+    email: a.email ?? null,
+  };
 }
 
 /** Map a backend user object into the app's Participant type. */
@@ -529,5 +569,48 @@ export const realApi: ApiClient = {
   async getMessStats(): Promise<MessStats> {
     const body = await request<{ eligible_count: number }>('/mess/stats');
     return { eligibleCount: body.eligible_count };
+  },
+
+  async getMyAllocation(): Promise<MyAllocationResponse> {
+    const body = await request<{ allocation: BackendAllocation | null }>('/hostel/allocation');
+    return { allocation: body.allocation ? toAllocation(body.allocation) : null };
+  },
+
+  async listAllocations(): Promise<AllocationListResponse> {
+    const body = await request<{ allocations: BackendAllocation[] }>('/hostel/allocations');
+    return { allocations: body.allocations.map(toAllocationWithParticipant) };
+  },
+
+  async createAllocation(req: CreateAllocationRequest): Promise<HostelAllocation> {
+    return toAllocation(
+      await request<BackendAllocation>('/hostel/allocations', {
+        method: 'POST',
+        body: JSON.stringify({
+          participant_id: req.participantId,
+          hostel_block: req.hostelBlock,
+          room: req.room,
+          instructions: req.instructions ?? '',
+          coordinator: req.coordinator ?? null,
+        }),
+      }),
+    );
+  },
+
+  async updateAllocation(id: string, req: UpdateAllocationRequest): Promise<HostelAllocation> {
+    const body: Record<string, unknown> = {};
+    if (req.hostelBlock !== undefined) body.hostel_block = req.hostelBlock;
+    if (req.room !== undefined) body.room = req.room;
+    if (req.instructions !== undefined) body.instructions = req.instructions;
+    if (req.coordinator !== undefined) body.coordinator = req.coordinator;
+    return toAllocation(
+      await request<BackendAllocation>(`/hostel/allocations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    );
+  },
+
+  async deleteAllocation(id: string): Promise<void> {
+    await request<void>(`/hostel/allocations/${id}`, { method: 'DELETE' });
   },
 };

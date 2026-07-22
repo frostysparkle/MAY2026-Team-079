@@ -171,6 +171,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: Mess screen (pass + menu + report issue), admin Mess management (menu CRUD, eligibility toggles, opt-in count); nav + hub links
 - [x] ✅ Live-verified on Atlas (menu CRUD incl. 409 conflict, pass grant, scan not_eligible→valid); re-ran init_db to add events/queries/contacts/mess indexes
 
+### Epic 5 — Hostel (P0 + FR-5.3/5.4)
+- [x] ✅ Backend: `GET /hostel/allocation` (own), allocation CRUD (admin+, one per participant); hostel scan now checks allocation → records check-in (no allocation = not_eligible)
+- [x] ✅ Frontend: Hostel screen (allocation, instructions, coordinator, check-in status, report-issue prefill), admin Hostel Allocations page; nav + hub links
+- [x] ✅ Live-verified on Atlas (not_eligible→valid+checked_in, 409 dup guard, list/update/delete)
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

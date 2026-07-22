@@ -43,6 +43,12 @@ import type {
   MessEligibilityItem,
   MessEligibilityListResponse,
   MessStats,
+  HostelAllocation,
+  HostelAllocationWithParticipant,
+  MyAllocationResponse,
+  AllocationListResponse,
+  CreateAllocationRequest,
+  UpdateAllocationRequest,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
@@ -52,6 +58,7 @@ import {
   seedContacts,
   seedQueries,
   seedMessMenu,
+  seedHostelAllocations,
 } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
@@ -59,6 +66,7 @@ const events: EventItem[] = seedEvents();
 const contacts: Contact[] = seedContacts();
 const queries: SupportQuery[] = seedQueries();
 const messMenu: MessMenuItem[] = seedMessMenu();
+const hostelAllocations: HostelAllocation[] = seedHostelAllocations();
 // Explicit mess-pass holders (Epic 4). Only these verify at the mess checkpoint.
 const messEligible = new Set<string>(['p_participant']);
 let currentId: string | null = null;
@@ -69,7 +77,7 @@ const usedCodes = new Set<string>();
 // Minimal mock eligibility (not part of the shared API type) so the scanner can
 // demonstrate payment_pending / not_eligible live.
 const eligibility: Record<string, { hostelPaid: boolean; messEligible: boolean }> = {
-  p_participant: { hostelPaid: false, messEligible: true },
+  p_participant: { hostelPaid: true, messEligible: true },
 };
 
 const delay = (ms = 160) => new Promise((r) => setTimeout(r, ms));
@@ -217,11 +225,23 @@ export const mockApi: ApiClient = {
     if (checkpointContext === 'mess' && !messEligible.has(participantId)) {
       return { result: 'not_eligible', detail: 'No active mess pass.' };
     }
+    // Hostel check-in requires an allocation (Epic 5, FR-5.2).
+    const allocation =
+      checkpointContext === 'hostel'
+        ? hostelAllocations.find((a) => a.participantId === participantId)
+        : undefined;
+    if (checkpointContext === 'hostel' && !allocation) {
+      return { result: 'not_eligible', detail: 'No accommodation assigned.' };
+    }
+    if (allocation) {
+      allocation.checkedIn = true;
+      allocation.checkedInAt = new Date().toISOString();
+    }
 
     return {
       result: 'valid',
       participant: { id: p.id, fullName: p.fullName || p.email, photoUrl: p.photoUrl },
-      detail: checkpointContext === 'hostel' ? 'Hostel A · Room 214' : undefined,
+      detail: allocation ? `${allocation.hostelBlock} · Room ${allocation.room}` : undefined,
     };
   },
 
@@ -439,5 +459,62 @@ export const mockApi: ApiClient = {
   async getMessStats(): Promise<MessStats> {
     await delay();
     return { eligibleCount: messEligible.size };
+  },
+
+  async getMyAllocation(): Promise<MyAllocationResponse> {
+    await delay();
+    const a = hostelAllocations.find((x) => x.participantId === currentId) ?? null;
+    return { allocation: a };
+  },
+
+  async listAllocations(): Promise<AllocationListResponse> {
+    await delay();
+    const allocations: HostelAllocationWithParticipant[] = hostelAllocations.map((a) => {
+      const p = participants.find((x) => x.id === a.participantId);
+      return { ...a, fullName: p?.fullName || null, email: p?.email ?? null };
+    });
+    return { allocations };
+  },
+
+  async createAllocation(req: CreateAllocationRequest): Promise<HostelAllocation> {
+    await delay();
+    if (!participants.some((p) => p.id === req.participantId)) {
+      throw new ApiClientError(404, 'participant_not_found', 'Participant not found.');
+    }
+    if (hostelAllocations.some((a) => a.participantId === req.participantId)) {
+      throw new ApiClientError(409, 'allocation_conflict', 'Participant already has an allocation.');
+    }
+    const created: HostelAllocation = {
+      id: `h_${Date.now()}`,
+      participantId: req.participantId,
+      hostelBlock: req.hostelBlock,
+      room: req.room,
+      instructions: req.instructions ?? '',
+      coordinator: req.coordinator ?? null,
+      checkedIn: false,
+      checkedInAt: null,
+    };
+    hostelAllocations.push(created);
+    return created;
+  },
+
+  async updateAllocation(id: string, req: UpdateAllocationRequest): Promise<HostelAllocation> {
+    await delay();
+    const a = hostelAllocations.find((x) => x.id === id);
+    if (!a) throw new ApiClientError(404, 'allocation_not_found', 'Allocation not found.');
+    Object.assign(a, {
+      ...(req.hostelBlock !== undefined ? { hostelBlock: req.hostelBlock } : {}),
+      ...(req.room !== undefined ? { room: req.room } : {}),
+      ...(req.instructions !== undefined ? { instructions: req.instructions } : {}),
+      ...(req.coordinator !== undefined ? { coordinator: req.coordinator } : {}),
+    });
+    return a;
+  },
+
+  async deleteAllocation(id: string): Promise<void> {
+    await delay();
+    const idx = hostelAllocations.findIndex((x) => x.id === id);
+    if (idx === -1) throw new ApiClientError(404, 'allocation_not_found', 'Allocation not found.');
+    hostelAllocations.splice(idx, 1);
   },
 };

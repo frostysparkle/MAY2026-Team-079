@@ -289,6 +289,45 @@ export interface MessStats {
   eligibleCount: number;
 }
 
+/* -------------------------------------------------------------- hostel --- */
+
+export interface HostelAllocation {
+  id: string;
+  participantId: string;
+  hostelBlock: string;
+  room: string;
+  instructions: string;
+  coordinator: string | null;
+  checkedIn: boolean;
+  checkedInAt: string | null;
+}
+
+/** Admin listing enriches each allocation with the participant's name/email. */
+export interface HostelAllocationWithParticipant extends HostelAllocation {
+  fullName: string | null;
+  email: string | null;
+}
+
+export interface MyAllocationResponse {
+  allocation: HostelAllocation | null;
+}
+
+export interface AllocationListResponse {
+  allocations: HostelAllocationWithParticipant[];
+}
+
+export interface CreateAllocationRequest {
+  participantId: string;
+  hostelBlock: string;
+  room: string;
+  instructions?: string;
+  coordinator?: string | null;
+}
+
+export type UpdateAllocationRequest = Partial<
+  Omit<CreateAllocationRequest, 'participantId'>
+>;
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

@@ -35,6 +35,11 @@ import type {
   MessEligibilityListResponse,
   MessEligibilityItem,
   MessStats,
+  MyAllocationResponse,
+  AllocationListResponse,
+  HostelAllocation,
+  CreateAllocationRequest,
+  UpdateAllocationRequest,
 } from './types';
 
 export interface ApiClient {
@@ -77,6 +82,13 @@ export interface ApiClient {
   listMessEligibility(): Promise<MessEligibilityListResponse>;
   setMessEligibility(id: string, eligible: boolean): Promise<MessEligibilityItem>;
   getMessStats(): Promise<MessStats>;
+
+  // Hostel (Epic 5)
+  getMyAllocation(): Promise<MyAllocationResponse>;
+  listAllocations(): Promise<AllocationListResponse>;
+  createAllocation(req: CreateAllocationRequest): Promise<HostelAllocation>;
+  updateAllocation(id: string, req: UpdateAllocationRequest): Promise<HostelAllocation>;
+  deleteAllocation(id: string): Promise<void>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

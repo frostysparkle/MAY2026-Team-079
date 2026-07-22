@@ -1,4 +1,11 @@
-import type { Participant, EventItem, Contact, SupportQuery, MessMenuItem } from '@/api/types';
+import type {
+  Participant,
+  EventItem,
+  Contact,
+  SupportQuery,
+  MessMenuItem,
+  HostelAllocation,
+} from '@/api/types';
 
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
@@ -193,6 +200,22 @@ export function seedMessMenu(): MessMenuItem[] {
       items: 'Fried Rice, Gobi Manchurian, Roti, Dal Tadka',
       startTime: '19:30',
       endTime: '21:30',
+    },
+  ];
+}
+
+/** Seed a hostel allocation for the mock participant (Epic 5). */
+export function seedHostelAllocations(): HostelAllocation[] {
+  return [
+    {
+      id: 'h_participant',
+      participantId: 'p_participant',
+      hostelBlock: 'Block A',
+      room: '214',
+      instructions: 'Check in at the Block A office. Carry your digital ID.',
+      coordinator: 'Mr. Rao · 9100000222',
+      checkedIn: false,
+      checkedInAt: null,
     },
   ];
 }

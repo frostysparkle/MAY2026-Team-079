@@ -85,6 +85,7 @@ async def verify_scan(
     current_code: str,
     checkpoint_context: str,
     scanned_by: ObjectId,
+    hostel_allocations: AsyncCollection[dict[str, Any]] | None = None,
 ) -> ScanOutcome:
     if not ObjectId.is_valid(participant_id):
         await _audit(scan_logs, participant_id, checkpoint_context, "unknown_participant", scanned_by)
@@ -112,6 +113,14 @@ async def verify_scan(
         await _audit(scan_logs, participant_id, checkpoint_context, blocked.result, scanned_by)
         return blocked
 
+    # Hostel check-in (FR-5.2): a participant with no allocation is not eligible.
+    allocation: dict[str, Any] | None = None
+    if checkpoint_context == "hostel" and hostel_allocations is not None:
+        allocation = await hostel_allocations.find_one({"user_id": ObjectId(participant_id)})
+        if allocation is None:
+            await _audit(scan_logs, participant_id, checkpoint_context, "not_eligible", scanned_by)
+            return ScanOutcome("not_eligible", detail="No accommodation assigned.")
+
     # Replay protection: a matched (participant, context, step) records once.
     try:
         await scan_logs.insert_one(
@@ -127,4 +136,12 @@ async def verify_scan(
     except DuplicateKeyError:
         return ScanOutcome("duplicate")
 
-    return ScanOutcome("valid", user=user)
+    detail: str | None = None
+    if allocation is not None:
+        await hostel_allocations.update_one(
+            {"_id": allocation["_id"]},
+            {"$set": {"checked_in": True, "checked_in_at": datetime.now(UTC)}},
+        )
+        detail = f"{allocation.get('hostel_block', '')} · Room {allocation.get('room', '')}"
+
+    return ScanOutcome("valid", user=user, detail=detail)
