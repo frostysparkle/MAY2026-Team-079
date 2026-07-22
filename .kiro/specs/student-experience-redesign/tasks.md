@@ -77,8 +77,8 @@ each slice ship together so the mock and real paths stay in sync.
     - Home sections: continue-setup (while incomplete), my events, my pass, bookings & payment status, announcements (unread indicator), quick links — each with loading/empty/error/success. Refine student nav (Home · Events · My Pass · More · Profile).
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 9.4, 11.2, 11.3_
 
-- [ ] 7. Frontend: dev-only account switcher
-  - [ ] 7.1 AccountSwitcher (dev/mock only)
+- [x] 7. Frontend: dev-only account switcher
+  - [x] 7.1 AccountSwitcher (dev/mock only)
     - `features/devtools/AccountSwitcher`: rendered only when `env.enableDevSwitcher`; lists `listTestAccounts()` grouped by state; tap → `devLogin` (real) or switch `currentId` (mock) → reload journey → route. Not rendered in production; add `VITE_ENABLE_DEV_SWITCHER` + docs.
     - _Requirements: 10.3, 10.4, 10.5_
 

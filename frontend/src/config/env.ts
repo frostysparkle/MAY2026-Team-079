@@ -10,4 +10,7 @@ export const env = {
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '',
   // Default to the mock API so the app runs with no backend and no config.
   useMockApi: (import.meta.env.VITE_USE_MOCK_API ?? 'true') !== 'false',
+  // Dev-only account switcher (Req 10). Never enable in a production build.
+  enableDevSwitcher:
+    import.meta.env.DEV && (import.meta.env.VITE_ENABLE_DEV_SWITCHER ?? 'true') !== 'false',
 } as const;
