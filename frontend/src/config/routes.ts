@@ -6,6 +6,7 @@ export const ROUTES = {
   splash: '/',
   login: '/login',
   completeProfile: '/complete-profile',
+  onboarding: '/onboarding',
 
   // Participant area (inside the nav shell)
   home: '/app',

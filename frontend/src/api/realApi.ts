@@ -78,6 +78,16 @@ import type {
   MyPayments,
   ReconciliationResponse,
   ReconciliationItem,
+  Journey,
+  OnboardingChoice,
+  NextStep,
+  JourneyStepState,
+  JourneyStepKey,
+  PendingPayments,
+  RegistrationResult,
+  MyRegistrationsResponse,
+  MyRegistration,
+  TestAccount,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -157,6 +167,9 @@ interface BackendEvent {
   instructions: string;
   status: EventStatus;
   created_at?: string | null;
+  registered?: boolean | null;
+  registration_count?: number | null;
+  spots_left?: number | null;
 }
 
 function toEvent(e: BackendEvent): EventItem {
@@ -171,6 +184,9 @@ function toEvent(e: BackendEvent): EventItem {
     instructions: e.instructions,
     status: e.status,
     createdAt: e.created_at ?? new Date(0).toISOString(),
+    registered: e.registered ?? undefined,
+    registrationCount: e.registration_count ?? undefined,
+    spotsLeft: e.spots_left ?? undefined,
   };
 }
 
@@ -389,6 +405,34 @@ function toPayment(p: BackendPayment): Payment {
     txnRef: p.txn_ref,
     createdAt: p.created_at,
     paidAt: p.paid_at,
+  };
+}
+
+interface BackendJourney {
+  profile_complete: boolean;
+  accommodation: { choice: OnboardingChoice | null; allocated: boolean; paid: boolean };
+  mess: { choice: OnboardingChoice | null; plan_id: string | null; paid: boolean };
+  payment_due: boolean;
+  events_registered: number;
+  steps: { key: JourneyStepKey; state: JourneyStepState }[];
+  next_step: NextStep;
+  complete: boolean;
+}
+
+function toJourney(j: BackendJourney): Journey {
+  return {
+    profileComplete: j.profile_complete,
+    accommodation: {
+      choice: j.accommodation.choice,
+      allocated: j.accommodation.allocated,
+      paid: j.accommodation.paid,
+    },
+    mess: { choice: j.mess.choice, planId: j.mess.plan_id, paid: j.mess.paid },
+    paymentDue: j.payment_due,
+    eventsRegistered: j.events_registered,
+    steps: j.steps,
+    nextStep: j.next_step,
+    complete: j.complete,
   };
 }
 
@@ -901,5 +945,105 @@ export const realApi: ApiClient = {
       messStatus: p.mess_status,
     }));
     return { participants };
+  },
+
+  async getJourney(): Promise<Journey> {
+    return toJourney(await request<BackendJourney>('/me/journey'));
+  },
+
+  async setAccommodationChoice(choice: OnboardingChoice): Promise<Journey> {
+    return toJourney(
+      await request<BackendJourney>('/me/onboarding/accommodation', {
+        method: 'POST',
+        body: JSON.stringify({ choice }),
+      }),
+    );
+  },
+
+  async setMessChoice(choice: OnboardingChoice, planId?: string): Promise<Journey> {
+    return toJourney(
+      await request<BackendJourney>('/me/onboarding/mess', {
+        method: 'POST',
+        body: JSON.stringify({ choice, plan_id: planId ?? null }),
+      }),
+    );
+  },
+
+  async getPendingPayments(): Promise<PendingPayments> {
+    const b = await request<{
+      items: { kind: 'hostel' | 'mess'; label: string; amount: number; currency: string }[];
+      total: number;
+      currency: string;
+    }>('/me/payments/pending');
+    return { items: b.items, total: b.total, currency: b.currency };
+  },
+
+  async registerEvent(eventId: string): Promise<RegistrationResult> {
+    const b = await request<{
+      event_id: string;
+      registered: boolean;
+      registration_count: number;
+      spots_left: number;
+    }>(`/events/${eventId}/register`, { method: 'POST', body: JSON.stringify({}) });
+    return {
+      eventId: b.event_id,
+      registered: b.registered,
+      registrationCount: b.registration_count,
+      spotsLeft: b.spots_left,
+    };
+  },
+
+  async cancelEventRegistration(eventId: string): Promise<void> {
+    await request<void>(`/events/${eventId}/register`, { method: 'DELETE' });
+  },
+
+  async listMyRegistrations(): Promise<MyRegistrationsResponse> {
+    const b = await request<{
+      registrations: Array<{
+        event_id: string;
+        title: string;
+        venue: string;
+        event_date: string;
+        start_time: string;
+        end_time: string;
+        status: EventStatus;
+        registered_at: string | null;
+      }>;
+    }>('/me/registrations');
+    const registrations: MyRegistration[] = b.registrations.map((r) => ({
+      eventId: r.event_id,
+      title: r.title,
+      venue: r.venue,
+      eventDate: r.event_date,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      status: r.status,
+      registeredAt: r.registered_at,
+    }));
+    return { registrations };
+  },
+
+  async devLogin(email: string): Promise<GoogleLoginResponse> {
+    const body = await request<{
+      access_token: string;
+      is_new_user: boolean;
+      user: BackendUser;
+    }>('/auth/dev-login', { method: 'POST', body: JSON.stringify({ email }) });
+    return {
+      session: { token: body.access_token, participant: toParticipant(body.user) },
+      isNewUser: body.is_new_user,
+    };
+  },
+
+  async listTestAccounts(): Promise<TestAccount[]> {
+    const b = await request<{
+      accounts: { email: string; full_name: string | null; role: TestAccount['role']; label: string | null }[];
+    }>('/auth/test-accounts');
+    return b.accounts.map((a) => ({
+      email: a.email,
+      fullName: a.full_name,
+      role: a.role,
+      label: a.label,
+    }));
   },
 };

@@ -7,7 +7,9 @@ import type {
   HostelAllocation,
   Announcement,
   MealPlan,
+  OnboardingChoice,
 } from '@/api/types';
+import type { Role } from '@/config/constants';
 
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
@@ -280,6 +282,155 @@ export function seedQueries(): SupportQuery[] {
       assignedTeam: 'hostel',
       createdAt: '2026-07-14T08:00:00+05:30',
       updatedAt: '2026-07-14T10:00:00+05:30',
+    },
+  ];
+}
+
+
+/**
+ * Test-harness accounts for the mock — a faithful mirror of the backend
+ * `scripts/seed_test_data.py` matrix so the dev account switcher behaves the
+ * same offline (spec: student-experience-redesign, Req 10).
+ */
+export interface TestAccountSeed {
+  participant: Participant;
+  label: string;
+  onboarding: {
+    accommodationChoice: OnboardingChoice | null;
+    messChoice: OnboardingChoice | null;
+    messPlanId: string | null;
+  };
+  hostelPaid: boolean;
+  messEligible: boolean;
+  allocation?: { hostelBlock: string; room: string };
+  registrations: string[]; // seed event ids
+  payments: { kind: 'hostel' | 'mess'; status: 'created' | 'paid'; amount: number; planName?: string }[];
+}
+
+const FULL_PLAN_ID = 'plan_full';
+
+function testParticipant(local: string, role: Role, profileComplete: boolean): Participant {
+  return {
+    id: `p_${local}`,
+    email: `${local}@ds.study.iitm.ac.in`,
+    fullName: profileComplete ? `${local[0].toUpperCase()}${local.slice(1)} Test` : '',
+    role,
+    age: profileComplete ? 20 : null,
+    gender: profileComplete ? 'other' : null,
+    phone: profileComplete ? '9000000000' : null,
+    country: profileComplete ? 'India' : null,
+    state: profileComplete ? 'Tamil Nadu' : null,
+    city: profileComplete ? 'Chennai' : null,
+    program: profileComplete ? 'standalone_degree' : null,
+    courseStage: profileComplete ? 'degree' : null,
+    courseStageOther: null,
+    photoUrl: null,
+    profileComplete,
+    createdAt: '2026-07-20T09:00:00+05:30',
+  };
+}
+
+export function seedTestAccounts(): TestAccountSeed[] {
+  const none = { accommodationChoice: null, messChoice: null, messPlanId: null };
+  return [
+    {
+      participant: testParticipant('newbie', 'participant', false),
+      label: 'New — no profile',
+      onboarding: none,
+      hostelPaid: false,
+      messEligible: false,
+      registrations: [],
+      payments: [],
+    },
+    {
+      participant: testParticipant('profileonly', 'participant', true),
+      label: 'Profile done — no bookings',
+      onboarding: none,
+      hostelPaid: false,
+      messEligible: false,
+      registrations: [],
+      payments: [],
+    },
+    {
+      participant: testParticipant('hosteler', 'participant', true),
+      label: 'Accommodation booked + paid',
+      onboarding: { accommodationChoice: 'yes', messChoice: 'no', messPlanId: null },
+      hostelPaid: true,
+      messEligible: false,
+      allocation: { hostelBlock: 'Block A', room: '214' },
+      registrations: [],
+      payments: [{ kind: 'hostel', status: 'paid', amount: 2000 }],
+    },
+    {
+      participant: testParticipant('hostelunpaid', 'participant', true),
+      label: 'Accommodation — payment pending',
+      onboarding: { accommodationChoice: 'yes', messChoice: 'no', messPlanId: null },
+      hostelPaid: false,
+      messEligible: false,
+      registrations: [],
+      payments: [{ kind: 'hostel', status: 'created', amount: 2000 }],
+    },
+    {
+      participant: testParticipant('messie', 'participant', true),
+      label: 'Mess booked + paid',
+      onboarding: { accommodationChoice: 'no', messChoice: 'yes', messPlanId: FULL_PLAN_ID },
+      hostelPaid: false,
+      messEligible: true,
+      registrations: [],
+      payments: [{ kind: 'mess', status: 'paid', amount: 1500, planName: 'Full Plan (3 meals)' }],
+    },
+    {
+      participant: testParticipant('fullstack', 'participant', true),
+      label: 'Fully onboarded (all paid + events)',
+      onboarding: { accommodationChoice: 'yes', messChoice: 'yes', messPlanId: FULL_PLAN_ID },
+      hostelPaid: true,
+      messEligible: true,
+      allocation: { hostelBlock: 'Block C', room: '007' },
+      registrations: ['e_keynote', 'e_hackathon'],
+      payments: [
+        { kind: 'hostel', status: 'paid', amount: 2000 },
+        { kind: 'mess', status: 'paid', amount: 1500, planName: 'Full Plan (3 meals)' },
+      ],
+    },
+    {
+      participant: testParticipant('eventfan', 'participant', true),
+      label: 'Registered for events',
+      onboarding: { accommodationChoice: 'no', messChoice: 'no', messPlanId: null },
+      hostelPaid: false,
+      messEligible: false,
+      registrations: ['e_keynote'],
+      payments: [],
+    },
+    {
+      participant: testParticipant('paidpending', 'participant', true),
+      label: 'One paid, one pending',
+      onboarding: { accommodationChoice: 'yes', messChoice: 'yes', messPlanId: FULL_PLAN_ID },
+      hostelPaid: true,
+      messEligible: false,
+      allocation: { hostelBlock: 'Block A', room: '118' },
+      registrations: [],
+      payments: [
+        { kind: 'hostel', status: 'paid', amount: 2000 },
+        { kind: 'mess', status: 'created', amount: 1500, planName: 'Full Plan (3 meals)' },
+      ],
+    },
+    {
+      participant: testParticipant('volunteer', 'organizer', true),
+      label: 'Organizer / volunteer',
+      onboarding: none,
+      hostelPaid: false,
+      messEligible: false,
+      registrations: [],
+      payments: [],
+    },
+    {
+      participant: testParticipant('warden', 'admin', true),
+      label: 'Admin',
+      onboarding: none,
+      hostelPaid: false,
+      messEligible: false,
+      registrations: [],
+      payments: [],
     },
   ];
 }

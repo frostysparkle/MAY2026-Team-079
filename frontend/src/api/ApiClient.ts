@@ -54,6 +54,12 @@ import type {
   CheckoutResponse,
   MyPayments,
   ReconciliationResponse,
+  Journey,
+  OnboardingChoice,
+  PendingPayments,
+  RegistrationResult,
+  MyRegistrationsResponse,
+  TestAccount,
 } from './types';
 
 export interface ApiClient {
@@ -117,6 +123,21 @@ export interface ApiClient {
 
   // Operational overview (Epic 9)
   getOverview(): Promise<OperationalOverview>;
+
+  // Onboarding journey (student-experience-redesign)
+  getJourney(): Promise<Journey>;
+  setAccommodationChoice(choice: OnboardingChoice): Promise<Journey>;
+  setMessChoice(choice: OnboardingChoice, planId?: string): Promise<Journey>;
+  getPendingPayments(): Promise<PendingPayments>;
+
+  // Event registration (participant side)
+  registerEvent(eventId: string): Promise<RegistrationResult>;
+  cancelEventRegistration(eventId: string): Promise<void>;
+  listMyRegistrations(): Promise<MyRegistrationsResponse>;
+
+  // Dev-only test harness
+  devLogin(email: string): Promise<GoogleLoginResponse>;
+  listTestAccounts(): Promise<TestAccount[]>;
 
   // Payments (Epic 10)
   listMealPlans(): Promise<MealPlanListResponse>;

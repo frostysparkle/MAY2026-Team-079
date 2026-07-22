@@ -5,7 +5,7 @@ import { api, ApiClientError } from '@/api';
 import type { CompleteProfileRequest, Gender, Program, CourseStage } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
-import { postLoginRoute } from '@/features/auth/postLoginRoute';
+import { resolvePostLoginRoute } from '@/features/auth/postLoginRoute';
 import { Button, ResultBanner, Select, TextInput } from '@/components/ui';
 import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
@@ -105,7 +105,7 @@ export default function CompleteProfilePage() {
     try {
       const { participant: updated } = await api.completeProfile(payload);
       updateParticipant(updated);
-      navigate(postLoginRoute(updated), { replace: true });
+      navigate(await resolvePostLoginRoute(updated), { replace: true });
     } catch (e) {
       setSubmitError(
         e instanceof ApiClientError ? e.message : 'Could not save your profile. Please try again.',

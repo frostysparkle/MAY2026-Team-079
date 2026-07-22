@@ -4,7 +4,7 @@ import { api, ApiClientError } from '@/api';
 import { env } from '@/config/env';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
-import { postLoginRoute } from '@/features/auth/postLoginRoute';
+import { resolvePostLoginRoute } from '@/features/auth/postLoginRoute';
 import { PORTAL_LABELS, type Portal } from '@/features/auth/portal';
 import { GoogleSignInButton } from '@/features/auth/GoogleSignInButton';
 import { Button, ResultBanner, TextInput } from '@/components/ui';
@@ -39,7 +39,7 @@ export default function LoginPage() {
     try {
       const { session } = await api.loginWithGoogle({ idToken });
       setSession(session.token, session.participant);
-      navigate(postLoginRoute(session.participant), { replace: true });
+      navigate(await resolvePostLoginRoute(session.participant), { replace: true });
     } catch (e) {
       if (e instanceof ApiClientError) {
         // Distinct, specific messages for the expected rejections. Covers both

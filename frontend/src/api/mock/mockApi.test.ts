@@ -16,7 +16,7 @@ describe('mockApi', () => {
   });
 
   it('creates a new participant for an unseen IITM email', async () => {
-    const res = await mockApi.loginWithGoogle({ idToken: 'newbie@ds.study.iitm.ac.in' });
+    const res = await mockApi.loginWithGoogle({ idToken: 'brandnew@ds.study.iitm.ac.in' });
     expect(res.isNewUser).toBe(true);
     expect(res.session.participant.profileComplete).toBe(false);
   });

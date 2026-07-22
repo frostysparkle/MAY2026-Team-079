@@ -165,6 +165,10 @@ export interface EventItem {
   instructions: string;
   status: EventStatus;
   createdAt: string;
+  /** Registration context for the current caller (Task 2). */
+  registered?: boolean;
+  registrationCount?: number;
+  spotsLeft?: number;
 }
 
 export interface EventListResponse {
@@ -180,6 +184,13 @@ export interface CreateEventRequest {
   capacity: number;
   instructions: string;
   status?: EventStatus;
+}
+
+/** Participant-side registration context (populated per caller). */
+export interface EventRegistrationContext {
+  registered?: boolean;
+  registrationCount?: number;
+  spotsLeft?: number;
 }
 
 /** All fields optional — send only what changes (PATCH semantics). */
@@ -465,6 +476,75 @@ export interface ReconciliationItem {
 
 export interface ReconciliationResponse {
   participants: ReconciliationItem[];
+}
+
+/* ----------------------------------------------------- journey / onboarding --- */
+
+export type OnboardingChoice = 'yes' | 'no';
+export type JourneyStepKey = 'profile' | 'accommodation' | 'mess' | 'payment' | 'events';
+export type JourneyStepState = 'done' | 'current' | 'upcoming' | 'skipped';
+export type NextStep = JourneyStepKey | 'done';
+
+export interface JourneyStep {
+  key: JourneyStepKey;
+  state: JourneyStepState;
+}
+
+export interface Journey {
+  profileComplete: boolean;
+  accommodation: { choice: OnboardingChoice | null; allocated: boolean; paid: boolean };
+  mess: { choice: OnboardingChoice | null; planId: string | null; paid: boolean };
+  paymentDue: boolean;
+  eventsRegistered: number;
+  steps: JourneyStep[];
+  nextStep: NextStep;
+  complete: boolean;
+}
+
+export interface PendingPaymentItem {
+  kind: 'hostel' | 'mess';
+  label: string;
+  amount: number;
+  currency: string;
+}
+
+export interface PendingPayments {
+  items: PendingPaymentItem[];
+  total: number;
+  currency: string;
+}
+
+/* ---------------------------------------------------- event registration --- */
+
+export interface RegistrationResult {
+  eventId: string;
+  registered: boolean;
+  registrationCount: number;
+  spotsLeft: number;
+}
+
+export interface MyRegistration {
+  eventId: string;
+  title: string;
+  venue: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  status: EventStatus;
+  registeredAt: string | null;
+}
+
+export interface MyRegistrationsResponse {
+  registrations: MyRegistration[];
+}
+
+/* -------------------------------------------------------- test harness --- */
+
+export interface TestAccount {
+  email: string;
+  fullName: string | null;
+  role: Role;
+  label: string | null;
 }
 
 /* -------------------------------------------------------------- errors --- */

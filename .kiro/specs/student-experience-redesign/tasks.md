@@ -47,21 +47,21 @@ each slice ship together so the mock and real paths stay in sync.
     - Disposable user: profile → accommodation intent → mess plan → mock-settle payments → register events → journey `complete`; then delete. Re-run `init_db`; verify each seeded account resolves to its intended journey state.
     - _Requirements: 2.4, 3.1, 4.1, 5.1, 6.3, 7.2, 10.2_
 
-- [ ] 4. Frontend: API contract + journey plumbing
-  - [ ] 4.1 Types + ApiClient + realApi adapter + mock
+- [x] 4. Frontend: API contract + journey plumbing
+  - [x] 4.1 Types + ApiClient + realApi adapter + mock
     - Add `Journey`, `JourneyStep`, `EventRegistration`, `PendingPaymentItem`, `TestAccount` to `api/types.ts`; add the new methods to `ApiClient`, `realApi` (snake↔camel), and `mockApi`.
     - Extend mock fixtures with the seeded account states + seed registrations so the mock mirrors the real harness.
     - _Requirements: 3.3, 7.2, 10.5, 13.3_
-  - [ ] 4.2 `useJourney` hook + journey-driven post-login routing + guards
+  - [x] 4.2 `useJourney` hook + journey-driven post-login routing + guards
     - `features/journey/`: pure step model + `useJourney`; update `postLoginRoute` to route via `next_step`; onboarding guards redirect out-of-order deep links.
     - Unit-test the pure step model.
     - _Requirements: 1.4, 2.2, 2.5, 2.8, 11.4_
 
-- [ ] 5. Frontend: student-first entry + onboarding pipeline
+- [-] 5. Frontend: student-first entry + onboarding pipeline
   - [ ] 5.1 Student-first landing
     - Rework Splash so the primary CTA is student register/sign-in; demote organizer/admin to a secondary link. Preserve the "Paradox Connect" heading and portal labels used by tests.
     - _Requirements: 1.1, 1.2, 1.3, 12.2_
-  - [ ] 5.2 Onboarding layout + steps with progress
+  - [x] 5.2 Onboarding layout + steps with progress
     - `pages/onboarding/OnboardingLayout` renders the current step from journey with a progress header; steps: Profile (reuse CompleteProfile), Accommodation (opt), Mess (opt, plan select), Payment (pending items → hosted checkout), Events (prompt).
     - Skip/continue for optional steps; empty-payment bypass; resume at `next_step`.
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 4.1, 5.1, 6.1, 11.1, 12.4_

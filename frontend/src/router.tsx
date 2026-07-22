@@ -39,6 +39,7 @@ const PlaceholderPage = lazy(() => import('@/pages/PlaceholderPage'));
 // Complete Your Profile pulls in the large country/state/city dataset — kept
 // split so it never bloats the offline app shell.
 const CompleteProfilePage = lazy(() => import('@/pages/CompleteProfilePage'));
+const OnboardingLayout = lazy(() => import('@/pages/onboarding/OnboardingLayout'));
 
 function Lazy({ children }: { children: ReactNode }) {
   return (
@@ -70,6 +71,19 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <Lazy>
           <CompleteProfilePage />
+        </Lazy>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Onboarding pipeline — authenticated students; renders the current journey
+  // step (profile → stay → food → payment → events) and resumes at next_step.
+  {
+    path: ROUTES.onboarding,
+    element: (
+      <ProtectedRoute>
+        <Lazy>
+          <OnboardingLayout />
         </Lazy>
       </ProtectedRoute>
     ),

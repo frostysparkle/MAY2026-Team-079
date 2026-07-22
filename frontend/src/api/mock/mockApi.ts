@@ -64,9 +64,18 @@ import type {
   Payment,
   MyPayments,
   ReconciliationResponse,
+  Journey,
+  OnboardingChoice,
+  PendingPayments,
+  PendingPaymentItem,
+  RegistrationResult,
+  MyRegistration,
+  MyRegistrationsResponse,
+  TestAccount,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP, roleRank } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
+import { resolveJourney } from '@/features/journey/resolve';
 import {
   seedParticipants,
   seedEvents,
@@ -76,6 +85,7 @@ import {
   seedHostelAllocations,
   seedAnnouncements,
   seedMealPlans,
+  seedTestAccounts,
 } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
@@ -99,6 +109,29 @@ interface MockPayment extends Payment {
 }
 const payments: MockPayment[] = [];
 const HOSTEL_FEE = 2000;
+
+/** Onboarding intent per participant (mirrors backend `users.onboarding`). */
+interface MockOnboarding {
+  accommodationChoice: OnboardingChoice | null;
+  messChoice: OnboardingChoice | null;
+  messPlanId: string | null;
+}
+const onboarding: Record<string, MockOnboarding> = {};
+
+/** Soft-cancellable event registrations (mirrors `event_registrations`). */
+interface MockRegistration {
+  participantId: string;
+  eventId: string;
+  status: 'registered' | 'cancelled';
+  createdAt: string;
+}
+const eventRegistrations: MockRegistration[] = [];
+
+/**
+ * Labels shown by the dev account switcher, keyed by participant id. Populated
+ * from the seeded test-harness matrix (Req 10) so the mock mirrors the backend.
+ */
+const testAccountLabels: Record<string, string> = {};
 
 function toPaymentOut(p: MockPayment): Payment {
   return {
@@ -126,6 +159,28 @@ function paymentDisplayStatus(p: MockPayment | null): string {
   return p.status === 'created' ? 'pending' : p.status;
 }
 
+function activeRegCount(eventId: string): number {
+  return eventRegistrations.filter((r) => r.eventId === eventId && r.status === 'registered')
+    .length;
+}
+
+function isRegistered(participantId: string | null, eventId: string): boolean {
+  return eventRegistrations.some(
+    (r) => r.participantId === participantId && r.eventId === eventId && r.status === 'registered',
+  );
+}
+
+/** Annotate an event with the current caller's registration context. */
+function annotateEvent(e: EventItem): EventItem {
+  const count = activeRegCount(e.id);
+  return {
+    ...e,
+    registered: isRegistered(currentId, e.id),
+    registrationCount: count,
+    spotsLeft: Math.max(e.capacity - count, 0),
+  };
+}
+
 function crowdStatus(attendance: number, capacity: number): 'available' | 'filling_fast' | 'full' {
   if (capacity <= 0) return 'available';
   const ratio = attendance / capacity;
@@ -143,6 +198,69 @@ const usedCodes = new Set<string>();
 const eligibility: Record<string, { hostelPaid: boolean; messEligible: boolean }> = {
   p_participant: { hostelPaid: true, messEligible: true },
 };
+
+// The default seeded participant has completed onboarding end-to-end.
+onboarding.p_participant = {
+  accommodationChoice: 'yes',
+  messChoice: 'yes',
+  messPlanId: 'plan_full',
+};
+
+/**
+ * Seed the test-harness account matrix (Req 10) into the mock stores so the dev
+ * account switcher and journey behave exactly like the backend seed script.
+ */
+(function seedTestHarness() {
+  for (const seed of seedTestAccounts()) {
+    const pid = seed.participant.id;
+    if (!participants.some((p) => p.id === pid)) participants.push(seed.participant);
+    testAccountLabels[pid] = seed.label;
+    onboarding[pid] = {
+      accommodationChoice: seed.onboarding.accommodationChoice,
+      messChoice: seed.onboarding.messChoice,
+      messPlanId: seed.onboarding.messPlanId,
+    };
+    eligibility[pid] = { hostelPaid: seed.hostelPaid, messEligible: seed.messEligible };
+    if (seed.messEligible) messEligible.add(pid);
+    if (seed.allocation && !hostelAllocations.some((a) => a.participantId === pid)) {
+      hostelAllocations.push({
+        id: `h_${pid}`,
+        participantId: pid,
+        hostelBlock: seed.allocation.hostelBlock,
+        room: seed.allocation.room,
+        instructions: 'Check in at the block office. Carry your digital ID.',
+        coordinator: 'Hostel Desk · 9100000222',
+        checkedIn: false,
+        checkedInAt: null,
+      });
+    }
+    for (const eventId of seed.registrations) {
+      eventRegistrations.push({
+        participantId: pid,
+        eventId,
+        status: 'registered',
+        createdAt: '2026-07-20T10:00:00+05:30',
+      });
+    }
+    for (const pay of seed.payments) {
+      const now = '2026-07-20T10:00:00+05:30';
+      payments.push({
+        id: `pay_${pid}_${pay.kind}`,
+        userId: pid,
+        kind: pay.kind,
+        status: pay.status,
+        amount: pay.amount,
+        currency: 'INR',
+        planId: pay.kind === 'mess' ? seed.onboarding.messPlanId : null,
+        planName: pay.planName ?? null,
+        sessionId: `seed_${pid}_${pay.kind}`,
+        txnRef: pay.status === 'paid' ? `MOCK-SEED-${pid}` : null,
+        createdAt: now,
+        paidAt: pay.status === 'paid' ? now : null,
+      });
+    }
+  }
+})();
 
 const delay = (ms = 160) => new Promise((r) => setTimeout(r, ms));
 
@@ -322,7 +440,7 @@ export const mockApi: ApiClient = {
     const sorted = [...visible].sort((a, b) =>
       `${a.eventDate}${a.startTime}`.localeCompare(`${b.eventDate}${b.startTime}`),
     );
-    return { events: sorted };
+    return { events: sorted.map(annotateEvent) };
   },
 
   async getEvent(id: string): Promise<EventItem> {
@@ -333,7 +451,7 @@ export const mockApi: ApiClient = {
     if (!e || (!canManage && e.status !== 'published')) {
       throw new ApiClientError(404, 'event_not_found', 'Event not found.');
     }
-    return e;
+    return annotateEvent(e);
   },
 
   async createEvent(req: CreateEventRequest): Promise<EventItem> {
@@ -844,4 +962,176 @@ export const mockApi: ApiClient = {
       })),
     };
   },
+
+  async getJourney(): Promise<Journey> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    return journeyFor(currentId);
+  },
+
+  async setAccommodationChoice(choice: OnboardingChoice): Promise<Journey> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const o = (onboarding[currentId] ??= {
+      accommodationChoice: null,
+      messChoice: null,
+      messPlanId: null,
+    });
+    o.accommodationChoice = choice;
+    return journeyFor(currentId);
+  },
+
+  async setMessChoice(choice: OnboardingChoice, planId?: string): Promise<Journey> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    if (choice === 'yes') {
+      const plan = mealPlans.find((p) => p.id === planId && p.active);
+      if (!plan) throw new ApiClientError(400, 'plan_inactive', 'That meal plan is not available.');
+    }
+    const o = (onboarding[currentId] ??= {
+      accommodationChoice: null,
+      messChoice: null,
+      messPlanId: null,
+    });
+    o.messChoice = choice;
+    o.messPlanId = choice === 'yes' ? (planId ?? null) : null;
+    return journeyFor(currentId);
+  },
+
+  async getPendingPayments(): Promise<PendingPayments> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const o = onboarding[currentId] ?? {
+      accommodationChoice: null,
+      messChoice: null,
+      messPlanId: null,
+    };
+    const items: PendingPaymentItem[] = [];
+    if (o.accommodationChoice === 'yes' && !(eligibility[currentId]?.hostelPaid === true)) {
+      items.push({
+        kind: 'hostel',
+        label: 'Hostel accommodation fee',
+        amount: HOSTEL_FEE,
+        currency: 'INR',
+      });
+    }
+    if (o.messChoice === 'yes' && !messEligible.has(currentId)) {
+      const plan = mealPlans.find((p) => p.id === o.messPlanId);
+      if (plan) {
+        items.push({ kind: 'mess', label: plan.name, amount: plan.amount, currency: 'INR' });
+      }
+    }
+    return { items, total: items.reduce((s, i) => s + i.amount, 0), currency: 'INR' };
+  },
+
+  async registerEvent(eventId: string): Promise<RegistrationResult> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const e = events.find((x) => x.id === eventId);
+    if (!e || e.status !== 'published') {
+      throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+    }
+    const existing = eventRegistrations.find(
+      (r) => r.participantId === currentId && r.eventId === eventId,
+    );
+    if (!existing || existing.status !== 'registered') {
+      if (e.capacity > 0 && activeRegCount(eventId) >= e.capacity) {
+        throw new ApiClientError(409, 'event_full', 'This event is at capacity.');
+      }
+      if (existing) {
+        existing.status = 'registered';
+      } else {
+        eventRegistrations.push({
+          participantId: currentId,
+          eventId,
+          status: 'registered',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+    const count = activeRegCount(eventId);
+    return {
+      eventId,
+      registered: true,
+      registrationCount: count,
+      spotsLeft: Math.max(e.capacity - count, 0),
+    };
+  },
+
+  async cancelEventRegistration(eventId: string): Promise<void> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const reg = eventRegistrations.find(
+      (r) => r.participantId === currentId && r.eventId === eventId && r.status === 'registered',
+    );
+    if (reg) reg.status = 'cancelled';
+  },
+
+  async listMyRegistrations(): Promise<MyRegistrationsResponse> {
+    await delay();
+    const mine = eventRegistrations
+      .filter((r) => r.participantId === currentId && r.status === 'registered')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const registrations: MyRegistration[] = [];
+    for (const r of mine) {
+      const e = events.find((x) => x.id === r.eventId);
+      if (!e) continue;
+      registrations.push({
+        eventId: e.id,
+        title: e.title,
+        venue: e.venue,
+        eventDate: e.eventDate,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        status: e.status,
+        registeredAt: r.createdAt,
+      });
+    }
+    return { registrations };
+  },
+
+  async devLogin(email: string): Promise<GoogleLoginResponse> {
+    await delay();
+    const target = email.trim().toLowerCase();
+    const p = participants.find((x) => x.email.toLowerCase() === target);
+    if (!p || !testAccountLabels[p.id]) {
+      throw new ApiClientError(404, 'not_found', 'No test account for that email.');
+    }
+    currentId = p.id;
+    return { session: { token: `mock.${p.id}`, participant: p }, isNewUser: false };
+  },
+
+  async listTestAccounts(): Promise<TestAccount[]> {
+    await delay();
+    return participants
+      .filter((p) => testAccountLabels[p.id])
+      .map((p) => ({
+        email: p.email,
+        fullName: p.fullName || null,
+        role: p.role,
+        label: testAccountLabels[p.id] ?? null,
+      }));
+  },
 };
+
+/** Resolve the derived onboarding journey for a participant (mirrors backend). */
+function journeyFor(participantId: string): Journey {
+  const p = participants.find((x) => x.id === participantId);
+  const o = onboarding[participantId] ?? {
+    accommodationChoice: null,
+    messChoice: null,
+    messPlanId: null,
+  };
+  return resolveJourney({
+    profileComplete: p?.profileComplete ?? false,
+    accommodationChoice: o.accommodationChoice,
+    messChoice: o.messChoice,
+    messPlanId: o.messPlanId,
+    hasAllocation: hostelAllocations.some((a) => a.participantId === participantId),
+    hostelPaid: eligibility[participantId]?.hostelPaid === true,
+    messPaid: messEligible.has(participantId),
+    eventsRegistered: eventRegistrations.filter(
+      (r) => r.participantId === participantId && r.status === 'registered',
+    ).length,
+  });
+}
