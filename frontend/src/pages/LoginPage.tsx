@@ -60,16 +60,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col justify-center gap-6 p-6">
+    <main className="animate-rise mx-auto flex min-h-full max-w-md flex-col justify-center gap-6 p-6">
       <div>
         <button
           type="button"
           onClick={() => navigate(ROUTES.splash)}
-          className="text-sm text-muted hover:text-brand"
+          className="tap -ml-1 inline-flex h-9 items-center rounded-full px-2 text-sm text-muted hover:bg-surface-2 hover:text-brand active:scale-95"
         >
-          ← Back
+          ‹ Back
         </button>
-        <h1 className="mt-3 text-xl font-bold text-gray-900">{PORTAL_LABELS[portal]}</h1>
+        <h1 className="mt-3 text-2xl font-black tracking-tight text-ink">{PORTAL_LABELS[portal]}</h1>
         <p className="mt-1 text-sm text-muted">
           Sign in with your IITM Google account. Your access is verified after sign-in.
         </p>
@@ -82,7 +82,7 @@ export default function LoginPage() {
       )}
 
       {env.useMockApi ? (
-        <div className="flex flex-col gap-4 rounded-xl border border-dashed border-line p-4">
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface p-5 shadow-card ring-1 ring-black/[0.03]">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">
             Dev sign-in (mock)
           </p>

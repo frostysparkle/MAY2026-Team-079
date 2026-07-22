@@ -1,28 +1,111 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens for Paradox Connect.
- * Tailwind v4 reads these from @theme and generates utilities like
- * `bg-brand`, `text-success`, etc. Keeping semantic names (success / danger /
- * warning) means the Result Banner and status states stay consistent everywhere.
+ * Paradox Connect — design system.
+ *
+ * A premium, mobile-first PWA look: layered surfaces, soft elevation, a warm
+ * indigo→violet brand, a refined type scale, and a small motion vocabulary.
+ * Tailwind v4 reads the @theme tokens and generates utilities (bg-brand,
+ * rounded-2xl, shadow-card, animate-rise, …). Semantic names are preserved so
+ * existing screens keep working while the whole app is elevated.
  */
 @theme {
-  --color-brand: #4f46e5;
-  --color-brand-dark: #4338ca;
+  /* Brand — indigo with a violet lift for gradients/accents. */
+  --color-brand: #5b5bf0;
+  --color-brand-dark: #4642d6;
+  --color-brand-light: #ecebff;
+  --color-brand-50: #f2f1ff;
+  --color-brand-100: #e6e5ff;
+  --color-brand-500: #5b5bf0;
+  --color-brand-600: #4c46e6;
+  --color-brand-700: #3f39c7;
+  --color-accent: #ec4899;
 
-  --color-success: #16a34a;
+  /* Status */
+  --color-success: #12a150;
   --color-success-bg: #dcfce7;
-  --color-danger: #dc2626;
-  --color-danger-bg: #fee2e2;
-  --color-warning: #d97706;
+  --color-danger: #e5484d;
+  --color-danger-bg: #ffe9e9;
+  --color-warning: #d98a04;
   --color-warning-bg: #fef3c7;
 
+  /* Neutrals & surfaces (layered) */
+  --color-canvas: #f6f6fb;
   --color-surface: #ffffff;
+  --color-surface-2: #f3f3f8;
   --color-muted: #6b7280;
-  --color-line: #e5e7eb;
+  --color-line: #ececf1;
+  --color-ink: #14141f;
+
+  /* Radius scale — generous, app-like corners. */
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  /* Soft, diffuse elevation (not harsh borders). */
+  --shadow-card: 0 1px 2px rgba(20, 20, 31, 0.04), 0 4px 16px rgba(20, 20, 31, 0.06);
+  --shadow-lift: 0 8px 30px rgba(20, 20, 31, 0.12);
+  --shadow-fab: 0 10px 25px rgba(91, 91, 240, 0.35);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Inter, system-ui,
+    sans-serif;
+
+  /* Motion vocabulary → `animate-*` utilities. */
+  --animate-rise: rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade: fade 0.3s ease both;
+  --animate-pop: pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-toast: toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Mobile-first base. The app is a PWA used mostly on phones at checkpoints. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/* ------------------------------------------------------------- base --- */
+
 html,
 body,
 #root {
@@ -31,19 +114,78 @@ body,
 
 body {
   margin: 0;
-  background: #f9fafb;
-  color: #111827;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Native-app feel: no rubber-band on the document, no tap flash. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Always show a visible focus ring for keyboard users (accessibility). */
+/* Smooth in-app scrolling with iOS momentum. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand) 22%, transparent);
+}
+
+/* Visible focus ring for keyboard users (accessibility). */
 :focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
+}
+
+/* Respect reduced-motion: disable non-essential animation/transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------- utilities --- */
+
+/* Safe-area padding for notched devices (used by shell + FABs). */
+@utility safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+@utility safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+/* Frosted glass surface for sticky bars. */
+@utility glass {
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+}
+
+/* Hide scrollbars on horizontal rails while keeping scroll. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Press feedback for tappable elements. */
+@utility tap {
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+/* Masonry-style columns for feed/grid layouts. */
+@utility masonry {
+  column-gap: 0.85rem;
+  column-fill: balance;
 }

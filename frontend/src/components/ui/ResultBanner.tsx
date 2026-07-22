@@ -4,9 +4,9 @@ import { cn } from '@/lib/cn';
 export type BannerVariant = 'success' | 'error' | 'warning';
 
 const styles: Record<BannerVariant, string> = {
-  success: 'bg-success-bg text-success',
-  error: 'bg-danger-bg text-danger',
-  warning: 'bg-warning-bg text-warning',
+  success: 'bg-success-bg text-success ring-success/15',
+  error: 'bg-danger-bg text-danger ring-danger/15',
+  warning: 'bg-warning-bg text-warning ring-warning/15',
 };
 
 const icons: Record<BannerVariant, string> = {
@@ -33,11 +33,15 @@ export function ResultBanner({
   return (
     <div
       role={variant === 'success' ? 'status' : 'alert'}
-      className={cn('flex items-start gap-3 rounded-lg p-4', styles[variant], className)}
+      className={cn(
+        'animate-pop flex items-start gap-3 rounded-2xl p-4 ring-1 ring-inset',
+        styles[variant],
+        className,
+      )}
     >
       <span
         aria-hidden
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/60 text-sm font-bold"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/70 text-sm font-bold"
       >
         {icons[variant]}
       </span>

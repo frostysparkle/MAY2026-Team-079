@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { ROLE_LABELS } from '@/config/constants';
-import { Card, EmptyState, Button } from '@/components/ui';
+import { Card, EmptyState, Button, Avatar } from '@/components/ui';
 
 const GENDER_LABELS: Record<string, string> = {
   male: 'Male',
@@ -63,24 +63,16 @@ export default function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center gap-4">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-line bg-gray-50">
-          {participant.photoUrl ? (
-            <img
-              src={participant.photoUrl}
-              alt={`${participant.fullName}'s profile`}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-muted">
-              No photo
-            </div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold text-gray-900">{participant.fullName}</h1>
+      {/* Gradient cover with the avatar overlapping. */}
+      <div className="relative">
+        <div className="h-24 rounded-3xl bg-gradient-to-br from-brand to-accent shadow-card" />
+        <div className="-mt-10 flex flex-col items-center px-4 text-center">
+          <Avatar src={participant.photoUrl} name={participant.fullName} size={84} />
+          <h1 className="mt-2 truncate text-lg font-black tracking-tight text-ink">
+            {participant.fullName}
+          </h1>
           <p className="truncate text-sm text-muted">{participant.email}</p>
-          <span className="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+          <span className="mt-2 inline-block rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand">
             {ROLE_LABELS[participant.role]}
           </span>
         </div>

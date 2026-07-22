@@ -1,11 +1,20 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-/** Simple surface container. */
-export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  /** Adds hover lift + press feedback for tappable cards. */
+  interactive?: boolean;
+}
+
+/** Rounded, softly-elevated surface container. */
+export function Card({ className, interactive, children, ...props }: CardProps) {
   return (
     <div
-      className={cn('rounded-xl border border-line bg-surface p-4 shadow-sm', className)}
+      className={cn(
+        'rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]',
+        interactive && 'tap cursor-pointer hover:-translate-y-0.5 hover:shadow-lift active:scale-[0.99]',
+        className,
+      )}
       {...props}
     >
       {children}
@@ -32,7 +41,7 @@ export function ListItem({
     <div
       className={cn(
         'flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0',
-        interactive && 'cursor-pointer hover:bg-gray-50',
+        interactive && 'tap cursor-pointer hover:bg-surface-2',
       )}
       onClick={onClick}
       role={interactive ? 'button' : undefined}

@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { clearSecrets } from '@/lib/secretStore';
+import { PageTransition } from '@/components/motion/PageTransition';
 import { cn } from '@/lib/cn';
 
 /** Bottom-nav tabs for the participant area. */
@@ -14,10 +15,9 @@ const NAV = [
 ];
 
 /**
- * Navigation shell for participant screens: a header with the signed-in user and
- * a bottom navigation bar. Child routes render into <Outlet />. The plan lists
- * Profile and My QR; a Home tab is added as the landing/dashboard target that
- * profile completion redirects to.
+ * Native-feeling app shell: a frosted sticky header, an animated bottom tab bar
+ * with an active pill, and route transitions on the content. Fills the viewport
+ * and respects device safe areas so it reads as an installed app, not a page.
  */
 export function AppShell() {
   const participant = useAuthStore((s) => s.participant);
@@ -33,49 +33,70 @@ export function AppShell() {
   };
 
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col bg-surface">
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-brand">Paradox Connect</p>
-          {participant && (
-            <p className="truncate text-xs text-muted">
-              {participant.fullName || participant.email}
-            </p>
-          )}
+    <div className="mx-auto flex min-h-full max-w-md flex-col bg-canvas">
+      <header className="glass safe-top sticky top-0 z-30 border-b border-line/60">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-sm font-bold text-white">
+              P
+            </div>
+            <div className="min-w-0 leading-tight">
+              <p className="text-sm font-bold text-ink">Paradox Connect</p>
+              {participant && (
+                <p className="truncate text-xs text-muted">
+                  {participant.fullName || participant.email}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={signOut}
+            className="tap rounded-full px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-2 hover:text-danger active:scale-95"
+          >
+            Sign out
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={signOut}
-          className="rounded-md px-2 py-1 text-xs font-medium text-muted hover:text-danger"
-        >
-          Sign out
-        </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-20">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto pb-24">
+        <PageTransition>
+          <Outlet />
+        </PageTransition>
       </main>
 
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md border-t border-line bg-surface"
+        className="glass safe-bottom fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line/60"
       >
         {NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs',
-                isActive ? 'text-brand' : 'text-muted',
-              )
-            }
+            className="tap flex flex-1 flex-col items-center gap-1 py-2.5"
           >
-            <span aria-hidden className="text-lg">
-              {item.icon}
-            </span>
-            {item.label}
+            {({ isActive }) => (
+              <>
+                <span
+                  aria-hidden
+                  className={cn(
+                    'flex h-8 w-12 items-center justify-center rounded-full text-lg transition-all duration-200',
+                    isActive ? 'scale-105 bg-brand-100 text-brand' : 'text-muted',
+                  )}
+                >
+                  {item.icon}
+                </span>
+                <span
+                  className={cn(
+                    'text-[10px] font-medium transition-colors',
+                    isActive ? 'text-brand' : 'text-muted',
+                  )}
+                >
+                  {item.label}
+                </span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -3,8 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#4f46e5" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <!-- viewport-fit=cover lets the app paint into the safe areas (notch). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#5b5bf0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#4642d6" media="(prefers-color-scheme: dark)" />
+    <!-- iOS installed-app behavior. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Paradox" />
     <meta
       name="description"
       content="Paradox Connect — centralized platform and digital ID for the Paradox fest."

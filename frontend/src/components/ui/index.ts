@@ -10,3 +10,6 @@ export { EmptyState } from './EmptyState';
 export { ErrorState } from './ErrorState';
 export { Card, ListItem } from './Card';
 export { ToastHost } from './ToastHost';
+export { FAB } from './FAB';
+export { PageHeader } from './PageHeader';
+export { Avatar } from './Avatar';

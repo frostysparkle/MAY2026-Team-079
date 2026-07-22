@@ -19,17 +19,57 @@ export default defineConfig({
         // The country/state/city dataset chunk is huge and only needed online
         // during profile completion — keep it out of the offline precache.
         globIgnores: ['**/CompleteProfilePage-*.js'],
+        cleanupOutdatedCaches: true,
+        // SPA: serve the cached app shell for any navigation while offline, so
+        // the on-device QR keeps working. API calls are excluded from fallback.
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            // Previously-fetched API data stays available offline (stale) with a
+            // quick network refresh when online.
+            urlPattern: ({ url }) => url.pathname.includes('/api/v1/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Participant photos / remote images.
+            urlPattern: ({ request }) => request.destination === 'image',
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'image-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            },
+          },
+        ],
       },
       manifest: {
+        id: '/',
         name: 'Paradox Connect',
         short_name: 'Paradox',
         description: 'Centralized platform and digital ID for the Paradox fest.',
-        theme_color: '#4f46e5',
-        background_color: '#f9fafb',
+        theme_color: '#5b5bf0',
+        background_color: '#f6f6fb',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
+        orientation: 'portrait',
+        scope: '/',
         start_url: '/',
+        lang: 'en',
+        categories: ['education', 'productivity', 'lifestyle'],
         icons: [
-          { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+        ],
+        shortcuts: [
+          { name: 'My Digital ID', short_name: 'My QR', url: '/app/qr' },
+          { name: 'Scan a QR', short_name: 'Scan', url: '/scan' },
+          { name: 'Events', short_name: 'Events', url: '/app/events' },
         ],
       },
     }),
