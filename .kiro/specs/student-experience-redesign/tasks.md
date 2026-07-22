@@ -34,16 +34,16 @@ each slice ship together so the mock and real paths stay in sync.
     - Add `registered`, `registration_count`, `spots_left` to events list/detail responses (per caller).
     - _Requirements: 7.1, 7.3, 7.4, 7.6_
 
-- [ ] 3. Backend: test harness (seed + gated dev login)
-  - [ ] 3.1 Dev-login + test-accounts endpoints (gated)
+- [x] 3. Backend: test harness (seed + gated dev login)
+  - [x] 3.1 Dev-login + test-accounts endpoints (gated)
     - `app/auth/dev_login.py`: `POST /auth/dev-login {email}` issues a JWT for a seeded active user; `GET /auth/test-accounts` lists them. Both 404 when `enable_dev_login` is false.
     - Unit-test gating (404 disabled; token + 200 enabled) — Property 8.
     - _Requirements: 10.3, 10.4, 10.5_
-  - [ ] 3.2 Idempotent seed script for the Req-10 account matrix
+  - [x] 3.2 Idempotent seed script for the Req-10 account matrix
     - `scripts/seed_test_data.py`: upsert accounts (newbie, profileonly, hosteler, hostelunpaid, messie, fullstack, eventfan, paidpending, volunteer, warden) with consistent supporting rows (allocations, payments, mess eligibility, registrations, onboarding intent) + a few seed events/meal plans.
     - Print how to re-seed/reset; document in `backend/README.md`.
     - _Requirements: 10.1, 10.2, 10.6_
-  - [ ] 3.3 Live smoke of the full pipeline + seed verification (Atlas, cleaned up)
+  - [x] 3.3 Live smoke of the full pipeline + seed verification (Atlas, cleaned up)
     - Disposable user: profile → accommodation intent → mess plan → mock-settle payments → register events → journey `complete`; then delete. Re-run `init_db`; verify each seeded account resolves to its intended journey state.
     - _Requirements: 2.4, 3.1, 4.1, 5.1, 6.3, 7.2, 10.2_
 

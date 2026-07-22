@@ -98,3 +98,49 @@ New users always start with the `participant` role.
   Google's OpenID Connect discovery endpoint without exposing credentials.
 
 `/live` works without MongoDB. `/ready` returns HTTP 503 until `MONGODB_URI` points to a reachable database.
+
+## Test accounts (manual QA)
+
+For end-to-end manual testing there is a seed script plus a dev-only login so you
+can switch between realistic accounts without creating data by hand.
+
+Seed (idempotent — purges the previously seeded test data, then rebuilds it;
+real data is untouched):
+
+```bash
+uv run python -m scripts.seed_test_data          # purge + re-seed
+uv run python -m scripts.seed_test_data --reset  # purge test data only
+```
+
+This creates accounts on `@ds.study.iitm.ac.in`, each in a distinct state:
+
+| Email local part | Role | State |
+|---|---|---|
+| `newbie` | participant | signed in, no profile |
+| `profileonly` | participant | profile done, no bookings |
+| `hosteler` | participant | accommodation booked + paid + allocated |
+| `hostelunpaid` | participant | accommodation chosen, payment pending |
+| `messie` | participant | mess plan booked + paid |
+| `fullstack` | participant | profile + hostel + mess + events, all paid |
+| `eventfan` | participant | registered for several events |
+| `paidpending` | participant | one paid + one pending payment |
+| `volunteer` | organizer | scanner access |
+| `warden` | admin | admin surfaces |
+
+To use them in the app, enable the **dev-only** login (never in production):
+
+```bash
+export APP_ENV=development
+export ENABLE_DEV_LOGIN=true
+```
+
+Then:
+
+* `GET  /api/v1/auth/test-accounts` — lists the seeded accounts (dev only).
+* `POST /api/v1/auth/dev-login {"email": "hosteler@ds.study.iitm.ac.in"}` — issues
+  a normal session for that seeded account (dev only).
+
+Both endpoints return **404** unless `ENABLE_DEV_LOGIN=true` **and**
+`APP_ENV != production`, and only accounts flagged `is_test` can be assumed, so
+real users are never reachable this way. The frontend account switcher uses these
+endpoints when `VITE_ENABLE_DEV_SWITCHER=true`.
