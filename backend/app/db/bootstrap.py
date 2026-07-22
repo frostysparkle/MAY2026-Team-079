@@ -9,6 +9,9 @@ from app.core.config import Settings
 from app.db.collections import (
     EVENT_REGISTRATIONS,
     INITIAL_COLLECTIONS,
+    PHOTOS,
+    QR_SECRETS,
+    SCAN_LOGS,
     STAFF_ASSIGNMENTS,
     USERS,
 )
@@ -102,6 +105,45 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
             IndexModel(
                 [("user_id", ASCENDING), ("active", ASCENDING)],
                 name="ix_staff_assignments_user_active",
+            ),
+        ]
+    )
+
+    # One stored photo per user (Complete Your Profile), separate from the
+    # participant document per the locked data-model decision.
+    await database[PHOTOS].create_indexes(
+        [IndexModel([("user_id", ASCENDING)], unique=True, name="uq_photos_user")]
+    )
+
+    # One TOTP secret per participant per checkpoint context. Re-provisioning
+    # overwrites the row (rotates the secret).
+    await database[QR_SECRETS].create_indexes(
+        [
+            IndexModel(
+                [("user_id", ASCENDING), ("checkpoint_context", ASCENDING)],
+                unique=True,
+                name="uq_qr_secrets_user_context",
+            )
+        ]
+    )
+
+    # Scan audit log + replay protection: a matched (participant, context, step)
+    # can only be recorded once.
+    await database[SCAN_LOGS].create_indexes(
+        [
+            IndexModel(
+                [
+                    ("participant_id", ASCENDING),
+                    ("checkpoint_context", ASCENDING),
+                    ("step", ASCENDING),
+                ],
+                unique=True,
+                partialFilterExpression={"step": {"$exists": True}},
+                name="uq_scan_logs_replay",
+            ),
+            IndexModel(
+                [("participant_id", ASCENDING), ("scanned_at", ASCENDING)],
+                name="ix_scan_logs_participant_time",
             ),
         ]
     )

@@ -15,10 +15,10 @@ _Last updated: 11 Jul 2026_
 | QR/TOTP + Security Architecture | ✅ Complete |
 | Sprint 1 Planning & Review | ✅ Complete |
 | **Frontend — Sprint 1** | ✅ Complete (mock-API backed, 35 tests passing) |
-| **Backend — Sprint 1** | 🔲 Not started (Ashwin) |
-| Frontend ↔ Backend integration | 🔲 Blocked on backend endpoints |
+| **Backend — Sprint 1** | ✅ Auth complete; all 6 contract endpoints implemented |
+| Frontend ↔ Backend integration | � Code complete on `feature/frontend-backend-integration`; pending live end-to-end run |
 
-The frontend is fully built and runs today against an in-memory **mock API**, so it is not blocked. The next critical path is the **backend**, which the frontend already has a typed contract for.
+The frontend is fully built and runs today against an in-memory **mock API**. All six contract endpoints now exist on the backend, and the frontend has a real-API adapter that maps the backend's snake_case / `roles[]` shapes to its camelCase / single-`role` types. What remains is a **live end-to-end run** against a real MongoDB instance and real Google OAuth credentials (config only — no code blockers).
 
 ---
 
@@ -143,20 +143,21 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Admin User Management + RBAC guards + Access Denied
 - [x] ✅ PWA + encrypted secret store
 - [x] ✅ Tests / lint / build green
-- [ ] 🔲 Backend integration pass (mock → real)
+- [x] ✅ Real-API adapter (snake_case→camelCase, `roles[]`→`role`), `/api/v1` base URL
+- [ ] � Backend integration pass (mock → real) — code done, pending live run
 
-### Backend (Sprint 1 — Ashwin)
-- [ ] 🔲 FastAPI project + MongoDB setup
-- [ ] 🔲 `POST /auth/google` (OAuth verify + JWT)
-- [ ] 🔲 4-tier roles + first Super Admin seed
-- [ ] 🔲 `POST /profile/complete` + `photos` collection
-- [ ] 🔲 `GET /admin/users`
-- [ ] 🔲 `PATCH /admin/participants/{id}/role` (Super Admin only)
-- [ ] 🔲 `POST /qr/provision`
-- [ ] 🔲 `POST /scan/verify` (7 result codes, matching TOTP config)
+### Backend (Sprint 1)
+- [x] ✅ FastAPI project + MongoDB setup
+- [x] ✅ `POST /auth/google` (OAuth verify + JWT)
+- [x] ✅ 5-tier roles (+ `staff`) + first Super Admin seed
+- [x] ✅ `POST /profile/complete` + `photos` collection
+- [x] ✅ `GET /admin/users`
+- [x] ✅ `PATCH /admin/participants/{id}/role` (Super Admin only, server-enforced)
+- [x] ✅ `POST /qr/provision` (once-per-context secret, rotates on re-provision)
+- [x] ✅ `POST /scan/verify` (7 result codes, `pyotp` SHA1/6/30/±1, replay protection)
 
 ### Shared
-- [ ] 🔲 Ravi ↔ Ashwin API contract sync
+- [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)
-- [ ] 🔲 End-to-end test pass
+- [ ] 🔲 End-to-end test pass against live MongoDB + real Google OAuth
 - [ ] 🔲 Payments integration (later sprint)

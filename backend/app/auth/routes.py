@@ -7,6 +7,7 @@ from pymongo.errors import PyMongoError
 from app.auth.dependencies import (
     get_current_user,
     get_google_verifier,
+    get_photos_collection_optional,
     get_users_collection,
 )
 from app.auth.google import (
@@ -17,7 +18,6 @@ from app.auth.google import (
     GoogleTokenVerifier,
 )
 from app.auth.schemas import (
-    AuthenticatedUser,
     GoogleLoginRequest,
     GoogleLoginResponse,
 )
@@ -29,23 +29,27 @@ from app.auth.service import (
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.security import SecurityConfigurationError, create_access_token
+from app.participants.serialization import (
+    ParticipantOut,
+    resolve_photo_url,
+    serialize_participant,
+)
 
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 users_router = APIRouter(prefix="/users", tags=["users"])
 
+# Resolve the forward reference to ParticipantOut declared in schemas.py
+# (kept there to avoid a circular import at module load).
+GoogleLoginResponse.model_rebuild()
 
-def _user_response(user: dict[str, Any]) -> AuthenticatedUser:
-    profile = user.get("profile", {})
-    return AuthenticatedUser(
-        id=str(user["_id"]),
-        email=user["email"],
-        email_verified=bool(user.get("email_verified")),
-        roles=user.get("roles", []),
-        status=user["status"],
-        full_name=profile.get("full_name"),
-        profile_complete=bool(user.get("profile_complete")),
-    )
+
+async def _participant_response(
+    user: dict[str, Any],
+    photos: AsyncCollection[dict[str, Any]] | None,
+) -> ParticipantOut:
+    photo_url = await resolve_photo_url(photos, user["_id"])
+    return serialize_participant(user, photo_url)
 
 
 @router.post(
@@ -58,6 +62,10 @@ async def login_with_google(
     verifier: Annotated[GoogleTokenVerifier, Depends(get_google_verifier)],
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
+    ],
+    photos: Annotated[
+        AsyncCollection[dict[str, Any]] | None,
+        Depends(get_photos_collection_optional),
     ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> GoogleLoginResponse:
@@ -118,16 +126,20 @@ async def login_with_google(
         access_token=access_token,
         expires_in=settings.jwt_access_token_minutes * 60,
         is_new_user=result.is_new_user,
-        user=_user_response(result.user),
+        user=await _participant_response(result.user, photos),
     )
 
 
 @users_router.get(
     "/me",
-    response_model=AuthenticatedUser,
+    response_model=ParticipantOut,
     summary="Return the authenticated user",
 )
 async def get_me(
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
-) -> AuthenticatedUser:
-    return _user_response(current_user)
+    photos: Annotated[
+        AsyncCollection[dict[str, Any]] | None,
+        Depends(get_photos_collection_optional),
+    ],
+) -> ParticipantOut:
+    return await _participant_response(current_user, photos)

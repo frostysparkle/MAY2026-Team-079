@@ -11,14 +11,19 @@ export const IITM_EMAIL_DOMAINS = [
   '@mg.study.iitm.ac.in',
 ] as const;
 
-/** Four-tier role hierarchy (PRD FR-7.3). Order matters: higher index = more power. */
-export const ROLES = ['participant', 'organizer', 'admin', 'super_admin'] as const;
+/**
+ * Role hierarchy (PRD FR-7.3, aligned with the backend). Order matters:
+ * higher index = more power. `staff` sits between organizer and admin and
+ * mirrors the backend's five-tier model.
+ */
+export const ROLES = ['participant', 'organizer', 'staff', 'admin', 'super_admin'] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Human-readable labels for roles. */
 export const ROLE_LABELS: Record<Role, string> = {
   participant: 'Participant',
   organizer: 'Organizer',
+  staff: 'Staff',
   admin: 'Admin',
   super_admin: 'Super Admin',
 };

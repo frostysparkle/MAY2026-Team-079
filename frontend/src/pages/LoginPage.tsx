@@ -6,6 +6,7 @@ import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
 import { PORTAL_LABELS, type Portal } from '@/features/auth/portal';
+import { GoogleSignInButton } from '@/features/auth/GoogleSignInButton';
 import { Button, ResultBanner, TextInput } from '@/components/ui';
 
 /** Seed accounts surfaced in the mock dev sign-in for quick testing. */
@@ -41,10 +42,11 @@ export default function LoginPage() {
       navigate(postLoginRoute(session.participant), { replace: true });
     } catch (e) {
       if (e instanceof ApiClientError) {
-        // Distinct, specific messages for the two expected rejections.
-        if (e.code === 'invalid_domain') {
+        // Distinct, specific messages for the expected rejections. Covers both
+        // the mock codes and the real backend codes (docs/api-contract.md).
+        if (e.code === 'invalid_domain' || e.code === 'google_account_not_allowed') {
           setError('That is not a valid IITM email. Please use your @*.study.iitm.ac.in account.');
-        } else if (e.code === 'already_registered') {
+        } else if (e.code === 'already_registered' || e.code === 'identity_conflict') {
           setError('This Google account is already registered. Try signing in again.');
         } else {
           setError(e.message);
@@ -116,9 +118,10 @@ export default function LoginPage() {
           </div>
         </div>
       ) : (
-        <Button fullWidth loading={loading} onClick={() => signIn('')}>
-          Sign in with Google
-        </Button>
+        <div className="flex flex-col gap-3">
+          <GoogleSignInButton onCredential={(cred) => void signIn(cred)} onError={setError} />
+          {loading && <p className="text-center text-sm text-muted">Signing in…</p>}
+        </div>
       )}
     </main>
   );

@@ -14,23 +14,61 @@ from app.core.security import (
     SecurityConfigurationError,
     decode_access_token,
 )
-from app.db.collections import USERS
+from app.db.collections import PHOTOS, QR_SECRETS, SCAN_LOGS, USERS
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_users_collection(
-    request: Request,
+def _collection(
+    request: Request, name: str
 ) -> AsyncCollection[dict[str, Any]]:
     try:
-        return request.app.state.mongo.database[USERS]
+        return request.app.state.mongo.database[name]
     except RuntimeError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             code="database_unavailable",
             message="The database is not configured or available.",
         ) from exc
+
+
+def get_users_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, USERS)
+
+
+def get_qr_secrets_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, QR_SECRETS)
+
+
+def get_scan_logs_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, SCAN_LOGS)
+
+
+def get_photos_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, PHOTOS)
+
+
+def get_photos_collection_optional(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]] | None:
+    """Photos collection, or None when the database is unavailable.
+
+    Used on read paths (login, /me) where a missing photo must not fail the
+    request.
+    """
+    try:
+        return request.app.state.mongo.database[PHOTOS]
+    except RuntimeError:
+        return None
 
 
 def get_google_verifier(

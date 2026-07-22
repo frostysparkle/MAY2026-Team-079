@@ -4,10 +4,13 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.admin.routes import router as admin_router
 from app.api.health import public_router, router as health_router
 from app.auth.routes import router as auth_router
 from app.auth.routes import users_router
 from app.core.config import get_settings
+from app.profile.routes import router as profile_router
+from app.qr.routes import router as qr_router
 from app.core.errors import ApiError, api_error_handler, validation_error_handler
 from app.db.mongo import MongoService
 
@@ -47,6 +50,9 @@ def create_app() -> FastAPI:
     application.include_router(health_router, prefix="/api/v1")
     application.include_router(auth_router, prefix="/api/v1")
     application.include_router(users_router, prefix="/api/v1")
+    application.include_router(profile_router, prefix="/api/v1")
+    application.include_router(admin_router, prefix="/api/v1")
+    application.include_router(qr_router, prefix="/api/v1")
     application.state.environment = settings.app_env
     return application
 
