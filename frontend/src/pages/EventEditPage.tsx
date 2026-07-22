@@ -5,6 +5,7 @@ import { api, ApiClientError } from '@/api';
 import type { CreateEventRequest, EventStatus } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { Button, ResultBanner, Select, TextInput, Spinner } from '@/components/ui';
+import { AdminScreen } from '@/components/layout/AdminScreen';
 
 const STATUS_OPTIONS: { value: EventStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
@@ -83,20 +84,11 @@ export default function EventEditPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col gap-6 p-6">
-      <div>
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.events)}
-          className="text-sm text-muted hover:text-brand"
-        >
-          ← Cancel
-        </button>
-        <h1 className="mt-3 text-xl font-bold text-gray-900">
-          {isEdit ? 'Edit Event' : 'New Event'}
-        </h1>
-      </div>
-
+    <AdminScreen
+      title={isEdit ? 'Edit Event' : 'New Event'}
+      subtitle={isEdit ? 'Update the details below.' : 'Fill in the details below.'}
+      onBack={() => navigate(ROUTES.events)}
+    >
       {submitError && (
         <ResultBanner variant="error" title="Could not save">
           {submitError}
@@ -180,6 +172,6 @@ export default function EventEditPage() {
           {isEdit ? 'Save changes' : 'Create event'}
         </Button>
       </form>
-    </main>
+    </AdminScreen>
   );
 }

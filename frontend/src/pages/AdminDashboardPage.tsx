@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/api';
 import type { CrowdStatus, DashboardEvent } from '@/api/types';
 import { ROUTES } from '@/config/routes';
+import { AdminScreen } from '@/components/layout/AdminScreen';
 import { Card, Skeleton, EmptyState, ErrorState } from '@/components/ui';
 
 type Status = 'loading' | 'error' | 'loaded';
@@ -41,20 +42,11 @@ export default function AdminDashboardPage() {
   }, []);
 
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Live Crowd</h1>
-          <p className="text-sm text-muted">Attendance across active events.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.home)}
-          className="text-sm text-muted hover:text-brand"
-        >
-          ← Home
-        </button>
-      </div>
+    <AdminScreen
+      title="Live Crowd"
+      subtitle="Attendance across active events."
+      onBack={() => navigate(ROUTES.home)}
+    >
 
       {status === 'loading' && <Skeleton className="h-24" />}
       {status === 'error' && (
@@ -96,6 +88,6 @@ export default function AdminDashboardPage() {
             </Card>
           </Link>
         ))}
-    </main>
+    </AdminScreen>
   );
 }

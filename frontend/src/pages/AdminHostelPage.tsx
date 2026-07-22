@@ -8,6 +8,7 @@ import type {
   UserListItem,
 } from '@/api/types';
 import { ROUTES } from '@/config/routes';
+import { AdminScreen } from '@/components/layout/AdminScreen';
 import { toast } from '@/stores/uiStore';
 import { Button, Card, Select, TextInput, Skeleton } from '@/components/ui';
 
@@ -73,20 +74,11 @@ export default function AdminHostelPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Hostel Allocations</h1>
-          <p className="text-sm text-muted">Assign blocks and rooms to participants.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.home)}
-          className="text-sm text-muted hover:text-brand"
-        >
-          ← Home
-        </button>
-      </div>
+    <AdminScreen
+      title="Hostel Allocations"
+      subtitle="Assign blocks and rooms to participants."
+      onBack={() => navigate(ROUTES.home)}
+    >
 
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(assign)} noValidate>
         <p className="text-sm font-semibold text-gray-800">Assign allocation</p>
@@ -151,6 +143,6 @@ export default function AdminHostelPage() {
             </Card>
           ))}
       </div>
-    </main>
+    </AdminScreen>
   );
 }

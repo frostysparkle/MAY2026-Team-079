@@ -49,7 +49,7 @@ export default function ScanResultPage() {
 
   return (
     <main className="mx-auto flex min-h-full max-w-md flex-col gap-5 p-4">
-      <h1 className="text-lg font-bold text-gray-900">Scan Result</h1>
+      <h1 className="text-xl font-black tracking-tight text-ink">Scan Result</h1>
 
       {loading && (
         <div className="flex flex-col items-center gap-3 py-12">

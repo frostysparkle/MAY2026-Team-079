@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/api';
 import type { UserListItem } from '@/api/types';
 import { ROLES, ROLE_LABELS, type Role } from '@/config/constants';
@@ -7,6 +7,7 @@ import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/uiStore';
 import { Card, EmptyState, ErrorState, ListItem, Spinner } from '@/components/ui';
+import { AdminScreen } from '@/components/layout/AdminScreen';
 
 type Status = 'loading' | 'ready' | 'error';
 
@@ -23,6 +24,7 @@ const dateFmt = new Intl.DateTimeFormat('en-IN', {
  * hidden here, but the endpoint also rejects non-super-admin callers.
  */
 export default function UsersPage() {
+  const navigate = useNavigate();
   const myRole = useAuthStore((s) => s.participant?.role);
   const isSuperAdmin = myRole === 'super_admin';
 
@@ -58,20 +60,15 @@ export default function UsersPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col gap-4 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">User Management</h1>
-          <p className="text-sm text-muted">
-            {isSuperAdmin
-              ? 'Assign roles to participants and staff.'
-              : 'View registered users. Only a Super Admin can change roles.'}
-          </p>
-        </div>
-        <Link to={ROUTES.home} className="shrink-0 text-sm text-muted hover:text-brand">
-          Dashboard
-        </Link>
-      </div>
+    <AdminScreen
+      title="User Management"
+      subtitle={
+        isSuperAdmin
+          ? 'Assign roles to participants and staff.'
+          : 'View registered users. Only a Super Admin can change roles.'
+      }
+      onBack={() => navigate(ROUTES.home)}
+    >
 
       {status === 'loading' && (
         <div className="flex justify-center py-12">
@@ -115,6 +112,6 @@ export default function UsersPage() {
             ))}
           </Card>
         ))}
-    </main>
+    </AdminScreen>
   );
 }

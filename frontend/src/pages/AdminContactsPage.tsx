@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/api';
 import type { Contact, ContactCategory, CreateContactRequest } from '@/api/types';
 import { ROUTES } from '@/config/routes';
+import { AdminScreen } from '@/components/layout/AdminScreen';
 import { toast } from '@/stores/uiStore';
 import { Button, Card, Select, TextInput, Skeleton, ErrorState } from '@/components/ui';
 
@@ -75,20 +76,11 @@ export default function AdminContactsPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Contact Directory</h1>
-          <p className="text-sm text-muted">Maintain support and emergency contacts.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.home)}
-          className="text-sm text-muted hover:text-brand"
-        >
-          ← Home
-        </button>
-      </div>
+    <AdminScreen
+      title="Contact Directory"
+      subtitle="Maintain support and emergency contacts."
+      onBack={() => navigate(ROUTES.home)}
+    >
 
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(onSubmit)} noValidate>
         <p className="text-sm font-semibold text-gray-800">Add a contact</p>
@@ -160,6 +152,6 @@ export default function AdminContactsPage() {
             </Card>
           ))}
       </div>
-    </main>
+    </AdminScreen>
   );
 }

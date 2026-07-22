@@ -39,7 +39,7 @@ export default function AnnouncementsPage() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Announcements</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Announcements</h1>
         <p className="text-sm text-muted">Official updates from the core team.</p>
       </div>
 

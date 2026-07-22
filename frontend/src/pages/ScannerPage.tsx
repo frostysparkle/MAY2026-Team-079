@@ -103,7 +103,7 @@ export default function ScannerPage() {
   return (
     <main className="mx-auto flex min-h-full max-w-md flex-col gap-5 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Scan Participant QR</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Scan Participant QR</h1>
         <p className="text-sm text-muted">Point the camera at the participant&apos;s digital ID.</p>
       </div>
 

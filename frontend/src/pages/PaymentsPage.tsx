@@ -83,7 +83,7 @@ export default function PaymentsPage() {
   return (
     <div className="flex flex-col gap-5 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Payments</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Payments</h1>
         <p className="text-sm text-muted">Hostel and mess fees.</p>
       </div>
 

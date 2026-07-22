@@ -49,7 +49,7 @@ export default function MessPage() {
   return (
     <div className="flex flex-col gap-5 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Mess</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Mess</h1>
         <p className="text-sm text-muted">Your mess pass, menu, and timings.</p>
       </div>
 

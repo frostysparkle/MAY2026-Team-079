@@ -94,7 +94,7 @@ export default function HelpPage() {
   return (
     <div className="flex flex-col gap-6 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Help &amp; Support</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Help &amp; Support</h1>
         <p className="text-sm text-muted">Raise a query or find the right contact.</p>
       </div>
 

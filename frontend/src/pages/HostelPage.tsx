@@ -34,7 +34,7 @@ export default function HostelPage() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Hostel</h1>
+        <h1 className="text-xl font-black tracking-tight text-ink">Hostel</h1>
         <p className="text-sm text-muted">Your accommodation and check-in details.</p>
       </div>
 
