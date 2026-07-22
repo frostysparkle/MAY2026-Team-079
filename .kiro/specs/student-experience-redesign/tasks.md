@@ -57,8 +57,8 @@ each slice ship together so the mock and real paths stay in sync.
     - Unit-test the pure step model.
     - _Requirements: 1.4, 2.2, 2.5, 2.8, 11.4_
 
-- [-] 5. Frontend: student-first entry + onboarding pipeline
-  - [ ] 5.1 Student-first landing
+- [x] 5. Frontend: student-first entry + onboarding pipeline
+  - [x] 5.1 Student-first landing
     - Rework Splash so the primary CTA is student register/sign-in; demote organizer/admin to a secondary link. Preserve the "Paradox Connect" heading and portal labels used by tests.
     - _Requirements: 1.1, 1.2, 1.3, 12.2_
   - [x] 5.2 Onboarding layout + steps with progress

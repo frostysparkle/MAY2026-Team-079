@@ -40,26 +40,43 @@ export default function SplashPage() {
         </div>
 
         <div
-          className="animate-rise flex w-full flex-col gap-3 rounded-3xl bg-surface/80 p-5 shadow-card ring-1 ring-black/[0.03] backdrop-blur"
+          className="animate-rise flex w-full flex-col gap-4 rounded-3xl bg-surface/80 p-5 shadow-card ring-1 ring-black/[0.03] backdrop-blur"
           style={{ animationDelay: '80ms' }}
         >
-          <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            Continue as
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-bold text-ink">New to Paradox?</p>
+            <p className="text-xs text-muted">
+              Register or sign in with your college email to book your stay, meals, and events.
+            </p>
+          </div>
           <Button size="lg" fullWidth onClick={() => choose('student')}>
             {PORTAL_LABELS.student}
           </Button>
-          <Button size="lg" fullWidth variant="secondary" onClick={() => choose('organizer')}>
-            {PORTAL_LABELS.organizer}
-          </Button>
-          <Button size="lg" fullWidth variant="secondary" onClick={() => choose('admin')}>
-            {PORTAL_LABELS.admin}
-          </Button>
         </div>
 
-        <p className="animate-fade mx-auto max-w-xs text-center text-xs text-muted">
-          Access is verified after you sign in with your IITM Google account.
-        </p>
+        <div className="animate-fade flex flex-col items-center gap-3">
+          <p className="max-w-xs text-center text-xs text-muted">
+            Access is verified after you sign in with your IITM Google account.
+          </p>
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span>Staff access:</span>
+            <button
+              type="button"
+              className="font-semibold text-brand underline-offset-2 hover:underline"
+              onClick={() => choose('organizer')}
+            >
+              {PORTAL_LABELS.organizer}
+            </button>
+            <span aria-hidden>·</span>
+            <button
+              type="button"
+              className="font-semibold text-brand underline-offset-2 hover:underline"
+              onClick={() => choose('admin')}
+            >
+              {PORTAL_LABELS.admin}
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   );
