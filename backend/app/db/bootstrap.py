@@ -13,7 +13,9 @@ from app.db.collections import (
     EVENTS,
     HOSTEL_ALLOCATIONS,
     INITIAL_COLLECTIONS,
+    MEAL_PLANS,
     MESS_MENU,
+    PAYMENTS,
     PHOTOS,
     QR_SECRETS,
     QUERIES,
@@ -209,6 +211,26 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
         [
             IndexModel([("created_at", DESCENDING)], name="ix_announcements_created"),
             IndexModel([("audience", ASCENDING)], name="ix_announcements_audience"),
+        ]
+    )
+
+    # Payments (Epic 10): look up a user's latest payment per kind, and resolve
+    # a gateway session on webhook. No card data is ever stored here.
+    await database[MEAL_PLANS].create_indexes(
+        [IndexModel([("active", ASCENDING)], name="ix_meal_plans_active")]
+    )
+    await database[PAYMENTS].create_indexes(
+        [
+            IndexModel(
+                [("gateway_session_id", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"gateway_session_id": {"$type": "string"}},
+                name="uq_payments_session",
+            ),
+            IndexModel(
+                [("user_id", ASCENDING), ("kind", ASCENDING), ("created_at", DESCENDING)],
+                name="ix_payments_user_kind",
+            ),
         ]
     )
 

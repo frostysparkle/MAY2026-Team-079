@@ -45,6 +45,11 @@ class Settings:
     jwt_access_token_minutes: int
     initial_super_admin_email: str | None
     cors_origins: tuple[str, ...]
+    payment_gateway: str
+    payment_webhook_secret: str
+    payment_currency: str
+    hostel_fee_amount: int
+    frontend_base_url: str
 
 
 @lru_cache
@@ -74,4 +79,15 @@ def get_settings() -> Settings:
         ),
         initial_super_admin_email=initial_super_admin_email,
         cors_origins=_csv_setting("CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
+        payment_gateway=getenv("PAYMENT_GATEWAY", "mock").strip().lower() or "mock",
+        # A real provider must set PAYMENT_WEBHOOK_SECRET; the mock gateway falls
+        # back to a dev secret so local end-to-end works without extra config.
+        payment_webhook_secret=(
+            getenv("PAYMENT_WEBHOOK_SECRET", "").strip() or "mock-dev-webhook-secret"
+        ),
+        payment_currency=getenv("PAYMENT_CURRENCY", "INR").strip() or "INR",
+        hostel_fee_amount=_positive_int_setting("HOSTEL_FEE_AMOUNT", 2000),
+        frontend_base_url=(
+            getenv("FRONTEND_BASE_URL", "").strip() or DEFAULT_CORS_ORIGINS[0]
+        ),
     )

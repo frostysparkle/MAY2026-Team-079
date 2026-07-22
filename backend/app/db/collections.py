@@ -10,6 +10,8 @@ CONTACTS = "contacts"
 MESS_MENU = "mess_menu"
 HOSTEL_ALLOCATIONS = "hostel_allocations"
 ANNOUNCEMENTS = "announcements"
+MEAL_PLANS = "meal_plans"
+PAYMENTS = "payments"
 
 INITIAL_COLLECTIONS = (
     USERS,
@@ -24,4 +26,6 @@ INITIAL_COLLECTIONS = (
     MESS_MENU,
     HOSTEL_ALLOCATIONS,
     ANNOUNCEMENTS,
+    MEAL_PLANS,
+    PAYMENTS,
 )

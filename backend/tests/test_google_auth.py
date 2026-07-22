@@ -36,6 +36,11 @@ def make_settings() -> Settings:
         jwt_access_token_minutes=30,
         initial_super_admin_email=None,
         cors_origins=("http://localhost:5173",),
+        payment_gateway="mock",
+        payment_webhook_secret="test-webhook-secret",
+        payment_currency="INR",
+        hostel_fee_amount=2000,
+        frontend_base_url="http://localhost:5173",
     )
 
 

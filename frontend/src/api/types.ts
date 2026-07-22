@@ -406,6 +406,67 @@ export interface OperationalOverview {
   mess: { eligible: number };
 }
 
+/* ------------------------------------------------------------ payments --- */
+
+export type PaymentKind = 'hostel' | 'mess';
+export type PaymentStatus = 'created' | 'paid' | 'failed';
+
+export interface MealPlan {
+  id: string;
+  name: string;
+  description: string;
+  amount: number;
+  currency: string;
+  active: boolean;
+}
+
+export interface MealPlanListResponse {
+  plans: MealPlan[];
+}
+
+export interface CreateMealPlanRequest {
+  name: string;
+  description?: string;
+  amount: number;
+  active?: boolean;
+}
+
+export type UpdateMealPlanRequest = Partial<CreateMealPlanRequest>;
+
+export interface CheckoutResponse {
+  paymentId: string;
+  checkoutUrl: string;
+}
+
+export interface Payment {
+  id: string;
+  kind: PaymentKind;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  planName: string | null;
+  txnRef: string | null;
+  createdAt: string | null;
+  paidAt: string | null;
+}
+
+export interface MyPayments {
+  hostel: Payment | null;
+  mess: Payment | null;
+}
+
+export interface ReconciliationItem {
+  id: string;
+  fullName: string | null;
+  email: string;
+  hostelStatus: string;
+  messStatus: string;
+}
+
+export interface ReconciliationResponse {
+  participants: ReconciliationItem[];
+}
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

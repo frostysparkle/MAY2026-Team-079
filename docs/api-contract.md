@@ -243,6 +243,24 @@ aggregated from the shared data stores (FR-9.3 — no parallel copies):
 }
 ```
 
+## Payments (Epic 10)
+
+Hosted-checkout model: our server never receives card data (PRD §7.2). A checkout
+returns a gateway `checkout_url`; the outcome arrives via a **signature-verified
+webhook**. Only status + a transaction reference are stored. The gateway is
+swappable (`PAYMENT_GATEWAY`); a `MockGateway` ships for local/dev, where
+`/payments/mock/settle` simulates the provider emitting a signed webhook.
+Status: `created` (pending) → `paid` | `failed`. On `paid`, hostel sets
+`access.hostel_paid`; mess sets `access.mess_eligible` (grants the mess pass).
+
+- `GET /payments/plans` *(auth)* — active meal plans; `POST/PATCH/DELETE /payments/plans[/id]` *(admin+)*.
+- `POST /payments/hostel/checkout` *(auth)* — requires a hostel allocation → `{ payment_id, checkout_url }` (FR-10.1).
+- `POST /payments/mess/checkout` *(auth)* — `{ plan_id }` → `{ payment_id, checkout_url }` (FR-10.2).
+- `POST /payments/webhook` *(public, `X-Signature` HMAC-SHA256 verified)* — settles a payment.
+- `POST /payments/mock/settle` *(auth, mock gateway only)* — `{ session_id, outcome }` dev simulation.
+- `GET /payments/me` *(auth)* — `{ hostel, mess }` status + receipt (amount, date, txn_ref) (FR-10.3).
+- `GET /payments/reconciliation` *(admin+)* — per-participant hostel/mess status (FR-10.4).
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

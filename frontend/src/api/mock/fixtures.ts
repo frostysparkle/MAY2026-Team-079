@@ -6,6 +6,7 @@ import type {
   MessMenuItem,
   HostelAllocation,
   Announcement,
+  MealPlan,
 } from '@/api/types';
 
 /**
@@ -241,6 +242,28 @@ export function seedAnnouncements(): Announcement[] {
       eventId: null,
       senderName: 'Accommodation Team',
       createdAt: '2026-08-14T09:00:00+05:30',
+    },
+  ];
+}
+
+/** Seed mess meal plans for the mock (Epic 10). */
+export function seedMealPlans(): MealPlan[] {
+  return [
+    {
+      id: 'plan_full',
+      name: 'Full Plan (3 meals)',
+      description: 'Breakfast, lunch, and dinner for the fest.',
+      amount: 1500,
+      currency: 'INR',
+      active: true,
+    },
+    {
+      id: 'plan_dinner',
+      name: 'Dinner Only',
+      description: 'Dinner access for the fest.',
+      amount: 700,
+      currency: 'INR',
+      active: true,
     },
   ];
 }

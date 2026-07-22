@@ -19,7 +19,9 @@ from app.db.collections import (
     CONTACTS,
     EVENTS,
     HOSTEL_ALLOCATIONS,
+    MEAL_PLANS,
     MESS_MENU,
+    PAYMENTS,
     PHOTOS,
     QR_SECRETS,
     QUERIES,
@@ -84,6 +86,18 @@ def get_announcements_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, ANNOUNCEMENTS)
+
+
+def get_meal_plans_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, MEAL_PLANS)
+
+
+def get_payments_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, PAYMENTS)
 
 
 def get_qr_secrets_collection(

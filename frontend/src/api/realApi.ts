@@ -67,6 +67,17 @@ import type {
   AnnouncementListResponse,
   CreateAnnouncementRequest,
   OperationalOverview,
+  MealPlan,
+  MealPlanListResponse,
+  CreateMealPlanRequest,
+  UpdateMealPlanRequest,
+  CheckoutResponse,
+  Payment,
+  PaymentKind,
+  PaymentStatus,
+  MyPayments,
+  ReconciliationResponse,
+  ReconciliationItem,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -332,6 +343,52 @@ function toAnnouncement(a: BackendAnnouncement): Announcement {
     eventId: a.event_id,
     senderName: a.sender_name,
     createdAt: a.created_at ?? new Date(0).toISOString(),
+  };
+}
+
+interface BackendPlan {
+  id: string;
+  name: string;
+  description: string;
+  amount: number;
+  currency: string;
+  active: boolean;
+}
+
+function toPlan(p: BackendPlan): MealPlan {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    amount: p.amount,
+    currency: p.currency,
+    active: p.active,
+  };
+}
+
+interface BackendPayment {
+  id: string;
+  kind: PaymentKind;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  plan_name: string | null;
+  txn_ref: string | null;
+  created_at: string | null;
+  paid_at: string | null;
+}
+
+function toPayment(p: BackendPayment): Payment {
+  return {
+    id: p.id,
+    kind: p.kind,
+    status: p.status,
+    amount: p.amount,
+    currency: p.currency,
+    planName: p.plan_name,
+    txnRef: p.txn_ref,
+    createdAt: p.created_at,
+    paidAt: p.paid_at,
   };
 }
 
@@ -754,5 +811,95 @@ export const realApi: ApiClient = {
       hostel: { allocations: b.hostel.allocations, checkedIn: b.hostel.checked_in },
       mess: { eligible: b.mess.eligible },
     };
+  },
+
+  async listMealPlans(): Promise<MealPlanListResponse> {
+    const b = await request<{ plans: BackendPlan[] }>('/payments/plans');
+    return { plans: b.plans.map(toPlan) };
+  },
+
+  async createMealPlan(req: CreateMealPlanRequest): Promise<MealPlan> {
+    return toPlan(
+      await request<BackendPlan>('/payments/plans', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: req.name,
+          description: req.description ?? '',
+          amount: req.amount,
+          active: req.active ?? true,
+        }),
+      }),
+    );
+  },
+
+  async updateMealPlan(id: string, req: UpdateMealPlanRequest): Promise<MealPlan> {
+    const body: Record<string, unknown> = {};
+    if (req.name !== undefined) body.name = req.name;
+    if (req.description !== undefined) body.description = req.description;
+    if (req.amount !== undefined) body.amount = req.amount;
+    if (req.active !== undefined) body.active = req.active;
+    return toPlan(
+      await request<BackendPlan>(`/payments/plans/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    );
+  },
+
+  async deleteMealPlan(id: string): Promise<void> {
+    await request<void>(`/payments/plans/${id}`, { method: 'DELETE' });
+  },
+
+  async startHostelCheckout(): Promise<CheckoutResponse> {
+    const b = await request<{ payment_id: string; checkout_url: string }>(
+      '/payments/hostel/checkout',
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+    return { paymentId: b.payment_id, checkoutUrl: b.checkout_url };
+  },
+
+  async startMessCheckout(planId: string): Promise<CheckoutResponse> {
+    const b = await request<{ payment_id: string; checkout_url: string }>(
+      '/payments/mess/checkout',
+      { method: 'POST', body: JSON.stringify({ plan_id: planId }) },
+    );
+    return { paymentId: b.payment_id, checkoutUrl: b.checkout_url };
+  },
+
+  async mockSettlePayment(sessionId: string, outcome: 'paid' | 'failed'): Promise<void> {
+    await request<void>('/payments/mock/settle', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId, outcome }),
+    });
+  },
+
+  async getMyPayments(): Promise<MyPayments> {
+    const b = await request<{ hostel: BackendPayment | null; mess: BackendPayment | null }>(
+      '/payments/me',
+    );
+    return {
+      hostel: b.hostel ? toPayment(b.hostel) : null,
+      mess: b.mess ? toPayment(b.mess) : null,
+    };
+  },
+
+  async getReconciliation(): Promise<ReconciliationResponse> {
+    const b = await request<{
+      participants: Array<{
+        id: string;
+        full_name: string | null;
+        email: string;
+        hostel_status: string;
+        mess_status: string;
+      }>;
+    }>('/payments/reconciliation');
+    const participants: ReconciliationItem[] = b.participants.map((p) => ({
+      id: p.id,
+      fullName: p.full_name,
+      email: p.email,
+      hostelStatus: p.hostel_status,
+      messStatus: p.mess_status,
+    }));
+    return { participants };
   },
 };

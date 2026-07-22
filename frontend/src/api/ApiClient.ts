@@ -47,6 +47,13 @@ import type {
   AnnouncementListResponse,
   CreateAnnouncementRequest,
   OperationalOverview,
+  MealPlan,
+  MealPlanListResponse,
+  CreateMealPlanRequest,
+  UpdateMealPlanRequest,
+  CheckoutResponse,
+  MyPayments,
+  ReconciliationResponse,
 } from './types';
 
 export interface ApiClient {
@@ -110,6 +117,18 @@ export interface ApiClient {
 
   // Operational overview (Epic 9)
   getOverview(): Promise<OperationalOverview>;
+
+  // Payments (Epic 10)
+  listMealPlans(): Promise<MealPlanListResponse>;
+  createMealPlan(req: CreateMealPlanRequest): Promise<MealPlan>;
+  updateMealPlan(id: string, req: UpdateMealPlanRequest): Promise<MealPlan>;
+  deleteMealPlan(id: string): Promise<void>;
+  startHostelCheckout(): Promise<CheckoutResponse>;
+  startMessCheckout(planId: string): Promise<CheckoutResponse>;
+  /** DEV/mock only: simulate the gateway completing a checkout. */
+  mockSettlePayment(sessionId: string, outcome: 'paid' | 'failed'): Promise<void>;
+  getMyPayments(): Promise<MyPayments>;
+  getReconciliation(): Promise<ReconciliationResponse>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

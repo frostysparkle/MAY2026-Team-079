@@ -20,6 +20,8 @@ import HelpPage from '@/pages/HelpPage';
 import MessPage from '@/pages/MessPage';
 import HostelPage from '@/pages/HostelPage';
 import AnnouncementsPage from '@/pages/AnnouncementsPage';
+import PaymentsPage from '@/pages/PaymentsPage';
+import MockCheckoutPage from '@/pages/MockCheckoutPage';
 import AdminQueriesPage from '@/pages/AdminQueriesPage';
 import AdminContactsPage from '@/pages/AdminContactsPage';
 import AdminMessPage from '@/pages/AdminMessPage';
@@ -27,6 +29,7 @@ import AdminHostelPage from '@/pages/AdminHostelPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import AdminOverviewPage from '@/pages/AdminOverviewPage';
 import AdminAnnouncementsPage from '@/pages/AdminAnnouncementsPage';
+import AdminPaymentsPage from '@/pages/AdminPaymentsPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -87,7 +90,18 @@ export const router = createBrowserRouter([
       { path: 'mess', element: <MessPage /> },
       { path: 'hostel', element: <HostelPage /> },
       { path: 'announcements', element: <AnnouncementsPage /> },
+      { path: 'payments', element: <PaymentsPage /> },
     ],
+  },
+
+  // Simulated hosted checkout (mock gateway) — authenticated, outside the shell.
+  {
+    path: ROUTES.mockCheckout,
+    element: (
+      <ProtectedRoute>
+        <MockCheckoutPage />
+      </ProtectedRoute>
+    ),
   },
 
   // Staff scanning — organizer role or higher.
@@ -200,6 +214,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <AdminOverviewPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Payments admin (plans + reconciliation) — admin role or higher.
+  {
+    path: ROUTES.managePayments,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <AdminPaymentsPage />
       </ProtectedRoute>
     ),
   },

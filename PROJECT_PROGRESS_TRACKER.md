@@ -192,6 +192,12 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: Operations dashboard with per-module summary tiles linking to each detailed view; hub link
 - [x] ✅ Live-verified on Atlas (RBAC 403, consolidated snapshot). FR-9.2 (overloaded-location flagging) deferred to P2 per PRD
 
+### Epic 10 — Hostel & Mess Payments (P0 + FR-10.4)
+- [x] ✅ Backend: swappable gateway (mock ships), meal-plan CRUD, hosted-checkout for hostel/mess, signature-verified webhook, payment status/receipts, admin reconciliation; success grants hostel_paid / mess pass
+- [x] ✅ Frontend: Payments screen (status + receipts + pay), simulated hosted checkout, admin plans + reconciliation with filters; Home card + hub link
+- [x] ✅ Live-verified on Atlas (allocation-gated 400, bad webhook signature 400, settle→paid+access granted, reconciliation)
+- Note: mock gateway only; a real provider (Razorpay/Stripe-style) plugs into the same `PaymentGateway` interface via `PAYMENT_GATEWAY` + `PAYMENT_WEBHOOK_SECRET`
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

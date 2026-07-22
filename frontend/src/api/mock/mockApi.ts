@@ -56,6 +56,14 @@ import type {
   AnnouncementListResponse,
   CreateAnnouncementRequest,
   OperationalOverview,
+  MealPlan,
+  MealPlanListResponse,
+  CreateMealPlanRequest,
+  UpdateMealPlanRequest,
+  CheckoutResponse,
+  Payment,
+  MyPayments,
+  ReconciliationResponse,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP, roleRank } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
@@ -67,6 +75,7 @@ import {
   seedMessMenu,
   seedHostelAllocations,
   seedAnnouncements,
+  seedMealPlans,
 } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
@@ -80,6 +89,42 @@ const messEligible = new Set<string>(['p_participant']);
 // Attendance (Epic 3): distinct participants counted per event id.
 const eventAttendance: Record<string, Set<string>> = {};
 const announcements: Announcement[] = seedAnnouncements();
+const mealPlans: MealPlan[] = seedMealPlans();
+// Mock payments store (Epic 10). Card data never appears here, matching the
+// hosted-checkout model — only status + a mock transaction reference.
+interface MockPayment extends Payment {
+  userId: string;
+  planId: string | null;
+  sessionId: string;
+}
+const payments: MockPayment[] = [];
+const HOSTEL_FEE = 2000;
+
+function toPaymentOut(p: MockPayment): Payment {
+  return {
+    id: p.id,
+    kind: p.kind,
+    status: p.status,
+    amount: p.amount,
+    currency: p.currency,
+    planName: p.planName,
+    txnRef: p.txnRef,
+    createdAt: p.createdAt,
+    paidAt: p.paidAt,
+  };
+}
+
+function latestPayment(userId: string | null, kind: 'hostel' | 'mess'): MockPayment | null {
+  const mine = payments
+    .filter((p) => p.userId === userId && p.kind === kind)
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  return mine[0] ?? null;
+}
+
+function paymentDisplayStatus(p: MockPayment | null): string {
+  if (!p) return 'not_started';
+  return p.status === 'created' ? 'pending' : p.status;
+}
 
 function crowdStatus(attendance: number, capacity: number): 'available' | 'filling_fast' | 'full' {
   if (capacity <= 0) return 'available';
@@ -656,6 +701,147 @@ export const mockApi: ApiClient = {
         checkedIn: hostelAllocations.filter((a) => a.checkedIn).length,
       },
       mess: { eligible: messEligible.size },
+    };
+  },
+
+  async listMealPlans(): Promise<MealPlanListResponse> {
+    await delay();
+    return { plans: mealPlans.filter((p) => p.active) };
+  },
+
+  async createMealPlan(req: CreateMealPlanRequest): Promise<MealPlan> {
+    await delay();
+    const created: MealPlan = {
+      id: `plan_${Date.now()}`,
+      name: req.name,
+      description: req.description ?? '',
+      amount: req.amount,
+      currency: 'INR',
+      active: req.active ?? true,
+    };
+    mealPlans.push(created);
+    return created;
+  },
+
+  async updateMealPlan(id: string, req: UpdateMealPlanRequest): Promise<MealPlan> {
+    await delay();
+    const p = mealPlans.find((x) => x.id === id);
+    if (!p) throw new ApiClientError(404, 'plan_not_found', 'Meal plan not found.');
+    Object.assign(p, {
+      ...(req.name !== undefined ? { name: req.name } : {}),
+      ...(req.description !== undefined ? { description: req.description } : {}),
+      ...(req.amount !== undefined ? { amount: req.amount } : {}),
+      ...(req.active !== undefined ? { active: req.active } : {}),
+    });
+    return p;
+  },
+
+  async deleteMealPlan(id: string): Promise<void> {
+    await delay();
+    const idx = mealPlans.findIndex((x) => x.id === id);
+    if (idx === -1) throw new ApiClientError(404, 'plan_not_found', 'Meal plan not found.');
+    mealPlans.splice(idx, 1);
+  },
+
+  async startHostelCheckout(): Promise<CheckoutResponse> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    if (!hostelAllocations.some((a) => a.participantId === currentId)) {
+      throw new ApiClientError(400, 'no_allocation', 'You need a hostel allocation before paying.');
+    }
+    const session = `sess_${Date.now()}`;
+    const now = new Date().toISOString();
+    const payment: MockPayment = {
+      id: `pay_${Date.now()}`,
+      userId: currentId,
+      kind: 'hostel',
+      status: 'created',
+      amount: HOSTEL_FEE,
+      currency: 'INR',
+      planId: null,
+      planName: null,
+      sessionId: session,
+      txnRef: null,
+      createdAt: now,
+      paidAt: null,
+    };
+    payments.push(payment);
+    return {
+      paymentId: payment.id,
+      checkoutUrl: `/payments/mock?session=${session}&amount=${HOSTEL_FEE}&currency=INR`,
+    };
+  },
+
+  async startMessCheckout(planId: string): Promise<CheckoutResponse> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const plan = mealPlans.find((p) => p.id === planId);
+    if (!plan || !plan.active) {
+      throw new ApiClientError(400, 'plan_inactive', 'That meal plan is not available.');
+    }
+    const session = `sess_${Date.now()}`;
+    const now = new Date().toISOString();
+    const payment: MockPayment = {
+      id: `pay_${Date.now()}`,
+      userId: currentId,
+      kind: 'mess',
+      status: 'created',
+      amount: plan.amount,
+      currency: 'INR',
+      planId: plan.id,
+      planName: plan.name,
+      sessionId: session,
+      txnRef: null,
+      createdAt: now,
+      paidAt: null,
+    };
+    payments.push(payment);
+    return {
+      paymentId: payment.id,
+      checkoutUrl: `/payments/mock?session=${session}&amount=${plan.amount}&currency=INR`,
+    };
+  },
+
+  async mockSettlePayment(sessionId: string, outcome: 'paid' | 'failed'): Promise<void> {
+    await delay();
+    const p = payments.find((x) => x.sessionId === sessionId);
+    if (!p) throw new ApiClientError(404, 'payment_not_found', 'No payment for this session.');
+    if (p.status === 'paid') return;
+    if (outcome === 'failed') {
+      p.status = 'failed';
+      return;
+    }
+    p.status = 'paid';
+    p.paidAt = new Date().toISOString();
+    p.txnRef = `MOCK-${sessionId.slice(0, 12)}`;
+    // Grant access on success, mirroring the backend.
+    if (p.kind === 'hostel') {
+      eligibility[p.userId] = { ...(eligibility[p.userId] ?? { messEligible: false }), hostelPaid: true };
+    } else {
+      messEligible.add(p.userId);
+    }
+  },
+
+  async getMyPayments(): Promise<MyPayments> {
+    await delay();
+    const hostel = latestPayment(currentId, 'hostel');
+    const mess = latestPayment(currentId, 'mess');
+    return {
+      hostel: hostel ? toPaymentOut(hostel) : null,
+      mess: mess ? toPaymentOut(mess) : null,
+    };
+  },
+
+  async getReconciliation(): Promise<ReconciliationResponse> {
+    await delay();
+    return {
+      participants: participants.map((u) => ({
+        id: u.id,
+        fullName: u.fullName || null,
+        email: u.email,
+        hostelStatus: paymentDisplayStatus(latestPayment(u.id, 'hostel')),
+        messStatus: paymentDisplayStatus(latestPayment(u.id, 'mess')),
+      })),
     };
   },
 };
