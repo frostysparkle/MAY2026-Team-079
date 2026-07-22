@@ -391,6 +391,21 @@ export interface CreateAnnouncementRequest {
   eventId?: string | null;
 }
 
+/* -------------------------------------------------- operational overview --- */
+
+export interface OperationalOverview {
+  events: { active: number; totalCheckedIn: number; atCapacity: number };
+  queries: {
+    open: number;
+    assigned: number;
+    inProgress: number;
+    resolved: number;
+    unresolved: number;
+  };
+  hostel: { allocations: number; checkedIn: number };
+  mess: { eligible: number };
+}
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

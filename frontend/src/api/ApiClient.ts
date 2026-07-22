@@ -46,6 +46,7 @@ import type {
   Announcement,
   AnnouncementListResponse,
   CreateAnnouncementRequest,
+  OperationalOverview,
 } from './types';
 
 export interface ApiClient {
@@ -106,6 +107,9 @@ export interface ApiClient {
   listAllAnnouncements(): Promise<AnnouncementListResponse>;
   createAnnouncement(req: CreateAnnouncementRequest): Promise<Announcement>;
   deleteAnnouncement(id: string): Promise<void>;
+
+  // Operational overview (Epic 9)
+  getOverview(): Promise<OperationalOverview>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

@@ -107,6 +107,7 @@ export default function HomePage() {
       {(canOrganize || canAdmin) && (
         <div className="mt-2 flex flex-col gap-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Manage</p>
+          {canAdmin && <ManageLink to={ROUTES.overview} icon="🧭" label="Operations Dashboard" />}
           {canOrganize && <ManageLink to={ROUTES.scanner} icon="📷" label="Scan QR" />}
           {canAdmin && <ManageLink to={ROUTES.dashboard} icon="📊" label="Live Crowd" />}
           {canAdmin && <ManageLink to={ROUTES.manageAnnouncements} icon="📣" label="Announcements" />}

@@ -31,6 +31,7 @@ export const ROUTES = {
   manageMess: '/admin/mess',
   manageHostel: '/admin/hostel',
   dashboard: '/admin/dashboard',
+  overview: '/admin/overview',
   manageAnnouncements: '/admin/announcements',
 
   accessDenied: '/access-denied',

@@ -229,6 +229,20 @@ event referenced. Every announcement logs sender + timestamp.
 
 `AnnouncementOut`: `{ id, title, body, audience, event_id, sender_name, created_at }`.
 
+## Operational Overview (Epic 9)
+
+`GET /admin/overview` *(admin+)* returns one consolidated snapshot (FR-9.1),
+aggregated from the shared data stores (FR-9.3 — no parallel copies):
+
+```json
+{
+  "events": { "active": 0, "total_checked_in": 0, "at_capacity": 0 },
+  "queries": { "open": 0, "assigned": 0, "in_progress": 0, "resolved": 0, "unresolved": 0 },
+  "hostel": { "allocations": 0, "checked_in": 0 },
+  "mess": { "eligible": 0 }
+}
+```
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

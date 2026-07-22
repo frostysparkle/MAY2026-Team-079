@@ -55,6 +55,7 @@ import type {
   Announcement,
   AnnouncementListResponse,
   CreateAnnouncementRequest,
+  OperationalOverview,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP, roleRank } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
@@ -630,5 +631,31 @@ export const mockApi: ApiClient = {
     const idx = announcements.findIndex((x) => x.id === id);
     if (idx === -1) throw new ApiClientError(404, 'announcement_not_found', 'Announcement not found.');
     announcements.splice(idx, 1);
+  },
+
+  async getOverview(): Promise<OperationalOverview> {
+    await delay();
+    const published = events.filter((e) => e.status === 'published');
+    let totalCheckedIn = 0;
+    let atCapacity = 0;
+    for (const e of published) {
+      const att = eventAttendance[e.id]?.size ?? 0;
+      totalCheckedIn += att;
+      if (e.capacity > 0 && att >= e.capacity) atCapacity += 1;
+    }
+    const byStatus = (s: SupportQuery['status']) => queries.filter((q) => q.status === s).length;
+    const open = byStatus('open');
+    const assigned = byStatus('assigned');
+    const inProgress = byStatus('in_progress');
+    const resolved = byStatus('resolved');
+    return {
+      events: { active: published.length, totalCheckedIn, atCapacity },
+      queries: { open, assigned, inProgress, resolved, unresolved: open + assigned + inProgress },
+      hostel: {
+        allocations: hostelAllocations.length,
+        checkedIn: hostelAllocations.filter((a) => a.checkedIn).length,
+      },
+      mess: { eligible: messEligible.size },
+    };
   },
 };

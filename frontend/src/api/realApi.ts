@@ -66,6 +66,7 @@ import type {
   Audience,
   AnnouncementListResponse,
   CreateAnnouncementRequest,
+  OperationalOverview,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -722,5 +723,36 @@ export const realApi: ApiClient = {
 
   async deleteAnnouncement(id: string): Promise<void> {
     await request<void>(`/announcements/${id}`, { method: 'DELETE' });
+  },
+
+  async getOverview(): Promise<OperationalOverview> {
+    const b = await request<{
+      events: { active: number; total_checked_in: number; at_capacity: number };
+      queries: {
+        open: number;
+        assigned: number;
+        in_progress: number;
+        resolved: number;
+        unresolved: number;
+      };
+      hostel: { allocations: number; checked_in: number };
+      mess: { eligible: number };
+    }>('/admin/overview');
+    return {
+      events: {
+        active: b.events.active,
+        totalCheckedIn: b.events.total_checked_in,
+        atCapacity: b.events.at_capacity,
+      },
+      queries: {
+        open: b.queries.open,
+        assigned: b.queries.assigned,
+        inProgress: b.queries.in_progress,
+        resolved: b.queries.resolved,
+        unresolved: b.queries.unresolved,
+      },
+      hostel: { allocations: b.hostel.allocations, checkedIn: b.hostel.checked_in },
+      mess: { eligible: b.mess.eligible },
+    };
   },
 };

@@ -187,6 +187,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Live-verified on Atlas (RBAC 403, audience validation 422, filtered feed, log)
 - Note: FR-8.2 registrant-only targeting is partial — no event-registration model in the MVP, so event announcements are event-tagged and shown to all.
 
+### Epic 9 — Admin Operational Dashboard (P1)
+- [x] ✅ Backend: `GET /admin/overview` (admin+) consolidating events/crowd, queries, hostel, and mess from the shared stores (FR-9.1, FR-9.3)
+- [x] ✅ Frontend: Operations dashboard with per-module summary tiles linking to each detailed view; hub link
+- [x] ✅ Live-verified on Atlas (RBAC 403, consolidated snapshot). FR-9.2 (overloaded-location flagging) deferred to P2 per PRD
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

@@ -25,6 +25,7 @@ import AdminContactsPage from '@/pages/AdminContactsPage';
 import AdminMessPage from '@/pages/AdminMessPage';
 import AdminHostelPage from '@/pages/AdminHostelPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import AdminOverviewPage from '@/pages/AdminOverviewPage';
 import AdminAnnouncementsPage from '@/pages/AdminAnnouncementsPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
@@ -189,6 +190,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <AdminAnnouncementsPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Operational overview — admin role or higher.
+  {
+    path: ROUTES.overview,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <AdminOverviewPage />
       </ProtectedRoute>
     ),
   },
