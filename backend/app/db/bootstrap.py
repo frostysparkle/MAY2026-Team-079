@@ -7,6 +7,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.config import Settings
 from app.db.collections import (
+    ANNOUNCEMENTS,
     CONTACTS,
     EVENT_REGISTRATIONS,
     EVENTS,
@@ -201,6 +202,14 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
     # allocated to two hostels simultaneously.
     await database[HOSTEL_ALLOCATIONS].create_indexes(
         [IndexModel([("user_id", ASCENDING)], unique=True, name="uq_hostel_alloc_user")]
+    )
+
+    # Announcements (Epic 8): newest-first feed, filterable by audience.
+    await database[ANNOUNCEMENTS].create_indexes(
+        [
+            IndexModel([("created_at", DESCENDING)], name="ix_announcements_created"),
+            IndexModel([("audience", ASCENDING)], name="ix_announcements_audience"),
+        ]
     )
 
 

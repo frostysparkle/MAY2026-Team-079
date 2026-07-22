@@ -5,6 +5,7 @@ import type {
   SupportQuery,
   MessMenuItem,
   HostelAllocation,
+  Announcement,
 } from '@/api/types';
 
 /**
@@ -216,6 +217,30 @@ export function seedHostelAllocations(): HostelAllocation[] {
       coordinator: 'Mr. Rao · 9100000222',
       checkedIn: false,
       checkedInAt: null,
+    },
+  ];
+}
+
+/** Seed announcements for the mock (Epic 8). */
+export function seedAnnouncements(): Announcement[] {
+  return [
+    {
+      id: 'a_welcome',
+      title: 'Welcome to Paradox!',
+      body: 'Gates open at 9 AM. Keep your digital ID handy at every checkpoint.',
+      audience: 'all_participants',
+      eventId: null,
+      senderName: 'Core Team',
+      createdAt: '2026-08-13T18:00:00+05:30',
+    },
+    {
+      id: 'a_hostel',
+      title: 'Hostel water supply notice',
+      body: 'Water supply in all blocks will be interrupted 2–4 PM today for maintenance.',
+      audience: 'hostel_residents',
+      eventId: null,
+      senderName: 'Accommodation Team',
+      createdAt: '2026-08-14T09:00:00+05:30',
     },
   ];
 }

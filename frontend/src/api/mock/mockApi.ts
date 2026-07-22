@@ -52,8 +52,11 @@ import type {
   EventAttendance,
   EventCrowd,
   AttendanceDashboardResponse,
+  Announcement,
+  AnnouncementListResponse,
+  CreateAnnouncementRequest,
 } from '@/api/types';
-import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
+import { IITM_EMAIL_DOMAINS, TOTP, roleRank } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
 import {
   seedParticipants,
@@ -62,6 +65,7 @@ import {
   seedQueries,
   seedMessMenu,
   seedHostelAllocations,
+  seedAnnouncements,
 } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
@@ -74,6 +78,7 @@ const hostelAllocations: HostelAllocation[] = seedHostelAllocations();
 const messEligible = new Set<string>(['p_participant']);
 // Attendance (Epic 3): distinct participants counted per event id.
 const eventAttendance: Record<string, Set<string>> = {};
+const announcements: Announcement[] = seedAnnouncements();
 
 function crowdStatus(attendance: number, capacity: number): 'available' | 'filling_fast' | 'full' {
   if (capacity <= 0) return 'available';
@@ -574,5 +579,56 @@ export const mockApi: ApiClient = {
         };
       }),
     };
+  },
+
+  async listAnnouncements(): Promise<AnnouncementListResponse> {
+    await delay();
+    const me = participants.find((p) => p.id === currentId);
+    const isPor = me ? roleRank(me.role) >= roleRank('organizer') : false;
+    const hasHostel = hostelAllocations.some((a) => a.participantId === currentId);
+    const visible = announcements.filter((a) => {
+      switch (a.audience) {
+        case 'all_participants':
+        case 'event_registrants':
+          return true;
+        case 'hostel_residents':
+          return hasHostel;
+        case 'pors':
+          return isPor;
+        default:
+          return false;
+      }
+    });
+    const sorted = [...visible].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { announcements: sorted };
+  },
+
+  async listAllAnnouncements(): Promise<AnnouncementListResponse> {
+    await delay();
+    const sorted = [...announcements].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { announcements: sorted };
+  },
+
+  async createAnnouncement(req: CreateAnnouncementRequest): Promise<Announcement> {
+    await delay();
+    const me = participants.find((p) => p.id === currentId);
+    const created: Announcement = {
+      id: `a_${Date.now()}`,
+      title: req.title,
+      body: req.body,
+      audience: req.audience,
+      eventId: req.eventId ?? null,
+      senderName: me?.fullName || 'Core Team',
+      createdAt: new Date().toISOString(),
+    };
+    announcements.unshift(created);
+    return created;
+  },
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await delay();
+    const idx = announcements.findIndex((x) => x.id === id);
+    if (idx === -1) throw new ApiClientError(404, 'announcement_not_found', 'Announcement not found.');
+    announcements.splice(idx, 1);
   },
 };

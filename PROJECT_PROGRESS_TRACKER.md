@@ -181,6 +181,12 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: scanner event selector, attendance/remaining on event detail (organizer+), crowd badge (participants), live-crowd dashboard (admin+, auto-refresh)
 - [x] ✅ Live-verified on Atlas (scan→attendance 1, at_capacity, crowd full, dashboard)
 
+### Epic 8 — Announcements (P1)
+- [x] ✅ Backend: audience-scoped announcements (all/event/hostel/pors), server-side feed filtering, accountability log, admin-only send/delete
+- [x] ✅ Frontend: participant Announcements feed + admin compose/log/delete; Home card + hub link
+- [x] ✅ Live-verified on Atlas (RBAC 403, audience validation 422, filtered feed, log)
+- Note: FR-8.2 registrant-only targeting is partial — no event-registration model in the MVP, so event announcements are event-tagged and shown to all.
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

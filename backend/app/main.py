@@ -9,6 +9,7 @@ from app.api.health import public_router, router as health_router
 from app.auth.routes import router as auth_router
 from app.auth.routes import users_router
 from app.contacts.routes import router as contacts_router
+from app.announcements.routes import router as announcements_router
 from app.attendance.routes import router as attendance_router
 from app.core.config import get_settings
 from app.events.routes import router as events_router
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     application.include_router(mess_router, prefix="/api/v1")
     application.include_router(hostel_router, prefix="/api/v1")
     application.include_router(attendance_router, prefix="/api/v1")
+    application.include_router(announcements_router, prefix="/api/v1")
     application.state.environment = settings.app_env
     return application
 

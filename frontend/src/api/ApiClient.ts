@@ -43,6 +43,9 @@ import type {
   EventAttendance,
   EventCrowd,
   AttendanceDashboardResponse,
+  Announcement,
+  AnnouncementListResponse,
+  CreateAnnouncementRequest,
 } from './types';
 
 export interface ApiClient {
@@ -97,6 +100,12 @@ export interface ApiClient {
   getEventAttendance(eventId: string): Promise<EventAttendance>;
   getEventCrowd(eventId: string): Promise<EventCrowd>;
   getAttendanceDashboard(): Promise<AttendanceDashboardResponse>;
+
+  // Announcements (Epic 8)
+  listAnnouncements(): Promise<AnnouncementListResponse>;
+  listAllAnnouncements(): Promise<AnnouncementListResponse>;
+  createAnnouncement(req: CreateAnnouncementRequest): Promise<Announcement>;
+  deleteAnnouncement(id: string): Promise<void>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

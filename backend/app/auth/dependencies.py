@@ -15,6 +15,7 @@ from app.core.security import (
     decode_access_token,
 )
 from app.db.collections import (
+    ANNOUNCEMENTS,
     CONTACTS,
     EVENTS,
     HOSTEL_ALLOCATIONS,
@@ -77,6 +78,12 @@ def get_hostel_allocations_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, HOSTEL_ALLOCATIONS)
+
+
+def get_announcements_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, ANNOUNCEMENTS)
 
 
 def get_qr_secrets_collection(

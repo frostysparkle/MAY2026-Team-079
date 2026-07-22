@@ -62,6 +62,10 @@ import type {
   CrowdStatus,
   DashboardEvent,
   AttendanceDashboardResponse,
+  Announcement,
+  Audience,
+  AnnouncementListResponse,
+  CreateAnnouncementRequest,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -305,6 +309,28 @@ function toAllocationWithParticipant(a: BackendAllocation): HostelAllocationWith
     ...toAllocation(a),
     fullName: a.full_name ?? null,
     email: a.email ?? null,
+  };
+}
+
+interface BackendAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  audience: Audience;
+  event_id: string | null;
+  sender_name: string | null;
+  created_at?: string | null;
+}
+
+function toAnnouncement(a: BackendAnnouncement): Announcement {
+  return {
+    id: a.id,
+    title: a.title,
+    body: a.body,
+    audience: a.audience,
+    eventId: a.event_id,
+    senderName: a.sender_name,
+    createdAt: a.created_at ?? new Date(0).toISOString(),
   };
 }
 
@@ -668,5 +694,33 @@ export const realApi: ApiClient = {
       status: e.status,
     }));
     return { events };
+  },
+
+  async listAnnouncements(): Promise<AnnouncementListResponse> {
+    const b = await request<{ announcements: BackendAnnouncement[] }>('/announcements');
+    return { announcements: b.announcements.map(toAnnouncement) };
+  },
+
+  async listAllAnnouncements(): Promise<AnnouncementListResponse> {
+    const b = await request<{ announcements: BackendAnnouncement[] }>('/announcements/manage');
+    return { announcements: b.announcements.map(toAnnouncement) };
+  },
+
+  async createAnnouncement(req: CreateAnnouncementRequest): Promise<Announcement> {
+    return toAnnouncement(
+      await request<BackendAnnouncement>('/announcements', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: req.title,
+          body: req.body,
+          audience: req.audience,
+          event_id: req.eventId ?? null,
+        }),
+      }),
+    );
+  },
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await request<void>(`/announcements/${id}`, { method: 'DELETE' });
   },
 };

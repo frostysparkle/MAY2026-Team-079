@@ -362,6 +362,35 @@ export interface AttendanceDashboardResponse {
   events: DashboardEvent[];
 }
 
+/* ------------------------------------------------------- announcements --- */
+
+export type Audience =
+  | 'all_participants'
+  | 'event_registrants'
+  | 'hostel_residents'
+  | 'pors';
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  audience: Audience;
+  eventId: string | null;
+  senderName: string | null;
+  createdAt: string;
+}
+
+export interface AnnouncementListResponse {
+  announcements: Announcement[];
+}
+
+export interface CreateAnnouncementRequest {
+  title: string;
+  body: string;
+  audience: Audience;
+  eventId?: string | null;
+}
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

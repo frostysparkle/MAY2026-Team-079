@@ -19,11 +19,13 @@ import EventEditPage from '@/pages/EventEditPage';
 import HelpPage from '@/pages/HelpPage';
 import MessPage from '@/pages/MessPage';
 import HostelPage from '@/pages/HostelPage';
+import AnnouncementsPage from '@/pages/AnnouncementsPage';
 import AdminQueriesPage from '@/pages/AdminQueriesPage';
 import AdminContactsPage from '@/pages/AdminContactsPage';
 import AdminMessPage from '@/pages/AdminMessPage';
 import AdminHostelPage from '@/pages/AdminHostelPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import AdminAnnouncementsPage from '@/pages/AdminAnnouncementsPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -83,6 +85,7 @@ export const router = createBrowserRouter([
       { path: 'help', element: <HelpPage /> },
       { path: 'mess', element: <MessPage /> },
       { path: 'hostel', element: <HostelPage /> },
+      { path: 'announcements', element: <AnnouncementsPage /> },
     ],
   },
 
@@ -176,6 +179,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <AdminDashboardPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Announcements — admin role or higher.
+  {
+    path: ROUTES.manageAnnouncements,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <AdminAnnouncementsPage />
       </ProtectedRoute>
     ),
   },

@@ -214,6 +214,21 @@ re-entry within the window does not double-count. Crowd status: `available`
 - `GET /attendance/events/{event_id}/crowd` *(auth)* → `{ event_id, status }` (FR-3.3).
 - `GET /attendance/dashboard` *(admin+)* → `{ events: [{ event_id, title, venue, capacity, attendance, remaining, at_capacity, status }] }` (FR-3.4).
 
+## Announcements (Epic 8)
+
+Audience ∈ `all_participants | event_registrants | hostel_residents | pors`.
+The feed is filtered server-side per caller: `all` → everyone; `hostel_residents`
+→ callers with an allocation; `pors` → organizer+; `event_registrants` requires
+an `event_id` and (no registration model in the MVP) is shown to all with the
+event referenced. Every announcement logs sender + timestamp.
+
+- `POST /announcements` *(admin+)* — `{ title, body, audience, event_id? }` → `201`. `422` if `event_registrants` without `event_id`.
+- `GET /announcements` *(auth)* — the caller's audience-filtered feed.
+- `GET /announcements/manage` *(admin+)* — full log (accountability).
+- `DELETE /announcements/{id}` *(admin+)* — `204`.
+
+`AnnouncementOut`: `{ id, title, body, audience, event_id, sender_name, created_at }`.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

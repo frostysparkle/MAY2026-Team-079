@@ -16,6 +16,7 @@ export const ROUTES = {
   help: '/app/help',
   mess: '/app/mess',
   hostel: '/app/hostel',
+  announcements: '/app/announcements',
 
   // Staff
   scanner: '/scan',
@@ -30,6 +31,7 @@ export const ROUTES = {
   manageMess: '/admin/mess',
   manageHostel: '/admin/hostel',
   dashboard: '/admin/dashboard',
+  manageAnnouncements: '/admin/announcements',
 
   accessDenied: '/access-denied',
 } as const;

@@ -9,6 +9,7 @@ QUERIES = "queries"
 CONTACTS = "contacts"
 MESS_MENU = "mess_menu"
 HOSTEL_ALLOCATIONS = "hostel_allocations"
+ANNOUNCEMENTS = "announcements"
 
 INITIAL_COLLECTIONS = (
     USERS,
@@ -22,4 +23,5 @@ INITIAL_COLLECTIONS = (
     CONTACTS,
     MESS_MENU,
     HOSTEL_ALLOCATIONS,
+    ANNOUNCEMENTS,
 )
