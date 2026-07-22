@@ -3,7 +3,7 @@
 **Team:** blastoi-SE · **Team Code:** MAY2026-Team-079
 **Purpose:** Single source of truth for project status. Anyone on the team should be able to read this and know what's done, what's pending, and what to work on next.
 
-_Last updated: 11 Jul 2026_
+_Last updated: 23 Jul 2026_
 
 ---
 
@@ -203,3 +203,34 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [ ] 🔲 Deployment (Vercel + Render)
 - [ ] 🔲 End-to-end test pass against live MongoDB + real Google OAuth
 - [ ] 🔲 Payments integration (later sprint)
+
+---
+
+## Student-Experience Redesign (spec: `.kiro/specs/student-experience-redesign`)
+
+Reorients the app around the student journey and adds a QA test harness.
+Spec docs (requirements → design → tasks) pass Kiro format validation.
+
+- [x] ✅ **Backend — onboarding intent + derived journey**: `users.onboarding`
+  intent, a pure `resolve_journey()` resolver, and `GET /me/journey`,
+  `POST /me/onboarding/{accommodation,mess}`, `GET /me/payments/pending`.
+- [x] ✅ **Backend — participant event registration**: `event_registrations`
+  with capacity/idempotent register, soft cancel, `GET /me/registrations`; events
+  annotate `registered`/`registration_count`/`spots_left`.
+- [x] ✅ **Backend — test harness**: gated `POST /auth/dev-login` +
+  `GET /auth/test-accounts` (404 unless `ENABLE_DEV_LOGIN=true` and non-prod);
+  idempotent `scripts/seed_test_data.py` (10-account state matrix, seeded to Atlas).
+- [x] ✅ **Frontend — journey plumbing**: journey/registration/dev-login types,
+  ApiClient + realApi (snake↔camel) + mock in sync; pure `resolveJourney` mirror
+  with unit tests; `useJourney`; journey-driven post-login routing.
+- [x] ✅ **Frontend — onboarding pipeline**: student-first splash; `/onboarding`
+  host renders the current journey step (profile → stay → food → payment → events)
+  and resumes at `next_step`.
+- [x] ✅ **Frontend — registration + passes + home**: event register/cancel with
+  Registered/Full states; My Pass hub (digital ID + event passes); reworked student
+  Home dashboard; refined nav (Home · Events · My Pass · More · Profile).
+- [x] ✅ **Frontend — dev account switcher**: gated `AccountSwitcher`
+  (`VITE_ENABLE_DEV_SWITCHER`, dev builds only) to swap test identities.
+- [x] ✅ **Verification**: frontend typecheck + lint (0 errors) + 48 vitest + build;
+  backend 22 pytest; live Atlas smoke of dev-login → journey for seeded accounts.
+- Contract documented in `docs/api-contract.md`.

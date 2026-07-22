@@ -82,11 +82,11 @@ each slice ship together so the mock and real paths stay in sync.
     - `features/devtools/AccountSwitcher`: rendered only when `env.enableDevSwitcher`; lists `listTestAccounts()` grouped by state; tap → `devLogin` (real) or switch `currentId` (mock) → reload journey → route. Not rendered in production; add `VITE_ENABLE_DEV_SWITCHER` + docs.
     - _Requirements: 10.3, 10.4, 10.5_
 
-- [ ] 8. Integration, docs, and verification
-  - [ ] 8.1 End-to-end verification pass
+- [x] 8. Integration, docs, and verification
+  - [x] 8.1 End-to-end verification pass
     - Frontend typecheck + lint (0 errors) + vitest green + build; backend pytest green; live smoke clean. Confirm offline QR + installable PWA still hold.
     - _Requirements: 12.1, 12.5, 13.1, 13.3_
-  - [ ] 8.2 Update contract + tracker docs
+  - [x] 8.2 Update contract + tracker docs
     - Extend `docs/api-contract.md` with journey/registration/dev-login endpoints; update `PROJECT_PROGRESS_TRACKER.md` and `backend/README.md`.
     - _Requirements: 10.6, 13.1_
 

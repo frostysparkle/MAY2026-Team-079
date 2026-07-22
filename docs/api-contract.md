@@ -261,6 +261,67 @@ Status: `created` (pending) → `paid` | `failed`. On `paid`, hostel sets
 - `GET /payments/me` *(auth)* — `{ hostel, mess }` status + receipt (amount, date, txn_ref) (FR-10.3).
 - `GET /payments/reconciliation` *(admin+)* — per-participant hostel/mess status (FR-10.4).
 
+## Onboarding journey (student-experience-redesign)
+
+The journey is **derived server-side** — a pure function of profile, hostel
+allocation, payment/access flags, event-registration count, and the small
+`users.onboarding` intent (`accommodation_choice`, `mess_choice`, `mess_plan_id`).
+Nothing is a parallel copy of module state.
+
+- `GET /me/journey` *(auth)* — the resolved journey:
+
+```json
+{
+  "profile_complete": true,
+  "accommodation": { "choice": "yes", "allocated": false, "paid": false },
+  "mess": { "choice": "no", "plan_id": null, "paid": false },
+  "payment_due": true,
+  "events_registered": 0,
+  "steps": [ { "key": "profile", "state": "done" }, { "key": "accommodation", "state": "current" } ],
+  "next_step": "payment",
+  "complete": false
+}
+```
+
+- `state` ∈ `done | current | upcoming | skipped`; `next_step` ∈
+  `profile | accommodation | mess | payment | events | done`.
+- `POST /me/onboarding/accommodation` *(auth)* — `{ "choice": "yes"|"no" }`;
+  records intent (room stays admin-allocated). Returns the updated journey.
+- `POST /me/onboarding/mess` *(auth)* — `{ "choice": "yes"|"no", "plan_id": "..." }`;
+  `plan_id` required (and must be active) when `choice=yes`. Returns the journey.
+- `GET /me/payments/pending` *(auth)* — bookings chosen but not yet paid:
+  `{ items: [{ kind, label, amount, currency }], total, currency }`.
+
+## Event registration — participant side (student-experience-redesign)
+
+Activates `event_registrations` (unique on `(user_id, event_id)`). Registrations
+are soft-cancellable (a cancelled row is re-activated, never duplicated) and
+capacity is checked against the count of active registrations.
+
+- `POST /events/{id}/register` *(auth)* — idempotent; `404 event_not_found`
+  (unknown/unpublished), `409 event_full` (at capacity). Returns
+  `{ event_id, registered, registration_count, spots_left }`.
+- `DELETE /events/{id}/register` *(auth)* — soft cancel; `204`, idempotent.
+- `GET /me/registrations` *(auth)* — active registrations joined with event
+  details: `{ registrations: [{ event_id, title, venue, event_date, start_time,
+  end_time, status, registered_at }] }`.
+- Events list/detail additionally annotate `registered`, `registration_count`,
+  and `spots_left` for the calling participant.
+
+## Dev-only test harness (student-experience-redesign)
+
+Hard-gated behind `enable_dev_login` (`APP_ENV != "production"` **and**
+`ENABLE_DEV_LOGIN=true`). Both endpoints return `404` when disabled and only
+ever operate on seeded `is_test` accounts. **Never enabled in production.**
+
+- `POST /auth/dev-login` *(gated)* — `{ "email": "..." }` → `{ access_token,
+  is_new_user, user }` for a seeded active user (same shape as Google login).
+- `GET /auth/test-accounts` *(gated)* — `{ accounts: [{ email, full_name, role,
+  label }] }` for the account-switcher.
+- Seed/reset the account matrix with `python -m scripts.seed_test_data`.
+- Frontend mirror: the mock API seeds the same matrix and a dev-only
+  `AccountSwitcher` (`VITE_ENABLE_DEV_SWITCHER`, dev builds only) swaps identities.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |
