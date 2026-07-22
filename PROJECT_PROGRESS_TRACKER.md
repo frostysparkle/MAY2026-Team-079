@@ -166,6 +166,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: Help & Support (raise query, track own queries, emergency + directory contacts), admin Query Triage, admin Contact Directory; nav + role-gated home hub
 - [x] ✅ Verified live against Atlas incl. RBAC (participant triage → 403); build/lint/tests green
 
+### Epic 4 — Mess (P0 + FR-4.4)
+- [x] ✅ Backend: mess menu CRUD (organizer+), digital mess pass (`GET /mess/pass`), eligibility grant/revoke + listing (admin+), opt-in count (`GET /mess/stats`); mess scan now requires an explicit pass
+- [x] ✅ Frontend: Mess screen (pass + menu + report issue), admin Mess management (menu CRUD, eligibility toggles, opt-in count); nav + hub links
+- [x] ✅ Live-verified on Atlas (menu CRUD incl. 409 conflict, pass grant, scan not_eligible→valid); re-ran init_db to add events/queries/contacts/mess indexes
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

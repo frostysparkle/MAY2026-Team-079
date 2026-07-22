@@ -27,6 +27,14 @@ import type {
   Contact,
   CreateContactRequest,
   UpdateContactRequest,
+  MessMenuListResponse,
+  MessMenuItem,
+  CreateMessMenuRequest,
+  UpdateMessMenuRequest,
+  MessPass,
+  MessEligibilityListResponse,
+  MessEligibilityItem,
+  MessStats,
 } from './types';
 
 export interface ApiClient {
@@ -59,6 +67,16 @@ export interface ApiClient {
   createContact(req: CreateContactRequest): Promise<Contact>;
   updateContact(id: string, req: UpdateContactRequest): Promise<Contact>;
   deleteContact(id: string): Promise<void>;
+
+  // Mess (Epic 4)
+  listMessMenu(): Promise<MessMenuListResponse>;
+  createMessMenu(req: CreateMessMenuRequest): Promise<MessMenuItem>;
+  updateMessMenu(id: string, req: UpdateMessMenuRequest): Promise<MessMenuItem>;
+  deleteMessMenu(id: string): Promise<void>;
+  getMessPass(): Promise<MessPass>;
+  listMessEligibility(): Promise<MessEligibilityListResponse>;
+  setMessEligibility(id: string, eligible: boolean): Promise<MessEligibilityItem>;
+  getMessStats(): Promise<MessStats>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

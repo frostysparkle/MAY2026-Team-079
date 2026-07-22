@@ -1,4 +1,4 @@
-import type { Participant, EventItem, Contact, SupportQuery } from '@/api/types';
+import type { Participant, EventItem, Contact, SupportQuery, MessMenuItem } from '@/api/types';
 
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
@@ -163,6 +163,36 @@ export function seedContacts(): Contact[] {
       phone: '9100000333',
       email: null,
       isEmergency: false,
+    },
+  ];
+}
+
+/** Seed the mess menu for the mock (Epic 4). */
+export function seedMessMenu(): MessMenuItem[] {
+  return [
+    {
+      id: 'm_bf',
+      location: 'Main Mess',
+      meal: 'breakfast',
+      items: 'Idli, Vada, Sambar, Bread, Tea/Coffee',
+      startTime: '07:30',
+      endTime: '09:30',
+    },
+    {
+      id: 'm_lunch',
+      location: 'Main Mess',
+      meal: 'lunch',
+      items: 'Rice, Dal, Paneer Curry, Chapati, Curd, Salad',
+      startTime: '12:30',
+      endTime: '14:30',
+    },
+    {
+      id: 'm_dinner',
+      location: 'Main Mess',
+      meal: 'dinner',
+      items: 'Fried Rice, Gobi Manchurian, Roti, Dal Tadka',
+      startTime: '19:30',
+      endTime: '21:30',
     },
   ];
 }

@@ -241,6 +241,54 @@ export interface CreateContactRequest {
 
 export type UpdateContactRequest = Partial<CreateContactRequest>;
 
+/* ---------------------------------------------------------------- mess --- */
+
+export type Meal = 'breakfast' | 'lunch' | 'snacks' | 'dinner';
+
+export interface MessMenuItem {
+  id: string;
+  location: string;
+  meal: Meal;
+  items: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface MessMenuListResponse {
+  items: MessMenuItem[];
+}
+
+export interface CreateMessMenuRequest {
+  location: string;
+  meal: Meal;
+  items: string;
+  startTime: string;
+  endTime: string;
+}
+
+export type UpdateMessMenuRequest = Partial<CreateMessMenuRequest>;
+
+/** The caller's own digital mess pass (FR-4.2). */
+export interface MessPass {
+  participantId: string;
+  eligible: boolean;
+}
+
+export interface MessEligibilityItem {
+  id: string;
+  fullName: string | null;
+  email: string;
+  eligible: boolean;
+}
+
+export interface MessEligibilityListResponse {
+  participants: MessEligibilityItem[];
+}
+
+export interface MessStats {
+  eligibleCount: number;
+}
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

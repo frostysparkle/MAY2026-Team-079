@@ -168,6 +168,24 @@ Contacts map `is_emergency`→`isEmergency`; `category` ∈ `hostel|mess|event|s
 
 `ContactOut`: `{ id, name, role, category, phone, email, is_emergency }`.
 
+## Mess (Epic 4)
+
+Menu items map `start_time`/`end_time` → `startTime`/`endTime`. `meal` ∈
+`breakfast|lunch|snacks|dinner`. A digital mess pass requires **explicit**
+eligibility: an unset participant is not eligible, and the mess scan checkpoint
+returns `not_eligible` for them.
+
+### 19. `GET /mess/menu` *(auth)* — `{ items: [MenuItemOut] }`.
+### 20. `POST /mess/menu` *(organizer+)* — `{ location, meal, items, start_time, end_time }` → `201`. `409 menu_conflict` on duplicate (location, meal).
+### 21. `PATCH /mess/menu/{id}` *(organizer+)* — partial update.
+### 22. `DELETE /mess/menu/{id}` *(organizer+)* — `204`.
+### 23. `GET /mess/pass` *(auth)* — the caller's own pass `{ participant_id, eligible }`.
+### 24. `GET /mess/eligibility` *(admin+)* — `{ participants: [{ id, full_name, email, eligible }] }`.
+### 25. `PATCH /mess/eligibility/{participant_id}` *(admin+)* — `{ eligible: bool }` → the updated item.
+### 26. `GET /mess/stats` *(organizer+)* — `{ eligible_count }` (FR-4.4 opt-in count).
+
+`MenuItemOut`: `{ id, location, meal, items, start_time, end_time }`.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

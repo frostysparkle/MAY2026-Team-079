@@ -35,15 +35,32 @@ import type {
   ContactListResponse,
   CreateContactRequest,
   UpdateContactRequest,
+  MessMenuItem,
+  MessMenuListResponse,
+  CreateMessMenuRequest,
+  UpdateMessMenuRequest,
+  MessPass,
+  MessEligibilityItem,
+  MessEligibilityListResponse,
+  MessStats,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
-import { seedParticipants, seedEvents, seedContacts, seedQueries } from './fixtures';
+import {
+  seedParticipants,
+  seedEvents,
+  seedContacts,
+  seedQueries,
+  seedMessMenu,
+} from './fixtures';
 
 const participants: Participant[] = seedParticipants();
 const events: EventItem[] = seedEvents();
 const contacts: Contact[] = seedContacts();
 const queries: SupportQuery[] = seedQueries();
+const messMenu: MessMenuItem[] = seedMessMenu();
+// Explicit mess-pass holders (Epic 4). Only these verify at the mess checkpoint.
+const messEligible = new Set<string>(['p_participant']);
 let currentId: string | null = null;
 
 // Used-code registry for replay protection: `${id}:${ctx}:${step}` -> true.
@@ -196,8 +213,9 @@ export const mockApi: ApiClient = {
     if (checkpointContext === 'hostel' && elig && !elig.hostelPaid) {
       return { result: 'payment_pending', detail: 'Hostel fee not yet paid.' };
     }
-    if (checkpointContext === 'mess' && elig && !elig.messEligible) {
-      return { result: 'not_eligible', detail: 'No active meal plan for this participant.' };
+    // Mess requires an explicit mess pass (Epic 4, FR-4.2/4.3).
+    if (checkpointContext === 'mess' && !messEligible.has(participantId)) {
+      return { result: 'not_eligible', detail: 'No active mess pass.' };
     }
 
     return {
@@ -349,5 +367,77 @@ export const mockApi: ApiClient = {
     const idx = contacts.findIndex((x) => x.id === id);
     if (idx === -1) throw new ApiClientError(404, 'contact_not_found', 'Contact not found.');
     contacts.splice(idx, 1);
+  },
+
+  async listMessMenu(): Promise<MessMenuListResponse> {
+    await delay();
+    const order = { breakfast: 0, lunch: 1, snacks: 2, dinner: 3 };
+    const items = [...messMenu].sort(
+      (a, b) => a.location.localeCompare(b.location) || order[a.meal] - order[b.meal],
+    );
+    return { items };
+  },
+
+  async createMessMenu(req: CreateMessMenuRequest): Promise<MessMenuItem> {
+    await delay();
+    if (messMenu.some((m) => m.location === req.location && m.meal === req.meal)) {
+      throw new ApiClientError(409, 'menu_conflict', 'That location and meal already exists.');
+    }
+    const created: MessMenuItem = { id: `m_${Date.now()}`, ...req };
+    messMenu.push(created);
+    return created;
+  },
+
+  async updateMessMenu(id: string, req: UpdateMessMenuRequest): Promise<MessMenuItem> {
+    await delay();
+    const m = messMenu.find((x) => x.id === id);
+    if (!m) throw new ApiClientError(404, 'menu_item_not_found', 'Menu item not found.');
+    Object.assign(m, {
+      ...(req.location !== undefined ? { location: req.location } : {}),
+      ...(req.meal !== undefined ? { meal: req.meal } : {}),
+      ...(req.items !== undefined ? { items: req.items } : {}),
+      ...(req.startTime !== undefined ? { startTime: req.startTime } : {}),
+      ...(req.endTime !== undefined ? { endTime: req.endTime } : {}),
+    });
+    return m;
+  },
+
+  async deleteMessMenu(id: string): Promise<void> {
+    await delay();
+    const idx = messMenu.findIndex((x) => x.id === id);
+    if (idx === -1) throw new ApiClientError(404, 'menu_item_not_found', 'Menu item not found.');
+    messMenu.splice(idx, 1);
+  },
+
+  async getMessPass(): Promise<MessPass> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    return { participantId: currentId, eligible: messEligible.has(currentId) };
+  },
+
+  async listMessEligibility(): Promise<MessEligibilityListResponse> {
+    await delay();
+    return {
+      participants: participants.map((p) => ({
+        id: p.id,
+        fullName: p.fullName || null,
+        email: p.email,
+        eligible: messEligible.has(p.id),
+      })),
+    };
+  },
+
+  async setMessEligibility(id: string, eligible: boolean): Promise<MessEligibilityItem> {
+    await delay();
+    const p = participants.find((x) => x.id === id);
+    if (!p) throw new ApiClientError(404, 'participant_not_found', 'Participant not found.');
+    if (eligible) messEligible.add(id);
+    else messEligible.delete(id);
+    return { id: p.id, fullName: p.fullName || null, email: p.email, eligible };
+  },
+
+  async getMessStats(): Promise<MessStats> {
+    await delay();
+    return { eligibleCount: messEligible.size };
   },
 };

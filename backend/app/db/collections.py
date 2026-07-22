@@ -7,6 +7,7 @@ QR_SECRETS = "qr_secrets"
 SCAN_LOGS = "scan_logs"
 QUERIES = "queries"
 CONTACTS = "contacts"
+MESS_MENU = "mess_menu"
 
 INITIAL_COLLECTIONS = (
     USERS,
@@ -18,4 +19,5 @@ INITIAL_COLLECTIONS = (
     SCAN_LOGS,
     QUERIES,
     CONTACTS,
+    MESS_MENU,
 )

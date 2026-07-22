@@ -11,6 +11,7 @@ from app.db.collections import (
     EVENT_REGISTRATIONS,
     EVENTS,
     INITIAL_COLLECTIONS,
+    MESS_MENU,
     PHOTOS,
     QR_SECRETS,
     QUERIES,
@@ -181,6 +182,17 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
         [
             IndexModel([("category", ASCENDING)], name="ix_contacts_category"),
             IndexModel([("is_emergency", ASCENDING)], name="ix_contacts_emergency"),
+        ]
+    )
+
+    # Mess menu (Epic 4): one entry per (location, meal).
+    await database[MESS_MENU].create_indexes(
+        [
+            IndexModel(
+                [("location", ASCENDING), ("meal", ASCENDING)],
+                unique=True,
+                name="uq_mess_menu_location_meal",
+            )
         ]
     )
 

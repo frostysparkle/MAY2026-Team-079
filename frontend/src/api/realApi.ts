@@ -42,6 +42,15 @@ import type {
   CreateContactRequest,
   UpdateContactRequest,
   ContactCategory,
+  Meal,
+  MessMenuItem,
+  MessMenuListResponse,
+  CreateMessMenuRequest,
+  UpdateMessMenuRequest,
+  MessPass,
+  MessEligibilityItem,
+  MessEligibilityListResponse,
+  MessStats,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -209,6 +218,49 @@ function fromContactRequest(
   if (req.email !== undefined) body.email = req.email;
   if (req.isEmergency !== undefined) body.is_emergency = req.isEmergency;
   return body;
+}
+
+interface BackendMenuItem {
+  id: string;
+  location: string;
+  meal: Meal;
+  items: string;
+  start_time: string;
+  end_time: string;
+}
+
+function toMenuItem(m: BackendMenuItem): MessMenuItem {
+  return {
+    id: m.id,
+    location: m.location,
+    meal: m.meal,
+    items: m.items,
+    startTime: m.start_time,
+    endTime: m.end_time,
+  };
+}
+
+function fromMenuRequest(
+  req: CreateMessMenuRequest | UpdateMessMenuRequest,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (req.location !== undefined) body.location = req.location;
+  if (req.meal !== undefined) body.meal = req.meal;
+  if (req.items !== undefined) body.items = req.items;
+  if (req.startTime !== undefined) body.start_time = req.startTime;
+  if (req.endTime !== undefined) body.end_time = req.endTime;
+  return body;
+}
+
+interface BackendEligibility {
+  id: string;
+  full_name: string | null;
+  email: string;
+  eligible: boolean;
+}
+
+function toEligibility(e: BackendEligibility): MessEligibilityItem {
+  return { id: e.id, fullName: e.full_name, email: e.email, eligible: e.eligible };
 }
 
 /** Map a backend user object into the app's Participant type. */
@@ -426,5 +478,56 @@ export const realApi: ApiClient = {
 
   async deleteContact(id: string): Promise<void> {
     await request<void>(`/contacts/${id}`, { method: 'DELETE' });
+  },
+
+  async listMessMenu(): Promise<MessMenuListResponse> {
+    const body = await request<{ items: BackendMenuItem[] }>('/mess/menu');
+    return { items: body.items.map(toMenuItem) };
+  },
+
+  async createMessMenu(req: CreateMessMenuRequest): Promise<MessMenuItem> {
+    return toMenuItem(
+      await request<BackendMenuItem>('/mess/menu', {
+        method: 'POST',
+        body: JSON.stringify(fromMenuRequest(req)),
+      }),
+    );
+  },
+
+  async updateMessMenu(id: string, req: UpdateMessMenuRequest): Promise<MessMenuItem> {
+    return toMenuItem(
+      await request<BackendMenuItem>(`/mess/menu/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fromMenuRequest(req)),
+      }),
+    );
+  },
+
+  async deleteMessMenu(id: string): Promise<void> {
+    await request<void>(`/mess/menu/${id}`, { method: 'DELETE' });
+  },
+
+  async getMessPass(): Promise<MessPass> {
+    const body = await request<{ participant_id: string; eligible: boolean }>('/mess/pass');
+    return { participantId: body.participant_id, eligible: body.eligible };
+  },
+
+  async listMessEligibility(): Promise<MessEligibilityListResponse> {
+    const body = await request<{ participants: BackendEligibility[] }>('/mess/eligibility');
+    return { participants: body.participants.map(toEligibility) };
+  },
+
+  async setMessEligibility(id: string, eligible: boolean): Promise<MessEligibilityItem> {
+    return toEligibility(
+      await request<BackendEligibility>(`/mess/eligibility/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ eligible }),
+      }),
+    );
+  },
+
+  async getMessStats(): Promise<MessStats> {
+    const body = await request<{ eligible_count: number }>('/mess/stats');
+    return { eligibleCount: body.eligible_count };
   },
 };

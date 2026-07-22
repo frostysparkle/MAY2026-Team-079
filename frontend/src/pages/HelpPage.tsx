@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useLocation } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
 import type {
   Contact,
@@ -43,12 +44,18 @@ export default function HelpPage() {
   const [loading, setLoading] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // A caller (e.g. the Mess screen) can pre-fill the category via route state.
+  const location = useLocation();
+  const prefillCategory = (location.state as { category?: QueryCategory } | null)?.category;
+
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<RaiseQueryRequest>();
+  } = useForm<RaiseQueryRequest>({
+    defaultValues: prefillCategory ? { category: prefillCategory } : undefined,
+  });
 
   async function load() {
     setLoading(true);

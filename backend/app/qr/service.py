@@ -44,12 +44,18 @@ class ScanOutcome:
 
 
 def _eligibility_block(user: dict[str, Any], checkpoint_context: str) -> ScanOutcome | None:
-    """Optional access gating. Missing data means eligible (happy path)."""
+    """Access gating per checkpoint.
+
+    Mess requires an explicit mess pass (Epic 4, FR-4.2/4.3): eligibility must be
+    granted, so an unset participant is 'not eligible'. Hostel payment gating is
+    softer for the MVP: only an explicit False blocks (Epic 5 / payments open
+    question).
+    """
     access = user.get("access") or {}
+    if checkpoint_context == "mess" and access.get("mess_eligible") is not True:
+        return ScanOutcome("not_eligible", detail="No active mess pass.")
     if checkpoint_context == "hostel" and access.get("hostel_paid") is False:
         return ScanOutcome("payment_pending", detail="Hostel fee not yet paid.")
-    if checkpoint_context == "mess" and access.get("mess_eligible") is False:
-        return ScanOutcome("not_eligible", detail="No active meal plan.")
     return None
 
 

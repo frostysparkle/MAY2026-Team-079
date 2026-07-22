@@ -17,8 +17,10 @@ import EventsPage from '@/pages/EventsPage';
 import EventDetailPage from '@/pages/EventDetailPage';
 import EventEditPage from '@/pages/EventEditPage';
 import HelpPage from '@/pages/HelpPage';
+import MessPage from '@/pages/MessPage';
 import AdminQueriesPage from '@/pages/AdminQueriesPage';
 import AdminContactsPage from '@/pages/AdminContactsPage';
+import AdminMessPage from '@/pages/AdminMessPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -76,6 +78,7 @@ export const router = createBrowserRouter([
       { path: 'events', element: <EventsPage /> },
       { path: 'events/:id', element: <EventDetailPage /> },
       { path: 'help', element: <HelpPage /> },
+      { path: 'mess', element: <MessPage /> },
     ],
   },
 
@@ -139,6 +142,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <AdminContactsPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Mess management — organizer role or higher (eligibility section is admin+).
+  {
+    path: ROUTES.manageMess,
+    element: (
+      <ProtectedRoute minRole="organizer">
+        <AdminMessPage />
       </ProtectedRoute>
     ),
   },
