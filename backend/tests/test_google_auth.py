@@ -41,6 +41,7 @@ def make_settings() -> Settings:
         payment_currency="INR",
         hostel_fee_amount=2000,
         frontend_base_url="http://localhost:5173",
+        enable_dev_login=False,
     )
 
 

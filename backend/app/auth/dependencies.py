@@ -17,6 +17,7 @@ from app.core.security import (
 from app.db.collections import (
     ANNOUNCEMENTS,
     CONTACTS,
+    EVENT_REGISTRATIONS,
     EVENTS,
     HOSTEL_ALLOCATIONS,
     MEAL_PLANS,
@@ -98,6 +99,12 @@ def get_payments_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, PAYMENTS)
+
+
+def get_registrations_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, EVENT_REGISTRATIONS)
 
 
 def get_qr_secrets_collection(

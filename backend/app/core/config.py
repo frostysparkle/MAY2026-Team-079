@@ -50,13 +50,14 @@ class Settings:
     payment_currency: str
     hostel_fee_amount: int
     frontend_base_url: str
+    enable_dev_login: bool
 
 
 @lru_cache
 def get_settings() -> Settings:
     uri = getenv("MONGODB_URI", "").strip() or None
     database = getenv("MONGODB_DATABASE", DEFAULT_DATABASE_NAME).strip()
-    environment = getenv("APP_ENV", "development").strip()
+    environment = getenv("APP_ENV", "development").strip() or "development"
     google_client_id = getenv("GOOGLE_CLIENT_ID", "").strip() or None
     jwt_secret = getenv("JWT_SECRET", "").strip() or None
     initial_super_admin_email = (
@@ -89,5 +90,11 @@ def get_settings() -> Settings:
         hostel_fee_amount=_positive_int_setting("HOSTEL_FEE_AMOUNT", 2000),
         frontend_base_url=(
             getenv("FRONTEND_BASE_URL", "").strip() or DEFAULT_CORS_ORIGINS[0]
+        ),
+        # Dev-only account switching: never available in production, and off
+        # unless explicitly enabled.
+        enable_dev_login=(
+            environment != "production"
+            and getenv("ENABLE_DEV_LOGIN", "").strip().lower() == "true"
         ),
     )
