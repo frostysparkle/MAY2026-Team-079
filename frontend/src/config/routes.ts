@@ -12,6 +12,8 @@ export const ROUTES = {
   home: '/app',
   profile: '/app/profile',
   myQr: '/app/qr',
+  passes: '/app/pass',
+  more: '/app/more',
   events: '/app/events',
   eventDetail: (id: string) => `/app/events/${id}`,
   help: '/app/help',

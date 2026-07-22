@@ -13,6 +13,8 @@ import LoginPage from '@/pages/LoginPage';
 const HomePage = lazy(() => import('@/pages/HomePage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const MyQrPage = lazy(() => import('@/pages/MyQrPage'));
+const PassesPage = lazy(() => import('@/pages/PassesPage'));
+const MorePage = lazy(() => import('@/pages/MorePage'));
 const EventsPage = lazy(() => import('@/pages/EventsPage'));
 const EventDetailPage = lazy(() => import('@/pages/EventDetailPage'));
 const EventEditPage = lazy(() => import('@/pages/EventEditPage'));
@@ -101,6 +103,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Lazy><HomePage /></Lazy> },
       { path: 'profile', element: <Lazy><ProfilePage /></Lazy> },
       { path: 'qr', element: <Lazy><MyQrPage /></Lazy> },
+      { path: 'pass', element: <Lazy><PassesPage /></Lazy> },
+      { path: 'more', element: <Lazy><MorePage /></Lazy> },
       { path: 'events', element: <Lazy><EventsPage /></Lazy> },
       { path: 'events/:id', element: <Lazy><EventDetailPage /></Lazy> },
       { path: 'help', element: <Lazy><HelpPage /></Lazy> },

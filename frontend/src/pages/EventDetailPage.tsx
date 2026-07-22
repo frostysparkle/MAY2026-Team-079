@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api } from '@/api';
+import { api, ApiClientError } from '@/api';
 import type { CrowdStatus, EventAttendance, EventItem } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { hasRoleAtLeast } from '@/stores/authStore';
-import { Card, Button, Skeleton, ErrorState } from '@/components/ui';
+import { Card, Button, Skeleton, ErrorState, ResultBanner } from '@/components/ui';
 
 type Status = 'loading' | 'error' | 'loaded';
 
@@ -28,6 +28,8 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<EventItem | null>(null);
   const [crowd, setCrowd] = useState<CrowdStatus | null>(null);
   const [attendance, setAttendance] = useState<EventAttendance | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
 
   async function load() {
     setStatus('loading');
@@ -58,6 +60,27 @@ export default function EventDetailPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function toggleRegistration() {
+    if (!event) return;
+    setBusy(true);
+    setRegError(null);
+    try {
+      if (event.registered) {
+        await api.cancelEventRegistration(event.id);
+      } else {
+        await api.registerEvent(event.id);
+      }
+      const fresh = await api.getEvent(event.id);
+      setEvent(fresh);
+    } catch (e) {
+      setRegError(
+        e instanceof ApiClientError ? e.message : 'Could not update your registration. Try again.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -94,6 +117,55 @@ export default function EventDetailPage() {
               </Link>
             )}
           </div>
+
+          {/* Participant registration (FR-7). Organizers manage instead. */}
+          {!canManage && event.status === 'published' && (
+            <Card className="flex flex-col gap-3">
+              {regError && (
+                <ResultBanner variant="error" title="Registration">
+                  {regError}
+                </ResultBanner>
+              )}
+              {event.registered ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                      ✓ You’re registered
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted">
+                    Your pass is ready in My Pass. See you there!
+                  </p>
+                  <Button variant="secondary" loading={busy} onClick={() => void toggleRegistration()}>
+                    Cancel registration
+                  </Button>
+                </>
+              ) : event.spotsLeft === 0 ? (
+                <>
+                  <span className="self-start rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                    Event full
+                  </span>
+                  <p className="text-sm text-muted">
+                    This event has reached capacity. Check back in case spots open up.
+                  </p>
+                  <Button disabled fullWidth>
+                    Register
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {typeof event.spotsLeft === 'number' && (
+                    <p className="text-sm text-muted">
+                      {event.spotsLeft} {event.spotsLeft === 1 ? 'spot' : 'spots'} left
+                    </p>
+                  )}
+                  <Button fullWidth loading={busy} onClick={() => void toggleRegistration()}>
+                    Register for this event
+                  </Button>
+                </>
+              )}
+            </Card>
+          )}
 
           {canManage && attendance && (
             <Card className="flex items-center justify-around gap-3 text-center">

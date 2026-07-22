@@ -81,13 +81,21 @@ export default function EventsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-semibold text-ink">{e.title}</p>
-                  {canManage && (
+                  {canManage ? (
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[e.status]}`}
                     >
                       {e.status}
                     </span>
-                  )}
+                  ) : e.registered ? (
+                    <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      ✓ Registered
+                    </span>
+                  ) : e.spotsLeft === 0 ? (
+                    <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      Full
+                    </span>
+                  ) : null}
                 </div>
                 <p className="truncate text-sm text-muted">{e.venue}</p>
                 <p className="mt-1 text-xs text-muted">

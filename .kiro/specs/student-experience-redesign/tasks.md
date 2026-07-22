@@ -66,14 +66,14 @@ each slice ship together so the mock and real paths stay in sync.
     - Skip/continue for optional steps; empty-payment bypass; resume at `next_step`.
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 4.1, 5.1, 6.1, 11.1, 12.4_
 
-- [ ] 6. Frontend: event registration + passes + student home
-  - [ ] 6.1 Event detail/list registration UI
+- [x] 6. Frontend: event registration + passes + student home
+  - [x] 6.1 Event detail/list registration UI
     - Register/cancel on event detail; "Registered"/"Full" states; list shows registered badge; My Events surfaced.
     - _Requirements: 7.1, 7.3, 7.4, 7.5, 7.6, 11.3_
-  - [ ] 6.2 Passes view + schedule access
+  - [x] 6.2 Passes view + schedule access
     - `PassesPage`: QR digital ID + per-registered-event pass access; schedule by day/time reachable; announcements within one interaction.
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
-  - [ ] 6.3 Reworked student Home + refined nav
+  - [x] 6.3 Reworked student Home + refined nav
     - Home sections: continue-setup (while incomplete), my events, my pass, bookings & payment status, announcements (unread indicator), quick links — each with loading/empty/error/success. Refine student nav (Home · Events · My Pass · More · Profile).
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 9.4, 11.2, 11.3_
 
