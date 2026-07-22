@@ -93,6 +93,7 @@ async def verify_scan_route(
             body.checkpoint_context,
             actor["_id"],
             hostel_allocations=hostel_allocations,
+            event_id=body.event_id,
         )
     except PyMongoError as exc:
         raise ApiError(

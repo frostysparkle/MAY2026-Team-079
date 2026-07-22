@@ -57,6 +57,11 @@ import type {
   AllocationListResponse,
   CreateAllocationRequest,
   UpdateAllocationRequest,
+  EventAttendance,
+  EventCrowd,
+  CrowdStatus,
+  DashboardEvent,
+  AttendanceDashboardResponse,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -420,6 +425,7 @@ export const realApi: ApiClient = {
         participant_id: req.participantId,
         current_code: req.currentCode,
         checkpoint_context: req.checkpointContext,
+        ...(req.eventId ? { event_id: req.eventId } : {}),
       }),
     });
     return {
@@ -612,5 +618,55 @@ export const realApi: ApiClient = {
 
   async deleteAllocation(id: string): Promise<void> {
     await request<void>(`/hostel/allocations/${id}`, { method: 'DELETE' });
+  },
+
+  async getEventAttendance(eventId: string): Promise<EventAttendance> {
+    const b = await request<{
+      event_id: string;
+      capacity: number;
+      attendance: number;
+      remaining: number;
+      at_capacity: boolean;
+    }>(`/attendance/events/${eventId}`);
+    return {
+      eventId: b.event_id,
+      capacity: b.capacity,
+      attendance: b.attendance,
+      remaining: b.remaining,
+      atCapacity: b.at_capacity,
+    };
+  },
+
+  async getEventCrowd(eventId: string): Promise<EventCrowd> {
+    const b = await request<{ event_id: string; status: CrowdStatus }>(
+      `/attendance/events/${eventId}/crowd`,
+    );
+    return { eventId: b.event_id, status: b.status };
+  },
+
+  async getAttendanceDashboard(): Promise<AttendanceDashboardResponse> {
+    const b = await request<{
+      events: Array<{
+        event_id: string;
+        title: string;
+        venue: string;
+        capacity: number;
+        attendance: number;
+        remaining: number;
+        at_capacity: boolean;
+        status: CrowdStatus;
+      }>;
+    }>('/attendance/dashboard');
+    const events: DashboardEvent[] = b.events.map((e) => ({
+      eventId: e.event_id,
+      title: e.title,
+      venue: e.venue,
+      capacity: e.capacity,
+      attendance: e.attendance,
+      remaining: e.remaining,
+      atCapacity: e.at_capacity,
+      status: e.status,
+    }));
+    return { events };
   },
 };

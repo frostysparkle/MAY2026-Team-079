@@ -29,6 +29,7 @@ export const ROUTES = {
   manageContacts: '/admin/contacts',
   manageMess: '/admin/mess',
   manageHostel: '/admin/hostel',
+  dashboard: '/admin/dashboard',
 
   accessDenied: '/access-denied',
 } as const;

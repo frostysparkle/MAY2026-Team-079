@@ -40,6 +40,9 @@ import type {
   HostelAllocation,
   CreateAllocationRequest,
   UpdateAllocationRequest,
+  EventAttendance,
+  EventCrowd,
+  AttendanceDashboardResponse,
 } from './types';
 
 export interface ApiClient {
@@ -89,6 +92,11 @@ export interface ApiClient {
   createAllocation(req: CreateAllocationRequest): Promise<HostelAllocation>;
   updateAllocation(id: string, req: UpdateAllocationRequest): Promise<HostelAllocation>;
   deleteAllocation(id: string): Promise<void>;
+
+  // Attendance & crowd (Epic 3)
+  getEventAttendance(eventId: string): Promise<EventAttendance>;
+  getEventCrowd(eventId: string): Promise<EventCrowd>;
+  getAttendanceDashboard(): Promise<AttendanceDashboardResponse>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

@@ -133,6 +133,8 @@ export interface VerifyScanRequest {
   currentCode: string;
   /** Supplied by the organizer app, NOT embedded in the QR. */
   checkpointContext: CheckpointType;
+  /** Optional event this scan counts toward (event checkpoints, Epic 3). */
+  eventId?: string;
 }
 
 export interface VerifyScanResponse {
@@ -327,6 +329,38 @@ export interface CreateAllocationRequest {
 export type UpdateAllocationRequest = Partial<
   Omit<CreateAllocationRequest, 'participantId'>
 >;
+
+/* --------------------------------------------------- attendance / crowd --- */
+
+export type CrowdStatus = 'available' | 'filling_fast' | 'full';
+
+export interface EventAttendance {
+  eventId: string;
+  capacity: number;
+  attendance: number;
+  remaining: number;
+  atCapacity: boolean;
+}
+
+export interface EventCrowd {
+  eventId: string;
+  status: CrowdStatus;
+}
+
+export interface DashboardEvent {
+  eventId: string;
+  title: string;
+  venue: string;
+  capacity: number;
+  attendance: number;
+  remaining: number;
+  atCapacity: boolean;
+  status: CrowdStatus;
+}
+
+export interface AttendanceDashboardResponse {
+  events: DashboardEvent[];
+}
 
 /* -------------------------------------------------------------- errors --- */
 

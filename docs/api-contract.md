@@ -202,6 +202,18 @@ is set.
 
 `AllocationOut`: `{ id, participant_id, hostel_block, room, instructions, coordinator, checked_in, checked_in_at }`.
 
+## Attendance & Crowd (Epic 3)
+
+Event scans may carry an optional `event_id` (organizer app supplies it) so
+attendance is counted **per event** as distinct valid-scanning participants —
+re-entry within the window does not double-count. Crowd status: `available`
+(<70%), `filling_fast` (70–99%), `full` (≥100%).
+
+- `POST /scan/verify` gains an optional `event_id` (event checkpoint only).
+- `GET /attendance/events/{event_id}` *(organizer+)* → `{ event_id, capacity, attendance, remaining, at_capacity }` (FR-3.1/3.2).
+- `GET /attendance/events/{event_id}/crowd` *(auth)* → `{ event_id, status }` (FR-3.3).
+- `GET /attendance/dashboard` *(admin+)* → `{ events: [{ event_id, title, venue, capacity, attendance, remaining, at_capacity, status }] }` (FR-3.4).
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

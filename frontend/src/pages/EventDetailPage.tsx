@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/api';
-import type { EventItem } from '@/api/types';
+import type { CrowdStatus, EventAttendance, EventItem } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { hasRoleAtLeast } from '@/stores/authStore';
 import { Card, Button, Skeleton, ErrorState } from '@/components/ui';
 
 type Status = 'loading' | 'error' | 'loaded';
+
+const CROWD: Record<CrowdStatus, { label: string; className: string }> = {
+  available: { label: 'Available', className: 'bg-green-100 text-green-700' },
+  filling_fast: { label: 'Filling fast', className: 'bg-amber-100 text-amber-700' },
+  full: { label: 'Full', className: 'bg-red-100 text-red-700' },
+};
 
 /**
  * Event detail with entry instructions (FR-1.4). If no instructions are set, an
@@ -20,12 +26,29 @@ export default function EventDetailPage() {
 
   const [status, setStatus] = useState<Status>('loading');
   const [event, setEvent] = useState<EventItem | null>(null);
+  const [crowd, setCrowd] = useState<CrowdStatus | null>(null);
+  const [attendance, setAttendance] = useState<EventAttendance | null>(null);
 
   async function load() {
     setStatus('loading');
     try {
-      setEvent(await api.getEvent(id));
+      const e = await api.getEvent(id);
+      setEvent(e);
       setStatus('loaded');
+      // Crowd status is available for published events (FR-3.3).
+      if (e.status === 'published') {
+        api
+          .getEventCrowd(id)
+          .then((c) => setCrowd(c.status))
+          .catch(() => undefined);
+      }
+      // Organizers see live attendance/remaining capacity (FR-3.1/3.2).
+      if (canManage) {
+        api
+          .getEventAttendance(id)
+          .then(setAttendance)
+          .catch(() => undefined);
+      }
     } catch {
       setStatus('error');
     }
@@ -57,6 +80,13 @@ export default function EventDetailPage() {
             <div>
               <h1 className="text-xl font-bold text-gray-900">{event.title}</h1>
               <p className="text-sm text-muted">{event.venue}</p>
+              {crowd && (
+                <span
+                  className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${CROWD[crowd].className}`}
+                >
+                  {CROWD[crowd].label}
+                </span>
+              )}
             </div>
             {canManage && (
               <Link to={ROUTES.editEvent(event.id)}>
@@ -64,6 +94,27 @@ export default function EventDetailPage() {
               </Link>
             )}
           </div>
+
+          {canManage && attendance && (
+            <Card className="flex items-center justify-around gap-3 text-center">
+              <div>
+                <p className="text-xl font-bold text-gray-900">{attendance.attendance}</p>
+                <p className="text-xs text-muted">Checked in</p>
+              </div>
+              <div>
+                <p className="text-xl font-bold text-gray-900">{attendance.remaining}</p>
+                <p className="text-xs text-muted">Remaining</p>
+              </div>
+              <div>
+                <p
+                  className={`text-xl font-bold ${attendance.atCapacity ? 'text-danger' : 'text-gray-900'}`}
+                >
+                  {attendance.atCapacity ? 'Full' : attendance.capacity}
+                </p>
+                <p className="text-xs text-muted">{attendance.atCapacity ? 'At capacity' : 'Capacity'}</p>
+              </div>
+            </Card>
+          )}
 
           <Card className="flex flex-col gap-2">
             <Row label="Date" value={event.eventDate} />

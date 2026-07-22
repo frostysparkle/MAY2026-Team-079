@@ -23,6 +23,7 @@ import AdminQueriesPage from '@/pages/AdminQueriesPage';
 import AdminContactsPage from '@/pages/AdminContactsPage';
 import AdminMessPage from '@/pages/AdminMessPage';
 import AdminHostelPage from '@/pages/AdminHostelPage';
+import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -165,6 +166,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <AdminHostelPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Live crowd dashboard — admin role or higher.
+  {
+    path: ROUTES.dashboard,
+    element: (
+      <ProtectedRoute minRole="admin">
+        <AdminDashboardPage />
       </ProtectedRoute>
     ),
   },

@@ -176,6 +176,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: Hostel screen (allocation, instructions, coordinator, check-in status, report-issue prefill), admin Hostel Allocations page; nav + hub links
 - [x] ✅ Live-verified on Atlas (not_eligible→valid+checked_in, 409 dup guard, list/update/delete)
 
+### Epic 3 — Attendance & Crowd (P1)
+- [x] ✅ Backend: optional `event_id` on scan/verify; per-event attendance (distinct participants), remaining capacity, crowd status, and admin live dashboard
+- [x] ✅ Frontend: scanner event selector, attendance/remaining on event detail (organizer+), crowd badge (participants), live-crowd dashboard (admin+, auto-refresh)
+- [x] ✅ Live-verified on Atlas (scan→attendance 1, at_capacity, crowd full, dashboard)
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

@@ -49,6 +49,9 @@ import type {
   AllocationListResponse,
   CreateAllocationRequest,
   UpdateAllocationRequest,
+  EventAttendance,
+  EventCrowd,
+  AttendanceDashboardResponse,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
@@ -69,6 +72,16 @@ const messMenu: MessMenuItem[] = seedMessMenu();
 const hostelAllocations: HostelAllocation[] = seedHostelAllocations();
 // Explicit mess-pass holders (Epic 4). Only these verify at the mess checkpoint.
 const messEligible = new Set<string>(['p_participant']);
+// Attendance (Epic 3): distinct participants counted per event id.
+const eventAttendance: Record<string, Set<string>> = {};
+
+function crowdStatus(attendance: number, capacity: number): 'available' | 'filling_fast' | 'full' {
+  if (capacity <= 0) return 'available';
+  const ratio = attendance / capacity;
+  if (ratio >= 1) return 'full';
+  if (ratio >= 0.7) return 'filling_fast';
+  return 'available';
+}
 let currentId: string | null = null;
 
 // Used-code registry for replay protection: `${id}:${ctx}:${step}` -> true.
@@ -199,6 +212,7 @@ export const mockApi: ApiClient = {
     participantId,
     currentCode,
     checkpointContext,
+    eventId,
   }: VerifyScanRequest): Promise<VerifyScanResponse> {
     await delay();
     const p = participants.find((x) => x.id === participantId);
@@ -236,6 +250,10 @@ export const mockApi: ApiClient = {
     if (allocation) {
       allocation.checkedIn = true;
       allocation.checkedInAt = new Date().toISOString();
+    }
+    // Attendance (Epic 3): a valid event scan counts the participant once.
+    if (checkpointContext === 'event' && eventId) {
+      (eventAttendance[eventId] ??= new Set()).add(participantId);
     }
 
     return {
@@ -516,5 +534,45 @@ export const mockApi: ApiClient = {
     const idx = hostelAllocations.findIndex((x) => x.id === id);
     if (idx === -1) throw new ApiClientError(404, 'allocation_not_found', 'Allocation not found.');
     hostelAllocations.splice(idx, 1);
+  },
+
+  async getEventAttendance(eventId: string): Promise<EventAttendance> {
+    await delay();
+    const e = events.find((x) => x.id === eventId);
+    if (!e) throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+    const attendance = eventAttendance[eventId]?.size ?? 0;
+    const remaining = Math.max(e.capacity - attendance, 0);
+    return { eventId, capacity: e.capacity, attendance, remaining, atCapacity: remaining === 0 };
+  },
+
+  async getEventCrowd(eventId: string): Promise<EventCrowd> {
+    await delay();
+    const e = events.find((x) => x.id === eventId);
+    if (!e || e.status !== 'published') {
+      throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+    }
+    const attendance = eventAttendance[eventId]?.size ?? 0;
+    return { eventId, status: crowdStatus(attendance, e.capacity) };
+  },
+
+  async getAttendanceDashboard(): Promise<AttendanceDashboardResponse> {
+    await delay();
+    const published = events.filter((e) => e.status === 'published');
+    return {
+      events: published.map((e) => {
+        const attendance = eventAttendance[e.id]?.size ?? 0;
+        const remaining = Math.max(e.capacity - attendance, 0);
+        return {
+          eventId: e.id,
+          title: e.title,
+          venue: e.venue,
+          capacity: e.capacity,
+          attendance,
+          remaining,
+          atCapacity: remaining === 0,
+          status: crowdStatus(attendance, e.capacity),
+        };
+      }),
+    };
   },
 };

@@ -8,4 +8,6 @@ export interface PendingScan {
   participantId: string;
   currentCode: string;
   checkpoint: CheckpointType;
+  /** For event checkpoints: which event this scan counts toward (Epic 3). */
+  eventId?: string;
 }

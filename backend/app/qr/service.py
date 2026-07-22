@@ -86,6 +86,7 @@ async def verify_scan(
     checkpoint_context: str,
     scanned_by: ObjectId,
     hostel_allocations: AsyncCollection[dict[str, Any]] | None = None,
+    event_id: str | None = None,
 ) -> ScanOutcome:
     if not ObjectId.is_valid(participant_id):
         await _audit(scan_logs, participant_id, checkpoint_context, "unknown_participant", scanned_by)
@@ -122,17 +123,18 @@ async def verify_scan(
             return ScanOutcome("not_eligible", detail="No accommodation assigned.")
 
     # Replay protection: a matched (participant, context, step) records once.
+    log: dict[str, Any] = {
+        "participant_id": participant_id,
+        "checkpoint_context": checkpoint_context,
+        "step": step,
+        "result": "valid",
+        "scanned_by": scanned_by,
+        "scanned_at": datetime.now(UTC),
+    }
+    if checkpoint_context == "event" and event_id is not None:
+        log["event_id"] = event_id
     try:
-        await scan_logs.insert_one(
-            {
-                "participant_id": participant_id,
-                "checkpoint_context": checkpoint_context,
-                "step": step,
-                "result": "valid",
-                "scanned_by": scanned_by,
-                "scanned_at": datetime.now(UTC),
-            }
-        )
+        await scan_logs.insert_one(log)
     except DuplicateKeyError:
         return ScanOutcome("duplicate")
 

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
+import { api } from '@/api';
+import type { EventItem } from '@/api/types';
 import { CHECKPOINT_TYPES, type CheckpointType } from '@/config/constants';
 import { ROUTES } from '@/config/routes';
 import { decodeQrPayload } from '@/features/qr/payload';
 import type { PendingScan } from '@/features/scan/types';
-import { Button, TextInput } from '@/components/ui';
+import { Button, Select, TextInput } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 const READER_ID = 'qr-reader';
@@ -27,16 +29,32 @@ export default function ScannerPage() {
   const [checkpoint, setCheckpoint] = useState<CheckpointType>('event');
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  // Event attribution for attendance (Epic 3) — only relevant for the event
+  // checkpoint. Populated from published events.
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [eventId, setEventId] = useState('');
+
   // Manual fallback fields.
   const [manualId, setManualId] = useState('');
   const [manualCode, setManualCode] = useState('');
 
-  // Keep the latest checkpoint readable inside the scan callback without
-  // restarting the camera each time it changes.
+  // Keep the latest checkpoint/event readable inside the scan callback without
+  // restarting the camera each time they change.
   const checkpointRef = useRef(checkpoint);
   useEffect(() => {
     checkpointRef.current = checkpoint;
   }, [checkpoint]);
+  const eventIdRef = useRef(eventId);
+  useEffect(() => {
+    eventIdRef.current = eventId;
+  }, [eventId]);
+
+  useEffect(() => {
+    api
+      .listEvents()
+      .then((r) => setEvents(r.events))
+      .catch(() => undefined);
+  }, []);
 
   function goToResult(scan: PendingScan) {
     navigate(ROUTES.scanResult, { state: scan });
@@ -63,6 +81,8 @@ export default function ScannerPage() {
                 participantId: payload.pid,
                 currentCode: payload.code,
                 checkpoint: checkpointRef.current,
+                eventId:
+                  checkpointRef.current === 'event' ? eventIdRef.current || undefined : undefined,
               }),
             );
         },
@@ -106,6 +126,16 @@ export default function ScannerPage() {
         </div>
       </div>
 
+      {checkpoint === 'event' && (
+        <Select
+          label="Event (for attendance)"
+          placeholder="Not tied to an event"
+          value={eventId}
+          onChange={(e) => setEventId(e.target.value)}
+          options={events.map((e) => ({ value: e.id, label: `${e.title} · ${e.eventDate}` }))}
+        />
+      )}
+
       {/* html5-qrcode renders the camera preview into this element. */}
       <div id={READER_ID} className="overflow-hidden rounded-xl bg-black/5" />
 
@@ -135,6 +165,7 @@ export default function ScannerPage() {
               participantId: manualId.trim(),
               currentCode: manualCode.trim(),
               checkpoint,
+              eventId: checkpoint === 'event' ? eventId || undefined : undefined,
             })
           }
         >

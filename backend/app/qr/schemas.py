@@ -30,6 +30,9 @@ class VerifyScanRequest(BaseModel):
     participant_id: str = Field(min_length=1)
     current_code: str = Field(pattern=r"^\d{6}$")
     checkpoint_context: CheckpointContext
+    # For event checkpoints, the organizer app may attribute the scan to a
+    # specific event so attendance can be counted per event (Epic 3).
+    event_id: str | None = None
 
 
 class ScanParticipant(BaseModel):

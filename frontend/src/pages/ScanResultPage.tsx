@@ -30,6 +30,7 @@ export default function ScanResultPage() {
         participantId: scan.participantId,
         currentCode: scan.currentCode,
         checkpointContext: scan.checkpoint,
+        eventId: scan.eventId,
       })
       .then((res) => active && setResponse(res))
       .catch(() => active && setFailed(true))
