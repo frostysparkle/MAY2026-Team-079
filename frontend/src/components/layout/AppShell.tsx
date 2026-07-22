@@ -7,8 +7,9 @@ import { cn } from '@/lib/cn';
 /** Bottom-nav tabs for the participant area. */
 const NAV = [
   { to: ROUTES.home, label: 'Home', icon: '🏠', end: true },
-  { to: ROUTES.profile, label: 'Profile', icon: '👤', end: false },
+  { to: ROUTES.events, label: 'Events', icon: '📅', end: false },
   { to: ROUTES.myQr, label: 'My QR', icon: '🔳', end: false },
+  { to: ROUTES.profile, label: 'Profile', icon: '👤', end: false },
 ];
 
 /**

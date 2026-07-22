@@ -23,12 +23,17 @@ import type {
   VerifyScanRequest,
   VerifyScanResponse,
   Participant,
+  EventItem,
+  EventListResponse,
+  CreateEventRequest,
+  UpdateEventRequest,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
-import { seedParticipants } from './fixtures';
+import { seedParticipants, seedEvents } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
+const events: EventItem[] = seedEvents();
 let currentId: string | null = null;
 
 // Used-code registry for replay protection: `${id}:${ctx}:${step}` -> true.
@@ -190,5 +195,62 @@ export const mockApi: ApiClient = {
       participant: { id: p.id, fullName: p.fullName || p.email, photoUrl: p.photoUrl },
       detail: checkpointContext === 'hostel' ? 'Hostel A · Room 214' : undefined,
     };
+  },
+
+  async listEvents(): Promise<EventListResponse> {
+    await delay();
+    const me = participants.find((p) => p.id === currentId);
+    const canManage = me ? me.role !== 'participant' : false;
+    const visible = canManage ? events : events.filter((e) => e.status === 'published');
+    const sorted = [...visible].sort((a, b) =>
+      `${a.eventDate}${a.startTime}`.localeCompare(`${b.eventDate}${b.startTime}`),
+    );
+    return { events: sorted };
+  },
+
+  async getEvent(id: string): Promise<EventItem> {
+    await delay();
+    const me = participants.find((p) => p.id === currentId);
+    const canManage = me ? me.role !== 'participant' : false;
+    const e = events.find((x) => x.id === id);
+    if (!e || (!canManage && e.status !== 'published')) {
+      throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+    }
+    return e;
+  },
+
+  async createEvent(req: CreateEventRequest): Promise<EventItem> {
+    await delay();
+    const created: EventItem = {
+      id: `e_${Date.now()}`,
+      title: req.title,
+      venue: req.venue,
+      eventDate: req.eventDate,
+      startTime: req.startTime,
+      endTime: req.endTime,
+      capacity: req.capacity,
+      instructions: req.instructions,
+      status: req.status ?? 'draft',
+      createdAt: new Date().toISOString(),
+    };
+    events.push(created);
+    return created;
+  },
+
+  async updateEvent(id: string, req: UpdateEventRequest): Promise<EventItem> {
+    await delay();
+    const e = events.find((x) => x.id === id);
+    if (!e) throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+    Object.assign(e, {
+      ...(req.title !== undefined ? { title: req.title } : {}),
+      ...(req.venue !== undefined ? { venue: req.venue } : {}),
+      ...(req.eventDate !== undefined ? { eventDate: req.eventDate } : {}),
+      ...(req.startTime !== undefined ? { startTime: req.startTime } : {}),
+      ...(req.endTime !== undefined ? { endTime: req.endTime } : {}),
+      ...(req.capacity !== undefined ? { capacity: req.capacity } : {}),
+      ...(req.instructions !== undefined ? { instructions: req.instructions } : {}),
+      ...(req.status !== undefined ? { status: req.status } : {}),
+    });
+    return e;
   },
 };

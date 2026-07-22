@@ -30,6 +30,18 @@ export default function HomePage() {
         </Card>
       </Link>
 
+      <Link to={ROUTES.events} className="block">
+        <Card className="flex items-center gap-3 transition-colors hover:border-brand">
+          <span className="text-2xl" aria-hidden>
+            📅
+          </span>
+          <div>
+            <p className="font-semibold text-gray-900">Events</p>
+            <p className="text-sm text-muted">Schedule, venues, and entry rules</p>
+          </div>
+        </Card>
+      </Link>
+
       <Link to={ROUTES.profile} className="block">
         <Card className="flex items-center gap-3 transition-colors hover:border-brand">
           <span className="text-2xl" aria-hidden>

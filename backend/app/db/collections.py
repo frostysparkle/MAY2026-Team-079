@@ -1,4 +1,5 @@
 USERS = "users"
+EVENTS = "events"
 EVENT_REGISTRATIONS = "event_registrations"
 STAFF_ASSIGNMENTS = "staff_assignments"
 PHOTOS = "photos"
@@ -7,6 +8,7 @@ SCAN_LOGS = "scan_logs"
 
 INITIAL_COLLECTIONS = (
     USERS,
+    EVENTS,
     EVENT_REGISTRATIONS,
     STAFF_ASSIGNMENTS,
     PHOTOS,

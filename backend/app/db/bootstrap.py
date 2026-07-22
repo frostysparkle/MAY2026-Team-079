@@ -8,6 +8,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 from app.core.config import Settings
 from app.db.collections import (
     EVENT_REGISTRATIONS,
+    EVENTS,
     INITIAL_COLLECTIONS,
     PHOTOS,
     QR_SECRETS,
@@ -61,6 +62,16 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
                 name="uq_users_roll_number",
             ),
             IndexModel([("roles", ASCENDING)], name="ix_users_roles"),
+        ]
+    )
+
+    await database[EVENTS].create_indexes(
+        [
+            IndexModel(
+                [("status", ASCENDING), ("event_date", ASCENDING)],
+                name="ix_events_status_date",
+            ),
+            IndexModel([("event_date", ASCENDING)], name="ix_events_date"),
         ]
     )
 

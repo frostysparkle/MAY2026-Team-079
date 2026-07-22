@@ -25,6 +25,11 @@ import type {
   Participant,
   UserListItem,
   ScanResultCode,
+  EventItem,
+  EventListResponse,
+  CreateEventRequest,
+  UpdateEventRequest,
+  EventStatus,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -90,6 +95,49 @@ function highestRole(roles: string[] | undefined): Role {
   const known = (roles ?? []).filter((r): r is Role => (ROLES as readonly string[]).includes(r));
   if (known.length === 0) return 'participant';
   return known.reduce((best, r) => (ROLES.indexOf(r) > ROLES.indexOf(best) ? r : best));
+}
+
+/** Backend event object (snake_case). */
+interface BackendEvent {
+  id: string;
+  title: string;
+  venue: string;
+  event_date: string;
+  start_time: string;
+  end_time: string;
+  capacity: number;
+  instructions: string;
+  status: EventStatus;
+  created_at?: string | null;
+}
+
+function toEvent(e: BackendEvent): EventItem {
+  return {
+    id: e.id,
+    title: e.title,
+    venue: e.venue,
+    eventDate: e.event_date,
+    startTime: e.start_time,
+    endTime: e.end_time,
+    capacity: e.capacity,
+    instructions: e.instructions,
+    status: e.status,
+    createdAt: e.created_at ?? new Date(0).toISOString(),
+  };
+}
+
+/** Map the app's camelCase event request into the backend's snake_case body. */
+function fromEventRequest(req: CreateEventRequest | UpdateEventRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (req.title !== undefined) body.title = req.title;
+  if (req.venue !== undefined) body.venue = req.venue;
+  if (req.eventDate !== undefined) body.event_date = req.eventDate;
+  if (req.startTime !== undefined) body.start_time = req.startTime;
+  if (req.endTime !== undefined) body.end_time = req.endTime;
+  if (req.capacity !== undefined) body.capacity = req.capacity;
+  if (req.instructions !== undefined) body.instructions = req.instructions;
+  if (req.status !== undefined) body.status = req.status;
+  return body;
 }
 
 /** Map a backend user object into the app's Participant type. */
@@ -222,5 +270,32 @@ export const realApi: ApiClient = {
         : undefined,
       detail: body.detail,
     };
+  },
+
+  async listEvents(): Promise<EventListResponse> {
+    const body = await request<{ events: BackendEvent[] }>('/events');
+    return { events: body.events.map(toEvent) };
+  },
+
+  async getEvent(id: string): Promise<EventItem> {
+    return toEvent(await request<BackendEvent>(`/events/${id}`));
+  },
+
+  async createEvent(req: CreateEventRequest): Promise<EventItem> {
+    return toEvent(
+      await request<BackendEvent>('/events', {
+        method: 'POST',
+        body: JSON.stringify(fromEventRequest(req)),
+      }),
+    );
+  },
+
+  async updateEvent(id: string, req: UpdateEventRequest): Promise<EventItem> {
+    return toEvent(
+      await request<BackendEvent>(`/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fromEventRequest(req)),
+      }),
+    );
   },
 };

@@ -9,6 +9,7 @@ from app.api.health import public_router, router as health_router
 from app.auth.routes import router as auth_router
 from app.auth.routes import users_router
 from app.core.config import get_settings
+from app.events.routes import router as events_router
 from app.profile.routes import router as profile_router
 from app.qr.routes import router as qr_router
 from app.core.errors import ApiError, api_error_handler, validation_error_handler
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     application.include_router(profile_router, prefix="/api/v1")
     application.include_router(admin_router, prefix="/api/v1")
     application.include_router(qr_router, prefix="/api/v1")
+    application.include_router(events_router, prefix="/api/v1")
     application.state.environment = settings.app_env
     return application
 

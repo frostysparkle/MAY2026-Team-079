@@ -13,6 +13,9 @@ import ScannerPage from '@/pages/ScannerPage';
 import ScanResultPage from '@/pages/ScanResultPage';
 import AccessDeniedPage from '@/pages/AccessDeniedPage';
 import UsersPage from '@/pages/UsersPage';
+import EventsPage from '@/pages/EventsPage';
+import EventDetailPage from '@/pages/EventDetailPage';
+import EventEditPage from '@/pages/EventEditPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 
 // Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
@@ -67,6 +70,8 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'qr', element: <MyQrPage /> },
+      { path: 'events', element: <EventsPage /> },
+      { path: 'events/:id', element: <EventDetailPage /> },
     ],
   },
 
@@ -94,6 +99,24 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute minRole="admin">
         <UsersPage />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Event management — organizer role or higher.
+  {
+    path: ROUTES.newEvent,
+    element: (
+      <ProtectedRoute minRole="organizer">
+        <EventEditPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/events/:id/edit',
+    element: (
+      <ProtectedRoute minRole="organizer">
+        <EventEditPage />
       </ProtectedRoute>
     ),
   },

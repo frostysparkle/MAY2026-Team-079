@@ -1,4 +1,4 @@
-import type { Participant } from '@/api/types';
+import type { Participant, EventItem } from '@/api/types';
 
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
@@ -78,6 +78,49 @@ export function seedParticipants(): Participant[] {
       photoUrl: null,
       profileComplete: true,
       createdAt: '2026-07-04T12:00:00+05:30',
+    },
+  ];
+}
+
+/** Seed events for the mock API (Epic 1). One is a draft to exercise admin views. */
+export function seedEvents(): EventItem[] {
+  return [
+    {
+      id: 'e_keynote',
+      title: 'Paradox Opening Keynote',
+      venue: 'CLT Auditorium',
+      eventDate: '2026-08-14',
+      startTime: '10:00',
+      endTime: '11:30',
+      capacity: 800,
+      instructions:
+        'Carry your digital ID. Doors close 10 minutes before start. No outside food.',
+      status: 'published',
+      createdAt: '2026-07-10T09:00:00+05:30',
+    },
+    {
+      id: 'e_hackathon',
+      title: 'Overnight Hackathon',
+      venue: 'CSE Lab Block',
+      eventDate: '2026-08-15',
+      startTime: '18:00',
+      endTime: '06:00',
+      capacity: 150,
+      instructions: 'Bring your own laptop and charger. Team size 2-4. ID scan at entry and exit.',
+      status: 'published',
+      createdAt: '2026-07-11T09:00:00+05:30',
+    },
+    {
+      id: 'e_draft_concert',
+      title: 'Pro Night (Unannounced)',
+      venue: 'Open Air Theatre',
+      eventDate: '2026-08-16',
+      startTime: '19:00',
+      endTime: '22:00',
+      capacity: 2000,
+      instructions: 'Lineup to be announced. Wristband mandatory.',
+      status: 'draft',
+      createdAt: '2026-07-12T09:00:00+05:30',
     },
   ];
 }

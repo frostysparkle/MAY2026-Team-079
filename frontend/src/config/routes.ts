@@ -11,6 +11,8 @@ export const ROUTES = {
   home: '/app',
   profile: '/app/profile',
   myQr: '/app/qr',
+  events: '/app/events',
+  eventDetail: (id: string) => `/app/events/${id}`,
 
   // Staff
   scanner: '/scan',
@@ -18,6 +20,8 @@ export const ROUTES = {
 
   // Admin
   users: '/admin/users',
+  newEvent: '/admin/events/new',
+  editEvent: (id: string) => `/admin/events/${id}/edit`,
 
   accessDenied: '/access-denied',
 } as const;

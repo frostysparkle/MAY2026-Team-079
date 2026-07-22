@@ -127,6 +127,26 @@ Verify a scanned QR against the per-checkpoint secret. The QR carries only
 `result` is one of: `valid`, `expired`, `unknown_participant`, `duplicate`,
 `wrong_checkpoint`, `not_eligible`, `payment_pending`.
 
+## Events (Epic 1)
+
+Event objects map `event_date`/`start_time`/`end_time` → `eventDate`/`startTime`/`endTime`.
+`event_date` is `YYYY-MM-DD`; times are 24h `HH:MM`. `status` ∈ `draft|published|cancelled`.
+
+### 7. `GET /events`  *(auth required)*
+Returns published events for participants; organizers and above also receive
+`draft`/`cancelled`. `{ "events": [ EventOut, … ] }`.
+
+### 8. `GET /events/{id}`  *(auth required)*
+Single event. Participants can only fetch `published`; organizers+ any. `404 event_not_found` otherwise.
+
+### 9. `POST /events`  *(organizer+)*
+Create an event. Body (snake_case): `title, venue, event_date, start_time, end_time, capacity, instructions, status?`. Returns `201` + `EventOut`.
+
+### 10. `PATCH /events/{id}`  *(organizer+)*
+Partial update — send only changed fields. Returns `EventOut`. `400 no_changes` if empty.
+
+`EventOut`: `{ id, title, venue, event_date, start_time, end_time, capacity, instructions, status, created_at }`.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

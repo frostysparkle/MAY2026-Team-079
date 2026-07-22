@@ -15,6 +15,10 @@ import type {
   ProvisionSecretResponse,
   VerifyScanRequest,
   VerifyScanResponse,
+  EventListResponse,
+  EventItem,
+  CreateEventRequest,
+  UpdateEventRequest,
 } from './types';
 
 export interface ApiClient {
@@ -31,6 +35,12 @@ export interface ApiClient {
   // QR / TOTP
   provisionSecret(req: ProvisionSecretRequest): Promise<ProvisionSecretResponse>;
   verifyScan(req: VerifyScanRequest): Promise<VerifyScanResponse>;
+
+  // Events (Epic 1)
+  listEvents(): Promise<EventListResponse>;
+  getEvent(id: string): Promise<EventItem>;
+  createEvent(req: CreateEventRequest): Promise<EventItem>;
+  updateEvent(id: string, req: UpdateEventRequest): Promise<EventItem>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

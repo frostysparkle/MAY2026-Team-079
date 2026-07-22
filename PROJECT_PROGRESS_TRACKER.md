@@ -156,6 +156,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ `POST /qr/provision` (once-per-context secret, rotates on re-provision)
 - [x] ✅ `POST /scan/verify` (7 result codes, `pyotp` SHA1/6/30/±1, replay protection)
 
+### Epic 1 — Events (P0)
+- [x] ✅ Backend: `GET /events`, `GET /events/{id}`, `POST /events`, `PATCH /events/{id}` (+ `events` collection/indexes, role-gated management)
+- [x] ✅ Frontend: Events schedule, event detail + entry instructions, organizer/admin create & edit; nav + home link; mock seed data
+- [x] ✅ Verified live against Atlas (create/publish/list/get) + build/lint/tests green
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

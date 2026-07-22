@@ -147,6 +147,42 @@ export interface VerifyScanResponse {
   detail?: string;
 }
 
+/* -------------------------------------------------------------- events --- */
+
+export type EventStatus = 'draft' | 'published' | 'cancelled';
+
+/** A fest event (Epic 1). Times are 24h "HH:MM"; date is ISO "YYYY-MM-DD". */
+export interface EventItem {
+  id: string;
+  title: string;
+  venue: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  instructions: string;
+  status: EventStatus;
+  createdAt: string;
+}
+
+export interface EventListResponse {
+  events: EventItem[];
+}
+
+export interface CreateEventRequest {
+  title: string;
+  venue: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  instructions: string;
+  status?: EventStatus;
+}
+
+/** All fields optional — send only what changes (PATCH semantics). */
+export type UpdateEventRequest = Partial<CreateEventRequest>;
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */
