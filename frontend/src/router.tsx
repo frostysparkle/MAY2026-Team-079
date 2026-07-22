@@ -1,47 +1,50 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Spinner } from '@/components/ui';
+// Entry screens load eagerly for instant first paint.
 import SplashPage from '@/pages/SplashPage';
 import LoginPage from '@/pages/LoginPage';
-import HomePage from '@/pages/HomePage';
-import ProfilePage from '@/pages/ProfilePage';
-import MyQrPage from '@/pages/MyQrPage';
-import ScannerPage from '@/pages/ScannerPage';
-import ScanResultPage from '@/pages/ScanResultPage';
-import AccessDeniedPage from '@/pages/AccessDeniedPage';
-import UsersPage from '@/pages/UsersPage';
-import EventsPage from '@/pages/EventsPage';
-import EventDetailPage from '@/pages/EventDetailPage';
-import EventEditPage from '@/pages/EventEditPage';
-import HelpPage from '@/pages/HelpPage';
-import MessPage from '@/pages/MessPage';
-import HostelPage from '@/pages/HostelPage';
-import AnnouncementsPage from '@/pages/AnnouncementsPage';
-import PaymentsPage from '@/pages/PaymentsPage';
-import MockCheckoutPage from '@/pages/MockCheckoutPage';
-import AdminQueriesPage from '@/pages/AdminQueriesPage';
-import AdminContactsPage from '@/pages/AdminContactsPage';
-import AdminMessPage from '@/pages/AdminMessPage';
-import AdminHostelPage from '@/pages/AdminHostelPage';
-import AdminDashboardPage from '@/pages/AdminDashboardPage';
-import AdminOverviewPage from '@/pages/AdminOverviewPage';
-import AdminAnnouncementsPage from '@/pages/AdminAnnouncementsPage';
-import AdminPaymentsPage from '@/pages/AdminPaymentsPage';
-import PlaceholderPage from '@/pages/PlaceholderPage';
 
-// Complete Your Profile pulls in the large country/state/city dataset. Lazy-load
-// it so that dataset is split out of the main bundle — keeping the offline app
-// shell (including My QR) small and precacheable by the service worker.
+// Everything else is route-split so the initial bundle stays small and each
+// screen streams in on demand (prefetched by the browser as links appear).
+const HomePage = lazy(() => import('@/pages/HomePage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const MyQrPage = lazy(() => import('@/pages/MyQrPage'));
+const EventsPage = lazy(() => import('@/pages/EventsPage'));
+const EventDetailPage = lazy(() => import('@/pages/EventDetailPage'));
+const EventEditPage = lazy(() => import('@/pages/EventEditPage'));
+const HelpPage = lazy(() => import('@/pages/HelpPage'));
+const MessPage = lazy(() => import('@/pages/MessPage'));
+const HostelPage = lazy(() => import('@/pages/HostelPage'));
+const AnnouncementsPage = lazy(() => import('@/pages/AnnouncementsPage'));
+const PaymentsPage = lazy(() => import('@/pages/PaymentsPage'));
+const MockCheckoutPage = lazy(() => import('@/pages/MockCheckoutPage'));
+const ScannerPage = lazy(() => import('@/pages/ScannerPage'));
+const ScanResultPage = lazy(() => import('@/pages/ScanResultPage'));
+const AccessDeniedPage = lazy(() => import('@/pages/AccessDeniedPage'));
+const UsersPage = lazy(() => import('@/pages/UsersPage'));
+const AdminQueriesPage = lazy(() => import('@/pages/AdminQueriesPage'));
+const AdminContactsPage = lazy(() => import('@/pages/AdminContactsPage'));
+const AdminMessPage = lazy(() => import('@/pages/AdminMessPage'));
+const AdminHostelPage = lazy(() => import('@/pages/AdminHostelPage'));
+const AdminDashboardPage = lazy(() => import('@/pages/AdminDashboardPage'));
+const AdminOverviewPage = lazy(() => import('@/pages/AdminOverviewPage'));
+const AdminAnnouncementsPage = lazy(() => import('@/pages/AdminAnnouncementsPage'));
+const AdminPaymentsPage = lazy(() => import('@/pages/AdminPaymentsPage'));
+const PlaceholderPage = lazy(() => import('@/pages/PlaceholderPage'));
+
+// Complete Your Profile pulls in the large country/state/city dataset — kept
+// split so it never bloats the offline app shell.
 const CompleteProfilePage = lazy(() => import('@/pages/CompleteProfilePage'));
 
-function Lazy({ children }: { children: React.ReactNode }) {
+function Lazy({ children }: { children: ReactNode }) {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-full items-center justify-center p-10">
+        <div className="flex min-h-[60vh] items-center justify-center p-10">
           <Spinner size={28} label="Loading" />
         </div>
       }
@@ -59,7 +62,7 @@ function Lazy({ children }: { children: React.ReactNode }) {
 export const router = createBrowserRouter([
   { path: ROUTES.splash, element: <SplashPage /> },
   { path: ROUTES.login, element: <LoginPage /> },
-  { path: ROUTES.accessDenied, element: <AccessDeniedPage /> },
+  { path: ROUTES.accessDenied, element: <Lazy><AccessDeniedPage /></Lazy> },
 
   {
     path: ROUTES.completeProfile,
@@ -81,16 +84,16 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'profile', element: <ProfilePage /> },
-      { path: 'qr', element: <MyQrPage /> },
-      { path: 'events', element: <EventsPage /> },
-      { path: 'events/:id', element: <EventDetailPage /> },
-      { path: 'help', element: <HelpPage /> },
-      { path: 'mess', element: <MessPage /> },
-      { path: 'hostel', element: <HostelPage /> },
-      { path: 'announcements', element: <AnnouncementsPage /> },
-      { path: 'payments', element: <PaymentsPage /> },
+      { index: true, element: <Lazy><HomePage /></Lazy> },
+      { path: 'profile', element: <Lazy><ProfilePage /></Lazy> },
+      { path: 'qr', element: <Lazy><MyQrPage /></Lazy> },
+      { path: 'events', element: <Lazy><EventsPage /></Lazy> },
+      { path: 'events/:id', element: <Lazy><EventDetailPage /></Lazy> },
+      { path: 'help', element: <Lazy><HelpPage /></Lazy> },
+      { path: 'mess', element: <Lazy><MessPage /></Lazy> },
+      { path: 'hostel', element: <Lazy><HostelPage /></Lazy> },
+      { path: 'announcements', element: <Lazy><AnnouncementsPage /></Lazy> },
+      { path: 'payments', element: <Lazy><PaymentsPage /></Lazy> },
     ],
   },
 
@@ -99,7 +102,7 @@ export const router = createBrowserRouter([
     path: ROUTES.mockCheckout,
     element: (
       <ProtectedRoute>
-        <MockCheckoutPage />
+        <Lazy><MockCheckoutPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -109,7 +112,7 @@ export const router = createBrowserRouter([
     path: ROUTES.scanner,
     element: (
       <ProtectedRoute minRole="organizer">
-        <ScannerPage />
+        <Lazy><ScannerPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -117,7 +120,7 @@ export const router = createBrowserRouter([
     path: ROUTES.scanResult,
     element: (
       <ProtectedRoute minRole="organizer">
-        <ScanResultPage />
+        <Lazy><ScanResultPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -127,7 +130,7 @@ export const router = createBrowserRouter([
     path: ROUTES.users,
     element: (
       <ProtectedRoute minRole="admin">
-        <UsersPage />
+        <Lazy><UsersPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -137,7 +140,7 @@ export const router = createBrowserRouter([
     path: ROUTES.newEvent,
     element: (
       <ProtectedRoute minRole="organizer">
-        <EventEditPage />
+        <Lazy><EventEditPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -145,7 +148,7 @@ export const router = createBrowserRouter([
     path: '/admin/events/:id/edit',
     element: (
       <ProtectedRoute minRole="organizer">
-        <EventEditPage />
+        <Lazy><EventEditPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -155,7 +158,7 @@ export const router = createBrowserRouter([
     path: ROUTES.manageQueries,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminQueriesPage />
+        <Lazy><AdminQueriesPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -163,7 +166,7 @@ export const router = createBrowserRouter([
     path: ROUTES.manageContacts,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminContactsPage />
+        <Lazy><AdminContactsPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -173,7 +176,7 @@ export const router = createBrowserRouter([
     path: ROUTES.manageMess,
     element: (
       <ProtectedRoute minRole="organizer">
-        <AdminMessPage />
+        <Lazy><AdminMessPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -183,7 +186,7 @@ export const router = createBrowserRouter([
     path: ROUTES.manageHostel,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminHostelPage />
+        <Lazy><AdminHostelPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -193,7 +196,7 @@ export const router = createBrowserRouter([
     path: ROUTES.dashboard,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminDashboardPage />
+        <Lazy><AdminDashboardPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -203,7 +206,7 @@ export const router = createBrowserRouter([
     path: ROUTES.manageAnnouncements,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminAnnouncementsPage />
+        <Lazy><AdminAnnouncementsPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -213,7 +216,7 @@ export const router = createBrowserRouter([
     path: ROUTES.overview,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminOverviewPage />
+        <Lazy><AdminOverviewPage /></Lazy>
       </ProtectedRoute>
     ),
   },
@@ -223,10 +226,10 @@ export const router = createBrowserRouter([
     path: ROUTES.managePayments,
     element: (
       <ProtectedRoute minRole="admin">
-        <AdminPaymentsPage />
+        <Lazy><AdminPaymentsPage /></Lazy>
       </ProtectedRoute>
     ),
   },
 
-  { path: '*', element: <PlaceholderPage title="Not Found" /> },
+  { path: '*', element: <Lazy><PlaceholderPage title="Not Found" /></Lazy> },
 ]);
