@@ -27,13 +27,23 @@ import type {
   EventListResponse,
   CreateEventRequest,
   UpdateEventRequest,
+  SupportQuery,
+  QueryListResponse,
+  RaiseQueryRequest,
+  UpdateQueryRequest,
+  Contact,
+  ContactListResponse,
+  CreateContactRequest,
+  UpdateContactRequest,
 } from '@/api/types';
 import { IITM_EMAIL_DOMAINS, TOTP } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
-import { seedParticipants, seedEvents } from './fixtures';
+import { seedParticipants, seedEvents, seedContacts, seedQueries } from './fixtures';
 
 const participants: Participant[] = seedParticipants();
 const events: EventItem[] = seedEvents();
+const contacts: Contact[] = seedContacts();
+const queries: SupportQuery[] = seedQueries();
 let currentId: string | null = null;
 
 // Used-code registry for replay protection: `${id}:${ctx}:${step}` -> true.
@@ -252,5 +262,92 @@ export const mockApi: ApiClient = {
       ...(req.status !== undefined ? { status: req.status } : {}),
     });
     return e;
+  },
+
+  async raiseQuery(req: RaiseQueryRequest): Promise<SupportQuery> {
+    await delay();
+    if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
+    const now = new Date().toISOString();
+    const created: SupportQuery = {
+      id: `q_${Date.now()}`,
+      participantId: currentId,
+      category: req.category,
+      description: req.description,
+      status: 'open',
+      assignedTeam: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    queries.unshift(created);
+    return created;
+  },
+
+  async listMyQueries(): Promise<QueryListResponse> {
+    await delay();
+    const mine = queries
+      .filter((q) => q.participantId === currentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { queries: mine };
+  },
+
+  async listAllQueries(): Promise<QueryListResponse> {
+    await delay();
+    const all = [...queries].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { queries: all };
+  },
+
+  async updateQuery(id: string, req: UpdateQueryRequest): Promise<SupportQuery> {
+    await delay();
+    const q = queries.find((x) => x.id === id);
+    if (!q) throw new ApiClientError(404, 'query_not_found', 'Query not found.');
+    if (req.status !== undefined) q.status = req.status;
+    if (req.assignedTeam !== undefined) q.assignedTeam = req.assignedTeam;
+    q.updatedAt = new Date().toISOString();
+    return q;
+  },
+
+  async listContacts(): Promise<ContactListResponse> {
+    await delay();
+    const sorted = [...contacts].sort(
+      (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
+    );
+    return { contacts: sorted };
+  },
+
+  async createContact(req: CreateContactRequest): Promise<Contact> {
+    await delay();
+    const created: Contact = {
+      id: `c_${Date.now()}`,
+      name: req.name,
+      role: req.role,
+      category: req.category,
+      phone: req.phone,
+      email: req.email ?? null,
+      isEmergency: req.isEmergency ?? false,
+    };
+    contacts.push(created);
+    return created;
+  },
+
+  async updateContact(id: string, req: UpdateContactRequest): Promise<Contact> {
+    await delay();
+    const c = contacts.find((x) => x.id === id);
+    if (!c) throw new ApiClientError(404, 'contact_not_found', 'Contact not found.');
+    Object.assign(c, {
+      ...(req.name !== undefined ? { name: req.name } : {}),
+      ...(req.role !== undefined ? { role: req.role } : {}),
+      ...(req.category !== undefined ? { category: req.category } : {}),
+      ...(req.phone !== undefined ? { phone: req.phone } : {}),
+      ...(req.email !== undefined ? { email: req.email } : {}),
+      ...(req.isEmergency !== undefined ? { isEmergency: req.isEmergency } : {}),
+    });
+    return c;
+  },
+
+  async deleteContact(id: string): Promise<void> {
+    await delay();
+    const idx = contacts.findIndex((x) => x.id === id);
+    if (idx === -1) throw new ApiClientError(404, 'contact_not_found', 'Contact not found.');
+    contacts.splice(idx, 1);
   },
 };

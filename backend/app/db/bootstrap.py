@@ -2,16 +2,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from pymongo import ASCENDING, IndexModel
+from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.config import Settings
 from app.db.collections import (
+    CONTACTS,
     EVENT_REGISTRATIONS,
     EVENTS,
     INITIAL_COLLECTIONS,
     PHOTOS,
     QR_SECRETS,
+    QUERIES,
     SCAN_LOGS,
     STAFF_ASSIGNMENTS,
     USERS,
@@ -156,6 +158,29 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
                 [("participant_id", ASCENDING), ("scanned_at", ASCENDING)],
                 name="ix_scan_logs_participant_time",
             ),
+        ]
+    )
+
+    # Support queries (Epic 6): fetch a participant's own queries, and triage by
+    # status for the admin queue.
+    await database[QUERIES].create_indexes(
+        [
+            IndexModel(
+                [("participant_id", ASCENDING), ("created_at", DESCENDING)],
+                name="ix_queries_participant_time",
+            ),
+            IndexModel(
+                [("status", ASCENDING), ("created_at", DESCENDING)],
+                name="ix_queries_status_time",
+            ),
+        ]
+    )
+
+    # Contact directory (Epic 6): browse by area, and surface emergency contacts.
+    await database[CONTACTS].create_indexes(
+        [
+            IndexModel([("category", ASCENDING)], name="ix_contacts_category"),
+            IndexModel([("is_emergency", ASCENDING)], name="ix_contacts_emergency"),
         ]
     )
 

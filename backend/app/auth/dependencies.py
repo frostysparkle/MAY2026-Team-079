@@ -14,7 +14,15 @@ from app.core.security import (
     SecurityConfigurationError,
     decode_access_token,
 )
-from app.db.collections import EVENTS, PHOTOS, QR_SECRETS, SCAN_LOGS, USERS
+from app.db.collections import (
+    CONTACTS,
+    EVENTS,
+    PHOTOS,
+    QR_SECRETS,
+    QUERIES,
+    SCAN_LOGS,
+    USERS,
+)
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -43,6 +51,18 @@ def get_events_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, EVENTS)
+
+
+def get_queries_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, QUERIES)
+
+
+def get_contacts_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, CONTACTS)
 
 
 def get_qr_secrets_collection(

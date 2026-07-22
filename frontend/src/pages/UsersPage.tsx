@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '@/api';
 import type { UserListItem } from '@/api/types';
 import { ROLES, ROLE_LABELS, type Role } from '@/config/constants';
+import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/uiStore';
 import { Card, EmptyState, ErrorState, ListItem, Spinner } from '@/components/ui';
@@ -57,13 +59,18 @@ export default function UsersPage() {
 
   return (
     <main className="mx-auto flex min-h-full max-w-md flex-col gap-4 p-4">
-      <div>
-        <h1 className="text-lg font-bold text-gray-900">User Management</h1>
-        <p className="text-sm text-muted">
-          {isSuperAdmin
-            ? 'Assign roles to participants and staff.'
-            : 'View registered users. Only a Super Admin can change roles.'}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">User Management</h1>
+          <p className="text-sm text-muted">
+            {isSuperAdmin
+              ? 'Assign roles to participants and staff.'
+              : 'View registered users. Only a Super Admin can change roles.'}
+          </p>
+        </div>
+        <Link to={ROUTES.home} className="shrink-0 text-sm text-muted hover:text-brand">
+          Dashboard
+        </Link>
       </div>
 
       {status === 'loading' && (

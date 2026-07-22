@@ -183,6 +183,64 @@ export interface CreateEventRequest {
 /** All fields optional — send only what changes (PATCH semantics). */
 export type UpdateEventRequest = Partial<CreateEventRequest>;
 
+/* ------------------------------------------------- queries & contacts --- */
+
+export type QueryCategory = 'event' | 'hostel' | 'mess' | 'workshop' | 'lost_item' | 'other';
+export type QueryStatus = 'open' | 'assigned' | 'in_progress' | 'resolved';
+export type QueryTeam = 'event' | 'hostel' | 'mess' | 'workshop' | 'general';
+
+export interface SupportQuery {
+  id: string;
+  participantId: string;
+  category: QueryCategory;
+  description: string;
+  status: QueryStatus;
+  assignedTeam: QueryTeam | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueryListResponse {
+  queries: SupportQuery[];
+}
+
+export interface RaiseQueryRequest {
+  category: QueryCategory;
+  description: string;
+}
+
+export interface UpdateQueryRequest {
+  status?: QueryStatus;
+  assignedTeam?: QueryTeam;
+}
+
+export type ContactCategory = 'hostel' | 'mess' | 'event' | 'security' | 'general';
+
+export interface Contact {
+  id: string;
+  name: string;
+  role: string;
+  category: ContactCategory;
+  phone: string;
+  email: string | null;
+  isEmergency: boolean;
+}
+
+export interface ContactListResponse {
+  contacts: Contact[];
+}
+
+export interface CreateContactRequest {
+  name: string;
+  role: string;
+  category: ContactCategory;
+  phone: string;
+  email?: string | null;
+  isEmergency?: boolean;
+}
+
+export type UpdateContactRequest = Partial<CreateContactRequest>;
+
 /* -------------------------------------------------------------- errors --- */
 
 /** Normalized error shape thrown by the API client on non-success. */

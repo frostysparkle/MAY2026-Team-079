@@ -1,4 +1,4 @@
-import type { Participant, EventItem } from '@/api/types';
+import type { Participant, EventItem, Contact, SupportQuery } from '@/api/types';
 
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
@@ -121,6 +121,64 @@ export function seedEvents(): EventItem[] {
       instructions: 'Lineup to be announced. Wristband mandatory.',
       status: 'draft',
       createdAt: '2026-07-12T09:00:00+05:30',
+    },
+  ];
+}
+
+/** Seed contact directory + emergency contacts for the mock (Epic 6). */
+export function seedContacts(): Contact[] {
+  return [
+    {
+      id: 'c_security',
+      name: 'Campus Security Control Room',
+      role: 'Security',
+      category: 'security',
+      phone: '9100000000',
+      email: null,
+      isEmergency: true,
+    },
+    {
+      id: 'c_medical',
+      name: 'Institute Health Centre',
+      role: 'Medical Emergency',
+      category: 'general',
+      phone: '9100000111',
+      email: 'health@iitm.ac.in',
+      isEmergency: true,
+    },
+    {
+      id: 'c_hostel',
+      name: 'Hostel Office Desk',
+      role: 'Accommodation',
+      category: 'hostel',
+      phone: '9100000222',
+      email: 'hostel@paradox.example',
+      isEmergency: false,
+    },
+    {
+      id: 'c_mess',
+      name: 'Mess Supervisor',
+      role: 'Mess',
+      category: 'mess',
+      phone: '9100000333',
+      email: null,
+      isEmergency: false,
+    },
+  ];
+}
+
+/** Seed one query for the mock participant so the tracking view isn't empty. */
+export function seedQueries(): SupportQuery[] {
+  return [
+    {
+      id: 'q_seed',
+      participantId: 'p_participant',
+      category: 'hostel',
+      description: 'AC in my room is not working.',
+      status: 'in_progress',
+      assignedTeam: 'hostel',
+      createdAt: '2026-07-14T08:00:00+05:30',
+      updatedAt: '2026-07-14T10:00:00+05:30',
     },
   ];
 }

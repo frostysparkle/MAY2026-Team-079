@@ -19,6 +19,14 @@ import type {
   EventItem,
   CreateEventRequest,
   UpdateEventRequest,
+  QueryListResponse,
+  SupportQuery,
+  RaiseQueryRequest,
+  UpdateQueryRequest,
+  ContactListResponse,
+  Contact,
+  CreateContactRequest,
+  UpdateContactRequest,
 } from './types';
 
 export interface ApiClient {
@@ -41,6 +49,16 @@ export interface ApiClient {
   getEvent(id: string): Promise<EventItem>;
   createEvent(req: CreateEventRequest): Promise<EventItem>;
   updateEvent(id: string, req: UpdateEventRequest): Promise<EventItem>;
+
+  // Queries & contacts (Epic 6)
+  raiseQuery(req: RaiseQueryRequest): Promise<SupportQuery>;
+  listMyQueries(): Promise<QueryListResponse>;
+  listAllQueries(): Promise<QueryListResponse>;
+  updateQuery(id: string, req: UpdateQueryRequest): Promise<SupportQuery>;
+  listContacts(): Promise<ContactListResponse>;
+  createContact(req: CreateContactRequest): Promise<Contact>;
+  updateContact(id: string, req: UpdateContactRequest): Promise<Contact>;
+  deleteContact(id: string): Promise<void>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

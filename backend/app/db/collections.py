@@ -5,6 +5,8 @@ STAFF_ASSIGNMENTS = "staff_assignments"
 PHOTOS = "photos"
 QR_SECRETS = "qr_secrets"
 SCAN_LOGS = "scan_logs"
+QUERIES = "queries"
+CONTACTS = "contacts"
 
 INITIAL_COLLECTIONS = (
     USERS,
@@ -14,4 +16,6 @@ INITIAL_COLLECTIONS = (
     PHOTOS,
     QR_SECRETS,
     SCAN_LOGS,
+    QUERIES,
+    CONTACTS,
 )

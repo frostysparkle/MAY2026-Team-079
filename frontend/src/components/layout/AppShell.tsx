@@ -9,6 +9,7 @@ const NAV = [
   { to: ROUTES.home, label: 'Home', icon: '🏠', end: true },
   { to: ROUTES.events, label: 'Events', icon: '📅', end: false },
   { to: ROUTES.myQr, label: 'My QR', icon: '🔳', end: false },
+  { to: ROUTES.help, label: 'Help', icon: '🆘', end: false },
   { to: ROUTES.profile, label: 'Profile', icon: '👤', end: false },
 ];
 

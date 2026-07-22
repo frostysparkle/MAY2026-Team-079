@@ -161,6 +161,11 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Frontend: Events schedule, event detail + entry instructions, organizer/admin create & edit; nav + home link; mock seed data
 - [x] ✅ Verified live against Atlas (create/publish/list/get) + build/lint/tests green
 
+### Epic 6 — Query & Contact Management (P0)
+- [x] ✅ Backend: `POST/GET /queries`, `GET /queries/manage` (admin+), `PATCH /queries/{id}` (admin+); `GET/POST /contacts`, `PATCH/DELETE /contacts/{id}` (admin+); collections + indexes
+- [x] ✅ Frontend: Help & Support (raise query, track own queries, emergency + directory contacts), admin Query Triage, admin Contact Directory; nav + role-gated home hub
+- [x] ✅ Verified live against Atlas incl. RBAC (participant triage → 403); build/lint/tests green
+
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)

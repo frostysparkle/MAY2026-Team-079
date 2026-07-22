@@ -30,6 +30,18 @@ import type {
   CreateEventRequest,
   UpdateEventRequest,
   EventStatus,
+  SupportQuery,
+  QueryListResponse,
+  RaiseQueryRequest,
+  UpdateQueryRequest,
+  QueryCategory,
+  QueryStatus,
+  QueryTeam,
+  Contact,
+  ContactListResponse,
+  CreateContactRequest,
+  UpdateContactRequest,
+  ContactCategory,
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
@@ -137,6 +149,65 @@ function fromEventRequest(req: CreateEventRequest | UpdateEventRequest): Record<
   if (req.capacity !== undefined) body.capacity = req.capacity;
   if (req.instructions !== undefined) body.instructions = req.instructions;
   if (req.status !== undefined) body.status = req.status;
+  return body;
+}
+
+interface BackendQuery {
+  id: string;
+  participant_id: string;
+  category: QueryCategory;
+  description: string;
+  status: QueryStatus;
+  assigned_team: QueryTeam | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+function toQuery(q: BackendQuery): SupportQuery {
+  return {
+    id: q.id,
+    participantId: q.participant_id,
+    category: q.category,
+    description: q.description,
+    status: q.status,
+    assignedTeam: q.assigned_team,
+    createdAt: q.created_at ?? new Date(0).toISOString(),
+    updatedAt: q.updated_at ?? new Date(0).toISOString(),
+  };
+}
+
+interface BackendContact {
+  id: string;
+  name: string;
+  role: string;
+  category: ContactCategory;
+  phone: string;
+  email: string | null;
+  is_emergency: boolean;
+}
+
+function toContact(c: BackendContact): Contact {
+  return {
+    id: c.id,
+    name: c.name,
+    role: c.role,
+    category: c.category,
+    phone: c.phone,
+    email: c.email,
+    isEmergency: c.is_emergency,
+  };
+}
+
+function fromContactRequest(
+  req: CreateContactRequest | UpdateContactRequest,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (req.name !== undefined) body.name = req.name;
+  if (req.role !== undefined) body.role = req.role;
+  if (req.category !== undefined) body.category = req.category;
+  if (req.phone !== undefined) body.phone = req.phone;
+  if (req.email !== undefined) body.email = req.email;
+  if (req.isEmergency !== undefined) body.is_emergency = req.isEmergency;
   return body;
 }
 
@@ -297,5 +368,63 @@ export const realApi: ApiClient = {
         body: JSON.stringify(fromEventRequest(req)),
       }),
     );
+  },
+
+  async raiseQuery(req: RaiseQueryRequest): Promise<SupportQuery> {
+    return toQuery(
+      await request<BackendQuery>('/queries', {
+        method: 'POST',
+        body: JSON.stringify({ category: req.category, description: req.description }),
+      }),
+    );
+  },
+
+  async listMyQueries(): Promise<QueryListResponse> {
+    const body = await request<{ queries: BackendQuery[] }>('/queries');
+    return { queries: body.queries.map(toQuery) };
+  },
+
+  async listAllQueries(): Promise<QueryListResponse> {
+    const body = await request<{ queries: BackendQuery[] }>('/queries/manage');
+    return { queries: body.queries.map(toQuery) };
+  },
+
+  async updateQuery(id: string, req: UpdateQueryRequest): Promise<SupportQuery> {
+    const payload: Record<string, unknown> = {};
+    if (req.status !== undefined) payload.status = req.status;
+    if (req.assignedTeam !== undefined) payload.assigned_team = req.assignedTeam;
+    return toQuery(
+      await request<BackendQuery>(`/queries/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+
+  async listContacts(): Promise<ContactListResponse> {
+    const body = await request<{ contacts: BackendContact[] }>('/contacts');
+    return { contacts: body.contacts.map(toContact) };
+  },
+
+  async createContact(req: CreateContactRequest): Promise<Contact> {
+    return toContact(
+      await request<BackendContact>('/contacts', {
+        method: 'POST',
+        body: JSON.stringify(fromContactRequest(req)),
+      }),
+    );
+  },
+
+  async updateContact(id: string, req: UpdateContactRequest): Promise<Contact> {
+    return toContact(
+      await request<BackendContact>(`/contacts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fromContactRequest(req)),
+      }),
+    );
+  },
+
+  async deleteContact(id: string): Promise<void> {
+    await request<void>(`/contacts/${id}`, { method: 'DELETE' });
   },
 };

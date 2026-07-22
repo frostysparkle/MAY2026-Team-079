@@ -147,6 +147,27 @@ Partial update — send only changed fields. Returns `EventOut`. `400 no_changes
 
 `EventOut`: `{ id, title, venue, event_date, start_time, end_time, capacity, instructions, status, created_at }`.
 
+## Queries & Contacts (Epic 6)
+
+Query objects map `participant_id`→`participantId`, `assigned_team`→`assignedTeam`.
+`category` ∈ `event|hostel|mess|workshop|lost_item|other`; `status` ∈
+`open|assigned|in_progress|resolved`; team ∈ `event|hostel|mess|workshop|general`.
+Contacts map `is_emergency`→`isEmergency`; `category` ∈ `hostel|mess|event|security|general`.
+
+### 11. `POST /queries` *(auth)* — raise a query `{ category, description }` → `201` QueryOut.
+### 12. `GET /queries` *(auth)* — the caller's own queries `{ queries: [...] }`.
+### 13. `GET /queries/manage` *(admin+)* — all queries for triage; optional `?status_filter=`.
+### 14. `PATCH /queries/{id}` *(admin+)* — `{ status?, assigned_team? }` → QueryOut.
+
+`QueryOut`: `{ id, participant_id, category, description, status, assigned_team, created_at, updated_at }`.
+
+### 15. `GET /contacts` *(auth)* — directory; `?emergency_only=true` for the Help section.
+### 16. `POST /contacts` *(admin+)* — `{ name, role, category, phone, email?, is_emergency? }` → `201` ContactOut.
+### 17. `PATCH /contacts/{id}` *(admin+)* — partial update → ContactOut.
+### 18. `DELETE /contacts/{id}` *(admin+)* — `204`.
+
+`ContactOut`: `{ id, name, role, category, phone, email, is_emergency }`.
+
 ## TOTP parameters (must match on both sides)
 
 | Param      | Value  |

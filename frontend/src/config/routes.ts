@@ -13,6 +13,7 @@ export const ROUTES = {
   myQr: '/app/qr',
   events: '/app/events',
   eventDetail: (id: string) => `/app/events/${id}`,
+  help: '/app/help',
 
   // Staff
   scanner: '/scan',
@@ -22,6 +23,8 @@ export const ROUTES = {
   users: '/admin/users',
   newEvent: '/admin/events/new',
   editEvent: (id: string) => `/admin/events/${id}/edit`,
+  manageQueries: '/admin/queries',
+  manageContacts: '/admin/contacts',
 
   accessDenied: '/access-denied',
 } as const;
