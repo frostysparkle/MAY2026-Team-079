@@ -8,9 +8,10 @@ understand *why* the code is shaped the way it is.
 
 - **One email/password sign-in flow** for every user. Public registration always
   creates a participant account; elevated roles are assigned by authorized admins.
-- **4-tier RBAC**: Participant → Organizer → Admin → Super Admin. Role is always resolved
-  **server-side** after sign-in; the splash "role" buttons only choose which login screen to
-  show and carry no permission.
+- **Multi-role authorization:** participant access is the baseline,
+  organizer/staff access comes from active scoped assignments, and Admin/Super
+  Admin are global roles. After sign-in, choosing an available view changes the
+  UI only; the server remains the permission boundary.
 - **Complete Your Profile** is one full page. Photo goes to a separate `photos` collection,
   linked by participant ID — never embedded in the profile document.
 - **Digital ID** is a per-participant, per-event/checkpoint TOTP secret. The QR is generated

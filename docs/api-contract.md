@@ -17,7 +17,9 @@ and the FastAPI backend. It reflects the **hybrid** integration decision:
 - **Auth:** authenticated requests send `Authorization: Bearer <access_token>`.
   The token is the JWT returned by `POST /auth/register` or `POST /auth/login`.
 - **Roles (5-tier, low → high):** `participant` < `organizer` < `staff` < `admin` < `super_admin`.
-  The backend stores a `roles` array; the frontend displays the **highest-ranked** role.
+  The backend stores a `roles` array. The current adapter displays the
+  highest-ranked role; the post-login available-view selector is a documented
+  follow-up in `authorization-model.md`.
 - **Operational scopes:** Admin and Super Admin roles are global. Organizer and
   staff capabilities require an active `staff_assignments` record for the
   concrete event/checkpoint scope; `scope_id: "*"` is an explicit wildcard.

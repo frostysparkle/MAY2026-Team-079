@@ -40,7 +40,10 @@ This revision incorporates decisions locked during Sprint 1 planning and the QR/
 - **Login method updated: email and password.** Registration and login use one
   credential flow for every user. Public registration creates participant access
   only; elevated roles are assigned after registration by authorized admins.
-- **Roles expand to a 4-tier hierarchy:** Participant → Organizer → **Admin → Super Admin**. Only a Super Admin can change another user's role, and the first Super Admin is seeded directly in the database as a one-time setup step. Updates FR-7.3, Section 7.2.
+- **Multi-role authorization model:** participant access is the baseline;
+  organizer/staff access is granted through scoped assignments; Admin and Super
+  Admin are global roles. The system has exactly one non-removable Super Admin,
+  who alone manages Admin roles. Updates FR-7.3 and Section 7.2.
 - **"Complete Your Profile" confirmed as a single full page**, with a **separate `photos` collection** in MongoDB linked by participant ID (photos are not embedded in the profile document).
 - **Section 8 (Admin) reframed** from a read-only participant list to **User Management**, adding a Super-Admin-only role-assignment control.
 
@@ -551,14 +554,23 @@ The single participant profile is the data source for event registration, hostel
 
 **P0 — Must Have (MVP core)** *(Ref: Story 7.3)*
 
-Admins view and manage participant records — identification, accommodation, mess access, event eligibility — from a single **User Management** dashboard. This screen is no longer read-only: it includes role management, gated by role tier.
+Admins view and manage participant records — identification, accommodation,
+mess access, event eligibility — from a single **User Management** dashboard.
+Users may hold multiple roles while retaining participant access.
 
 ***Acceptance Criteria***
 
 - An admin can search for a participant by name, email, or ID and view all module-specific data for that participant in one screen.
 - Only Admin-role accounts (or higher) can edit another participant's record.
-- A **role-assignment control** (e.g. a per-row dropdown) is visible and usable **only to a Super Admin**; regular Admins see the same list without the role-editing control.
-- Only a Super Admin can change a user's role across the four tiers (Participant → Organizer → Admin → Super Admin). The very first Super Admin is created directly in the database as a one-time setup step, since no in-app account has permission to grant that role initially.
+- Only the Super Admin may grant or revoke the global Admin role. Admins cannot
+  alter another Admin or the Super Admin.
+- Admins and the Super Admin may grant or revoke scoped organizer/staff
+  assignments. These assignments do not replace the user's participant access.
+- The single Super Admin cannot be demoted, removed, or deactivated through an
+  application role-management operation. Initial credentials are supplied
+  explicitly during backend bootstrap; there is no default password.
+- After the shared login flow, a multi-role user chooses an available view.
+  That UI choice changes navigation only and never grants authority.
 - Each participant's profile photo is read from the separate `photos` collection (linked by participant ID), not from a field embedded in the participant document.
 
 ### Epic 8 — Communication Between Teams
@@ -693,7 +705,10 @@ Admins can view which participants have paid, have a pending payment, or have no
   as salted PBKDF2 hashes and are never returned or logged. A short-lived JWT is
   issued only after the credentials and account status are verified.
 - The per-participant, per-event **TOTP secret is stored encrypted at rest** (encryption key held outside the database), sent to the device exactly once over HTTPS, and never re-exposed by a later API call. On the device it is held in encrypted client-side storage (encrypted IndexedDB via Web Crypto). **Lost/changed-device recovery** is: log in again → generate a **new** secret → invalidate the previous secret → only the new device can generate valid codes. The previous secret is never reissued or downloaded again; there is deliberately no endpoint that re-exposes an existing secret. This same "regenerate ID" mechanism is the revocation path for a lost or compromised device.
-- Role-based access control (RBAC) enforced server-side (not just hidden in the UI) across a **four-tier hierarchy: Participant → Organizer → Admin → Super Admin**. Only a Super Admin can change another user's role; the role-assignment endpoint rejects calls from any lower tier.
+- Role-based access control (RBAC) is enforced server-side, not merely hidden in
+  the UI. Organizer/staff access requires an active scoped assignment; Admin and
+  Super Admin are global roles. Only the Super Admin manages Admin roles, and no
+  application actor may demote, remove, or deactivate the Super Admin.
 - TOTP codes are verified server-side on every scan; a stale, out-of-window, or already-used code is rejected (replay protection, via shared Redis state). Scan attempts are rate-limited on a **composite key of participant ID + scanner device + IP address** (not participant ID alone), so brute-force attempts cannot be spread cheaply across many participant IDs.
 - JWT tokens have a defined, reasonable expiry and are never exposed in logs or client-visible error messages.
 - All QR scans and admin data edits are logged with timestamp and actor identity (supports auditability and Epic 2/4/5 acceptance criteria).
@@ -727,7 +742,7 @@ These are confirmed decisions, recorded here as constraints on implementation �
 | Backend                | Python + FastAPI.                                                                                                                                                                                                                                                                                                                                                          |
 | Database               | MongoDB, including a separate `photos` collection linked to participants by ID.                                                                                                                                                                                                                                                                                            |
 | Authentication         | **Email/password credentials** with salted password hashes and short-lived JWT session tokens. Digital identity is a **TOTP rotating QR (RFC 6238), one secret per participant per event/checkpoint**, generated on-device and verified server-side on scan. **Fixed TOTP parameters (frontend and backend must match): HMAC-SHA1, 6 digits, 30-second step, ±1 step (~90s) window, Base32-encoded 160-bit secret** (`pyotp` backend / `otpauth` frontend). The organizer app supplies the checkpoint context at scan; the QR carries only `{ participant_id, current_code }`. |
-| Authorization          | Four-tier RBAC: Participant → Organizer → Admin → Super Admin. Only Super Admin can assign roles; first Super Admin seeded directly in the database.                                                                                                                                                                                                                       |
+| Authorization          | Multi-role model: participant baseline; active scoped organizer/staff assignments; global Admin and Super Admin roles. Exactly one Super Admin exists, only that account manages Admin roles, and it cannot be removed through the application. View selection after login is presentation only. |
 | Scaling approach (MVP) | Stateless backend design with a shared **Redis** caching layer on the QR/TOTP verification path (highest-traffic operation), which also holds replay-protection state, rate-limit counters, and temporary verification state across instances. Full multi-service data distribution and load balancing is deferred to the Future Roadmap (Section 11).                     |
 | Timezone               | **India Standard Time (IST)** is the official application timezone; all human-facing timestamps (logs, receipts, schedules) use IST. TOTP itself is computed on Unix epoch time (timezone-independent), so a correct device clock is what matters, not the display timezone.                                                                                              |
 | Payments               | Certified third-party payment gateway with hosted checkout (e.g., a Razorpay/Stripe-style provider; specific provider not yet chosen — see Open Questions, Section 9.2). Raw card/payment data is never handled or stored directly by Paradox Connect.                                                                                                                     |

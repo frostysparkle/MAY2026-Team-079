@@ -14,7 +14,7 @@ import type { Role } from '@/config/constants';
 /**
  * Seed data for the mock API. Includes one account per role so the UI can be
  * exercised end-to-end without a backend. The first Super Admin mirrors the
- * "seeded directly in the DB" one-time setup from the PRD.
+ * explicitly configured one-time backend bootstrap from the PRD.
  */
 export function seedParticipants(): Participant[] {
   return [

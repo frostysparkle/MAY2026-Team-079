@@ -14,9 +14,9 @@ _Last updated: 23 Jul 2026_
 | Product & Requirements (PRD v1.2) | ✅ Complete |
 | QR/TOTP + Security Architecture | ✅ Complete |
 | Sprint 1 Planning & Review | ✅ Complete |
-| **Frontend — Sprint 1** | ✅ Complete (mock-API backed, 35 tests passing) |
-| **Backend — Sprint 1** | ✅ Auth complete; all 6 contract endpoints implemented |
-| Frontend ↔ Backend integration | � Code complete on `feature/frontend-backend-integration`; pending live end-to-end run |
+| **Frontend — Sprint 1** | ✅ Complete (mock/real API adapters, 53 tests passing) |
+| **Backend — Sprint 1** | ✅ Modular FastAPI backend, 41 tests passing |
+| Frontend ↔ Backend integration | 🔄 Code complete; isolated live end-to-end run pending |
 
 The frontend is fully built and runs today against an in-memory **mock API**.
 The integration endpoints exist on the backend, and the frontend has a real-API
@@ -46,27 +46,22 @@ MongoDB and Redis instances with the required JWT and QR encryption secrets.
 - **Admin User Management** with Super-Admin-only role assignment.
 - **RBAC route guards** + **Access Denied** page.
 - **PWA** manifest + offline service worker; encrypted IndexedDB secret store.
-- Quality: 35 tests passing, clean typecheck, lint, and production build.
+- Quality: 53 tests passing, production build passing, lint at 0 errors (53
+  existing warnings remain).
 
 ---
 
 ## 3. Pending Work
 
-### Backend (Ashwin) — Sprint 1 priority
-The frontend already defines the exact request/response shapes in `frontend/src/api/types.ts` and the expected endpoint paths in `frontend/src/api/realApi.ts`. These are the contract to implement.
+### Backend (Ashwin) — remaining hardening
 
-- ✅ **Email/password authentication** server-side with salted password hashes and JWT sessions.
-- 🔲 **4-tier role model**: Participant → Organizer → Admin → Super Admin.
-- 🔲 **One-time first Super Admin seed** (script or direct DB insert) before anyone logs in.
-- 🔲 **`photos` collection** in MongoDB, separate from `participants`, linked by participant ID.
-- 🔲 Core endpoints matching the frontend contract:
-  - `POST /auth/register` and `POST /auth/login` — create/authenticate an account and return a session.
-  - `POST /profile/complete` — save profile, store photo in `photos`.
-  - `GET /admin/users` — list users (admin+).
-  - `PATCH /admin/participants/{id}/role` — **Super Admin only**.
-  - `POST /qr/provision` — issue per-checkpoint TOTP secret **once**.
-  - `POST /scan/verify` — verify a scan against `checkpoint_context`, return one of the 7 result codes.
-- 🔲 TOTP config must match frontend exactly: **SHA1, 6 digits, 30s period, ±1 window** (see `frontend/src/config/constants.ts`).
+- 🔲 Enforce the locked role-management invariants: one non-removable Super
+  Admin, Super-Admin-only Admin management, and no Admin-on-Admin changes.
+- 🔲 Add the post-login available-view selector while continuing to enforce
+  stored roles and scoped assignments on every API request.
+- 🔲 Add login rate limiting and Admin MFA before treating authentication as
+  production-ready.
+- 🔲 Run a live end-to-end pass against isolated MongoDB and Redis instances.
 
 ### Frontend — remaining / deferred
 - 🔲 **Integration pass**: flip `VITE_USE_MOCK_API=false`, point at the real backend, resolve any contract drift.
@@ -82,12 +77,14 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 
 ## 4. Next Steps
 
-### Ashwin (Backend) — start here, in order
-1. **Stand up the FastAPI project** + MongoDB connection and the `participants` + `photos` collections.
-2. **Verify `POST /auth/register` and `POST /auth/login` end-to-end** against an isolated database.
-3. **Add the 4-tier role field** and the **first Super Admin seed** step.
-4. **Implement `POST /profile/complete`** (with photo → `photos` collection).
-5. Then the QR endpoints (`/qr/provision`, `/scan/verify`) using the shared TOTP params, and finally the admin endpoints.
+### Ashwin (Backend) — next, in order
+
+1. Run email/password, registration, and QR scan flows end-to-end against
+   isolated MongoDB and Redis instances.
+2. Implement the role-management invariants and available-view selector
+   described in `docs/authorization-model.md`.
+3. Add login rate limiting and Admin MFA.
+4. Wire the deployment environment and repeat the end-to-end checks.
 
 > Read `frontend/src/api/types.ts` (request/response shapes) and
 > `frontend/src/api/realApi.ts` (paths, methods, auth header) first — they are
@@ -102,10 +99,9 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 
 | Item | Waiting on | Impact |
 |------|-----------|--------|
-| Frontend ↔ backend integration | Backend endpoints (Ashwin) | Frontend runs on mock today; real data blocked until endpoints exist |
-| Scan verification end-to-end | `POST /scan/verify` + matching TOTP config | Cannot validate real scans until backend TOTP matches frontend params |
-| Role assignment (live) | `PATCH /admin/participants/{id}/role` + Super Admin seed | Admin UI works on mock; real role changes blocked |
-| Photo persistence | `photos` collection + `POST /profile/complete` | Profile photo stored as data URL in mock only |
+| Frontend ↔ backend integration | Isolated MongoDB/Redis environment + secrets | Code exists; live data-path validation remains |
+| Scan verification end-to-end | Redis + QR encryption key | Unit coverage exists; shared-service behavior needs a live pass |
+| Role/view model | Dedicated role-management follow-up | Current basic role endpoint and highest-role UI do not enforce the locked final model |
 | Deployment | Backend service on Render | Full staging environment blocked |
 
 **Action item:** run the real-API integration suite against isolated MongoDB and
@@ -118,8 +114,14 @@ Redis services before deployment.
 - **Auth:** one email/password login for every user. Public registration grants
   participant access only; the backend stores salted password hashes and issues
   short-lived JWT sessions.
-- **RBAC:** 4 tiers — Participant → Organizer → Admin → Super Admin. Role is **always resolved server-side**; the splash role buttons carry no permission. Route guards are UI-only; the backend is the real security boundary.
-- **First Super Admin:** seeded once directly in the DB (backend task) — never created through the app UI.
+- **Authorization:** participant access is the baseline; organizer/staff access
+  comes from active scoped assignments; Admin and Super Admin are global roles.
+  The system has exactly one non-removable Super Admin, and only that account
+  manages Admin roles.
+- **Role view:** after the shared login, users choose among available views.
+  Selection changes presentation only; the backend remains the security boundary.
+- **First Super Admin:** created once through explicitly configured bootstrap
+  credentials; there is no default password or public Super Admin registration.
 - **Profile:** one full page. Photo stored in a **separate `photos` collection**, linked by participant ID — never embedded in the profile document. Photo limits: JPG/PNG, ≤ 750 KB.
 - **Digital ID (QR):** per-participant, per-checkpoint **TOTP** secret. QR is generated **on-device** and works **offline** after first provisioning. The QR encodes only `{ participant_id, current_code }` — never the secret, never the checkpoint context.
 - **Checkpoint context** is supplied by the **organizer app at scan time**, sent as `checkpoint_context` on the verify request.
@@ -153,7 +155,7 @@ Redis services before deployment.
 - [x] ✅ PWA + encrypted secret store
 - [x] ✅ Tests / lint / build green
 - [x] ✅ Real-API adapter (snake_case→camelCase, `roles[]`→`role`), `/api/v1` base URL
-- [ ] � Backend integration pass (mock → real) — code done, pending live run
+- [ ] 🔄 Backend integration pass (mock → real) — code done, pending live run
 
 ### Backend (Sprint 1)
 - [x] ✅ FastAPI project + MongoDB setup
@@ -161,7 +163,8 @@ Redis services before deployment.
 - [x] ✅ 5-tier roles (+ `staff`) + first Super Admin seed
 - [x] ✅ `POST /profile/complete` + `photos` collection
 - [x] ✅ `GET /admin/users`
-- [x] ✅ `PATCH /admin/participants/{id}/role` (Super Admin only, server-enforced)
+- [x] ✅ Basic `PATCH /admin/participants/{id}/role` endpoint
+- [ ] 🔲 Locked single-Super-Admin/Admin-management invariants
 - [x] ✅ `POST /qr/provision` (once-per-context secret, rotates on re-provision)
 - [x] ✅ `POST /scan/verify` (7 result codes, `pyotp` SHA1/6/30/±1, replay protection)
 
@@ -194,7 +197,8 @@ Redis services before deployment.
 - [x] ✅ Backend: audience-scoped announcements (all/event/hostel/pors), server-side feed filtering, accountability log, admin-only send/delete
 - [x] ✅ Frontend: participant Announcements feed + admin compose/log/delete; Home card + hub link
 - [x] ✅ Live-verified on Atlas (RBAC 403, audience validation 422, filtered feed, log)
-- Note: FR-8.2 registrant-only targeting is partial — no event-registration model in the MVP, so event announcements are event-tagged and shown to all.
+- Note: FR-8.2 registrant-only targeting remains partial. The registration model
+  now exists, but event announcements are not yet filtered to active registrants.
 
 ### Epic 9 — Admin Operational Dashboard (P1)
 - [x] ✅ Backend: `GET /admin/overview` (admin+) consolidating events/crowd, queries, hostel, and mess from the shared stores (FR-9.1, FR-9.3)
@@ -241,6 +245,7 @@ Spec docs (requirements → design → tasks) pass Kiro format validation.
   Home dashboard; refined nav (Home · Events · My Pass · More · Profile).
 - [x] ✅ **Frontend — dev account switcher**: gated `AccountSwitcher`
   (`VITE_ENABLE_DEV_SWITCHER`, dev builds only) to swap test identities.
-- [x] ✅ **Verification**: frontend typecheck + lint (0 errors) + 48 vitest + build;
-  backend 22 pytest; live Atlas smoke of dev-login → journey for seeded accounts.
+- [x] ✅ **Verification**: frontend typecheck + lint (0 errors) + 53 Vitest
+  tests + production build; backend 41 pytest tests. A new isolated
+  MongoDB/Redis end-to-end run remains pending.
 - Contract documented in `docs/api-contract.md`.
