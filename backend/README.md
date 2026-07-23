@@ -40,6 +40,11 @@ The initial database uses three collections:
 * `event_registrations` links a user to an event without growing the user document.
 * `staff_assignments` grants organizer or staff access for a particular scope.
 
+Admins manage those assignments through `/api/v1/admin/staff-assignments`.
+Event operations use `scope_type=event` with the event ID; mess, hostel, and
+workshop operations use `scope_type=checkpoint`. A `scope_id` of `*` is an
+explicit wildcard. Admin and Super Admin roles retain global access.
+
 After configuring `.env`, initialize the collections, indexes, and optional
 Super Admin invitation:
 

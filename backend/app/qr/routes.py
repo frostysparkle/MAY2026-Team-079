@@ -12,9 +12,10 @@ from app.auth.dependencies import (
     get_qr_secrets_collection,
     get_registrations_collection,
     get_scan_logs_collection,
+    get_staff_assignments_collection,
     get_users_collection,
 )
-from app.auth.roles import require_role
+from app.auth.scopes import ensure_scope_access
 from app.core.errors import ApiError
 from app.participants.serialization import resolve_photo_url
 from app.qr.schemas import (
@@ -96,7 +97,7 @@ async def provision_secret_route(
 )
 async def verify_scan_route(
     body: VerifyScanRequest,
-    actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    actor: Annotated[dict[str, Any], Depends(get_current_user)],
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
     ],
@@ -105,6 +106,10 @@ async def verify_scan_route(
     ],
     registrations: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
+    ],
+    assignments: Annotated[
+        AsyncCollection[dict[str, Any]],
+        Depends(get_staff_assignments_collection),
     ],
     qr_secrets: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_qr_secrets_collection)
@@ -121,6 +126,15 @@ async def verify_scan_route(
     ],
 ) -> VerifyScanResponse:
     try:
+        await ensure_scope_access(
+            actor,
+            assignments,
+            roles=("organizer", "staff"),
+            scope_type=(
+                "event" if body.checkpoint_context == "event" else "checkpoint"
+            ),
+            scope_id=body.event_id or body.checkpoint_context,
+        )
         outcome = await verify_scan(
             users,
             events,

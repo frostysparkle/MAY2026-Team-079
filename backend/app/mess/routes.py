@@ -11,6 +11,7 @@ from app.auth.dependencies import (
     get_users_collection,
 )
 from app.auth.roles import require_role
+from app.auth.scopes import require_fixed_scope
 from app.core.errors import ApiError
 from app.mess.schemas import (
     CreateMessMenuRequest,
@@ -83,7 +84,10 @@ async def list_menu_route(
 )
 async def create_menu_route(
     body: CreateMessMenuRequest,
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any],
+        Depends(require_fixed_scope("checkpoint", "mess", "organizer")),
+    ],
     menu: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_mess_menu_collection)
     ],
@@ -109,7 +113,10 @@ async def create_menu_route(
 async def update_menu_route(
     item_id: str,
     body: UpdateMessMenuRequest,
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any],
+        Depends(require_fixed_scope("checkpoint", "mess", "organizer")),
+    ],
     menu: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_mess_menu_collection)
     ],
@@ -141,7 +148,10 @@ async def update_menu_route(
 )
 async def delete_menu_route(
     item_id: str,
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any],
+        Depends(require_fixed_scope("checkpoint", "mess", "organizer")),
+    ],
     menu: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_mess_menu_collection)
     ],
@@ -230,7 +240,10 @@ async def set_eligibility_route(
 
 @router.get("/stats", response_model=MessStatsOut, summary="Mess opt-in count (organizer+, FR-4.4)")
 async def mess_stats_route(
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any],
+        Depends(require_fixed_scope("checkpoint", "mess", "organizer")),
+    ],
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
     ],

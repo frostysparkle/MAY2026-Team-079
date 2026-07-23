@@ -13,9 +13,27 @@ class EventNotFoundError(RuntimeError):
 
 
 async def list_events(
-    events: AsyncCollection[dict[str, Any]], include_unpublished: bool
+    events: AsyncCollection[dict[str, Any]],
+    include_unpublished: bool,
+    accessible_event_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    query: dict[str, Any] = {} if include_unpublished else {"status": "published"}
+    query: dict[str, Any]
+    if include_unpublished:
+        query = {}
+    elif accessible_event_ids:
+        object_ids = [
+            ObjectId(event_id)
+            for event_id in accessible_event_ids
+            if ObjectId.is_valid(event_id)
+        ]
+        query = {
+            "$or": [
+                {"status": "published"},
+                {"_id": {"$in": object_ids}},
+            ]
+        }
+    else:
+        query = {"status": "published"}
     cursor = events.find(query, sort=[("event_date", 1), ("start_time", 1)])
     return [doc async for doc in cursor]
 

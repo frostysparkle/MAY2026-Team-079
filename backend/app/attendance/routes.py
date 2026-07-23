@@ -18,6 +18,7 @@ from app.auth.dependencies import (
     get_scan_logs_collection,
 )
 from app.auth.roles import require_role
+from app.auth.scopes import require_event_scope
 from app.core.errors import ApiError
 from app.events.service import EventNotFoundError, get_event, list_events
 
@@ -48,7 +49,9 @@ def _event_not_found() -> ApiError:
 )
 async def event_attendance_route(
     event_id: str,
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any], Depends(require_event_scope("organizer"))
+    ],
     events: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_events_collection)
     ],

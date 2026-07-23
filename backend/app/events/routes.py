@@ -8,8 +8,13 @@ from app.auth.dependencies import (
     get_current_user,
     get_events_collection,
     get_registrations_collection,
+    get_staff_assignments_collection,
 )
-from app.auth.roles import effective_rank, require_role, role_rank
+from app.auth.scopes import (
+    assigned_scope_ids,
+    require_event_scope,
+    require_fixed_scope,
+)
 from app.core.errors import ApiError
 from app.events.schemas import (
     EventCreate,
@@ -29,12 +34,6 @@ from app.registrations.service import registration_info
 
 
 router = APIRouter(prefix="/events", tags=["events"])
-
-_ORGANIZER_RANK = role_rank("organizer")
-
-
-def _can_manage(user: dict[str, Any]) -> bool:
-    return effective_rank(user) >= _ORGANIZER_RANK
 
 
 def _db_error(exc: PyMongoError) -> ApiError:
@@ -69,9 +68,23 @@ async def list_events_route(
     registrations: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
     ],
+    assignments: Annotated[
+        AsyncCollection[dict[str, Any]],
+        Depends(get_staff_assignments_collection),
+    ],
 ) -> EventListResponse:
     try:
-        docs = await list_events(events, include_unpublished=_can_manage(current_user))
+        event_ids = await assigned_scope_ids(
+            current_user,
+            assignments,
+            roles=("organizer",),
+            scope_type="event",
+        )
+        docs = await list_events(
+            events,
+            include_unpublished=event_ids is None,
+            accessible_event_ids=event_ids,
+        )
         items = [await _annotate(d, registrations, current_user) for d in docs]
     except PyMongoError as exc:
         raise _db_error(exc) from exc
@@ -88,10 +101,22 @@ async def get_event_route(
     registrations: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
     ],
+    assignments: Annotated[
+        AsyncCollection[dict[str, Any]],
+        Depends(get_staff_assignments_collection),
+    ],
 ) -> EventOut:
     try:
+        event_ids = await assigned_scope_ids(
+            current_user,
+            assignments,
+            roles=("organizer",),
+            scope_type="event",
+        )
         doc = await get_event(
-            events, event_id, include_unpublished=_can_manage(current_user)
+            events,
+            event_id,
+            include_unpublished=event_ids is None or event_id in event_ids,
         )
         annotated = await _annotate(doc, registrations, current_user)
     except EventNotFoundError as exc:
@@ -113,7 +138,10 @@ async def get_event_route(
 )
 async def create_event_route(
     body: EventCreate,
-    actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    actor: Annotated[
+        dict[str, Any],
+        Depends(require_fixed_scope("event", "*", "organizer")),
+    ],
     events: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_events_collection)
     ],
@@ -133,7 +161,9 @@ async def create_event_route(
 async def update_event_route(
     event_id: str,
     body: EventUpdate,
-    _actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
+    _actor: Annotated[
+        dict[str, Any], Depends(require_event_scope("organizer"))
+    ],
     events: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_events_collection)
     ],

@@ -26,6 +26,7 @@ from app.db.collections import (
     QR_SECRETS,
     QUERIES,
     SCAN_LOGS,
+    STAFF_ASSIGNMENTS,
     USERS,
 )
 
@@ -104,6 +105,12 @@ def get_registrations_collection(
     request: Request,
 ) -> AsyncCollection[dict[str, Any]]:
     return _collection(request, EVENT_REGISTRATIONS)
+
+
+def get_staff_assignments_collection(
+    request: Request,
+) -> AsyncCollection[dict[str, Any]]:
+    return _collection(request, STAFF_ASSIGNMENTS)
 
 
 def get_qr_secrets_collection(

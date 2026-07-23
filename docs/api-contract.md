@@ -18,6 +18,9 @@ and the FastAPI backend. It reflects the **hybrid** integration decision:
   The token is the JWT returned by `POST /auth/google`.
 - **Roles (5-tier, low → high):** `participant` < `organizer` < `staff` < `admin` < `super_admin`.
   The backend stores a `roles` array; the frontend displays the **highest-ranked** role.
+- **Operational scopes:** Admin and Super Admin roles are global. Organizer and
+  staff capabilities require an active `staff_assignments` record for the
+  concrete event/checkpoint scope; `scope_id: "*"` is an explicit wildcard.
 - **Errors:** non-2xx responses use `{ "code": string, "message": string, "details": any }`.
   The frontend throws `ApiClientError { status, code, message }`.
 
@@ -97,6 +100,17 @@ Adapter maps each item to `{ id, fullName, email, role, createdAt }`.
 **Response `200`:** `{ "participant_id": "…", "role": "organizer" }`
 Sets the user's `roles` to `[role]`.
 
+### Scoped staff assignments  *(admin+ required)*
+
+- `GET /admin/staff-assignments` lists assignments.
+- `POST /admin/staff-assignments` grants or reactivates an assignment:
+  `{ user_id, role: "organizer"|"staff", scope_type: "event"|"checkpoint", scope_id }`.
+- `PATCH /admin/staff-assignments/{id}` with `{ active: false }` revokes access
+  without deleting the audit record.
+
+Event scopes use an event ID (or `*`). Checkpoint scopes use
+`mess|hostel|workshop` (or `*`).
+
 ### 5. `POST /qr/provision`  *(auth required)*
 Issue a scope-specific TOTP secret **once**. Re-provisioning rotates the secret.
 The secret is returned only here and never re-exposed by any later call.
@@ -117,7 +131,7 @@ an active registration for that published event. Non-event checkpoints reject
 }
 ```
 
-### 6. `POST /scan/verify`  *(organizer+ required)*
+### 6. `POST /scan/verify`  *(active organizer/staff scope required)*
 Verify a scanned QR against the per-checkpoint secret. The QR carries only
 `{ participant_id, current_code }`; the organizer app supplies
 `checkpoint_context` and the concrete `event_id` for event scans.
@@ -149,16 +163,18 @@ Event objects map `event_date`/`start_time`/`end_time` → `eventDate`/`startTim
 `event_date` is `YYYY-MM-DD`; times are 24h `HH:MM`. `status` ∈ `draft|published|cancelled`.
 
 ### 7. `GET /events`  *(auth required)*
-Returns published events for participants; organizers and above also receive
-`draft`/`cancelled`. `{ "events": [ EventOut, … ] }`.
+Returns published events for everyone. Assigned organizers additionally receive
+draft/cancelled events in their exact event scopes; global/wildcard operators
+receive all events. `{ "events": [ EventOut, … ] }`.
 
 ### 8. `GET /events/{id}`  *(auth required)*
-Single event. Participants can only fetch `published`; organizers+ any. `404 event_not_found` otherwise.
+Single event. Unpublished events require an active organizer assignment for
+that event, wildcard event access, or a global admin role.
 
-### 9. `POST /events`  *(organizer+)*
+### 9. `POST /events`  *(global admin or wildcard event organizer)*
 Create an event. Body (snake_case): `title, venue, event_date, start_time, end_time, capacity, instructions, status?`. Returns `201` + `EventOut`.
 
-### 10. `PATCH /events/{id}`  *(organizer+)*
+### 10. `PATCH /events/{id}`  *(assigned event organizer or global admin)*
 Partial update — send only changed fields. Returns `EventOut`. `400 no_changes` if empty.
 
 `EventOut`: `{ id, title, venue, event_date, start_time, end_time, capacity, instructions, status, created_at }`.
@@ -192,13 +208,13 @@ eligibility: an unset participant is not eligible, and the mess scan checkpoint
 returns `not_eligible` for them.
 
 ### 19. `GET /mess/menu` *(auth)* — `{ items: [MenuItemOut] }`.
-### 20. `POST /mess/menu` *(organizer+)* — `{ location, meal, items, start_time, end_time }` → `201`. `409 menu_conflict` on duplicate (location, meal).
-### 21. `PATCH /mess/menu/{id}` *(organizer+)* — partial update.
-### 22. `DELETE /mess/menu/{id}` *(organizer+)* — `204`.
+### 20. `POST /mess/menu` *(assigned mess organizer or global admin)* — `{ location, meal, items, start_time, end_time }` → `201`. `409 menu_conflict` on duplicate (location, meal).
+### 21. `PATCH /mess/menu/{id}` *(assigned mess organizer or global admin)* — partial update.
+### 22. `DELETE /mess/menu/{id}` *(assigned mess organizer or global admin)* — `204`.
 ### 23. `GET /mess/pass` *(auth)* — the caller's own pass `{ participant_id, eligible }`.
 ### 24. `GET /mess/eligibility` *(admin+)* — `{ participants: [{ id, full_name, email, eligible }] }`.
 ### 25. `PATCH /mess/eligibility/{participant_id}` *(admin+)* — `{ eligible: bool }` → the updated item.
-### 26. `GET /mess/stats` *(organizer+)* — `{ eligible_count }` (FR-4.4 opt-in count).
+### 26. `GET /mess/stats` *(assigned mess organizer or global admin)* — `{ eligible_count }` (FR-4.4 opt-in count).
 
 `MenuItemOut`: `{ id, location, meal, items, start_time, end_time }`.
 
@@ -228,7 +244,7 @@ window does not double-count. Crowd status: `available`
 (<70%), `filling_fast` (70–99%), `full` (≥100%).
 
 - `POST /scan/verify` requires `event_id` for event checkpoints.
-- `GET /attendance/events/{event_id}` *(organizer+)* → `{ event_id, capacity, attendance, remaining, at_capacity }` (FR-3.1/3.2).
+- `GET /attendance/events/{event_id}` *(assigned event organizer or global admin)* → `{ event_id, capacity, attendance, remaining, at_capacity }` (FR-3.1/3.2).
 - `GET /attendance/events/{event_id}/crowd` *(auth)* → `{ event_id, status }` (FR-3.3).
 - `GET /attendance/dashboard` *(admin+)* → `{ events: [{ event_id, title, venue, capacity, attendance, remaining, at_capacity, status }] }` (FR-3.4).
 

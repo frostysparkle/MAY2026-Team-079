@@ -32,6 +32,7 @@ from app.db.collections import (  # noqa: E402
     HOSTEL_ALLOCATIONS,
     MEAL_PLANS,
     PAYMENTS,
+    STAFF_ASSIGNMENTS,
     USERS,
 )
 from app.db.mongo import MongoService  # noqa: E402
@@ -56,10 +57,14 @@ async def purge(db: Any) -> None:
     eids = [str(e["_id"]) for e in test_events]
 
     if uids:
+        await db[STAFF_ASSIGNMENTS].delete_many({"user_id": {"$in": uids}})
         await db[HOSTEL_ALLOCATIONS].delete_many({"user_id": {"$in": uids}})
         await db[PAYMENTS].delete_many({"user_id": {"$in": uids}})
         await db[EVENT_REGISTRATIONS].delete_many({"user_id": {"$in": uids}})
     if eids:
+        await db[STAFF_ASSIGNMENTS].delete_many(
+            {"scope_type": "event", "scope_id": {"$in": eids}}
+        )
         await db[EVENT_REGISTRATIONS].delete_many({"event_id": {"$in": eids}})
     await db[EVENTS].delete_many({"is_test": True})
     await db[MEAL_PLANS].delete_many({"is_test": True})
@@ -195,7 +200,37 @@ async def seed(db: Any, settings: Any) -> dict[str, int]:
     await _payment(db, paidpending, "hostel", "paid", fee, cur)
     await _payment(db, paidpending, "mess", "created", 1500, cur, str(full_plan_id), "Full Plan (3 meals)")
 
-    await _user(db, "volunteer", order=9, label="Organizer / volunteer", roles=["organizer"])
+    volunteer = await _user(
+        db,
+        "volunteer",
+        order=9,
+        label="Organizer / volunteer",
+        roles=["organizer"],
+    )
+    await db[STAFF_ASSIGNMENTS].insert_many(
+        [
+            {
+                "user_id": volunteer,
+                "role": "organizer",
+                "scope_type": "event",
+                "scope_id": "*",
+                "active": True,
+                "assigned_by": volunteer,
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+            {
+                "user_id": volunteer,
+                "role": "organizer",
+                "scope_type": "checkpoint",
+                "scope_id": "*",
+                "active": True,
+                "assigned_by": volunteer,
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        ]
+    )
     await _user(db, "warden", order=10, label="Admin", roles=["admin"])
 
     counts = {
