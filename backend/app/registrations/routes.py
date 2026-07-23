@@ -85,12 +85,13 @@ async def register_route(
 async def cancel_route(
     event_id: str,
     current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    events: Annotated[AsyncCollection[dict[str, Any]], Depends(get_events_collection)],
     registrations: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
     ],
 ) -> None:
     try:
-        await cancel(registrations, current_user["_id"], event_id)
+        await cancel(registrations, events, current_user["_id"], event_id)
     except PyMongoError as exc:
         raise _db_error() from exc
 

@@ -49,7 +49,8 @@ only as salted PBKDF2 hashes.
 The initial database uses three collections:
 
 * `users` stores every person's account credentials, profile, status, and roles.
-* `event_registrations` links a user to an event without growing the user document.
+* `event_registrations` links a user to an event without growing the user
+  document; an atomic counter on each event prevents concurrent overbooking.
 * `staff_assignments` grants organizer or staff access for a particular scope.
 
 Admins manage those assignments through `/api/v1/admin/staff-assignments`.
@@ -70,7 +71,9 @@ password. The password is hashed before storage and is never printed. Bootstrap
 refuses to replace a different Super Admin or promote an existing ordinary user.
 
 The command is idempotent. It also removes obsolete unique `username` and
-`google_subject` indexes left by earlier authentication models.
+`google_subject` indexes left by earlier authentication models and reconciles
+the atomic event-registration counters for existing events. Run it as a
+maintenance operation while registrations are paused.
 
 ### Initial indexes
 

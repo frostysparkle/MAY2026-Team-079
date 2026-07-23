@@ -245,6 +245,29 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
     )
 
 
+async def _reconcile_event_registration_counts(
+    database: AsyncDatabase[dict[str, Any]],
+) -> None:
+    """Backfill the admission counter for existing events.
+
+    Run database initialization as a maintenance operation so registrations are
+    not changing while this reconciliation is in progress.
+    """
+    events = database[EVENTS]
+    registrations = database[EVENT_REGISTRATIONS]
+    async for event in events.find({}, {"_id": 1}):
+        registration_count = await registrations.count_documents(
+            {
+                "event_id": str(event["_id"]),
+                "status": "registered",
+            }
+        )
+        await events.update_one(
+            {"_id": event["_id"]},
+            {"$set": {"registration_count": registration_count}},
+        )
+
+
 def _validate_super_admin_credentials(email: str, password: str) -> None:
     if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise RuntimeError("INITIAL_SUPER_ADMIN_EMAIL must be a valid email address.")
@@ -329,6 +352,7 @@ async def initialize_database(
 ) -> BootstrapResult:
     await _create_collections(database)
     await _create_indexes(database)
+    await _reconcile_event_registration_counts(database)
     super_admin_created = await _seed_initial_super_admin(database, settings)
 
     return BootstrapResult(

@@ -125,6 +125,10 @@ async def _register(db: Any, uid: ObjectId, event_id: str) -> None:
         "user_id": uid, "event_id": event_id, "status": "registered",
         "created_at": NOW, "updated_at": NOW,
     })
+    await db[EVENTS].update_one(
+        {"_id": ObjectId(event_id)},
+        {"$inc": {"registration_count": 1}},
+    )
 
 
 async def seed(db: Any, settings: Any) -> dict[str, int]:
@@ -150,6 +154,7 @@ async def seed(db: Any, settings: Any) -> dict[str, int]:
         res = await db[EVENTS].insert_one({
             "title": title, "venue": venue, "event_date": d,
             "start_time": "10:00", "end_time": "13:00", "capacity": cap,
+            "registration_count": 0,
             "instructions": "Carry your digital ID. Doors close 10 min prior.",
             "status": "published", "is_test": True, "created_at": NOW, "updated_at": NOW})
         events.append(str(res.inserted_id))

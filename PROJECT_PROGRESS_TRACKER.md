@@ -224,8 +224,9 @@ Spec docs (requirements → design → tasks) pass Kiro format validation.
   intent, a pure `resolve_journey()` resolver, and `GET /me/journey`,
   `POST /me/onboarding/{accommodation,mess}`, `GET /me/payments/pending`.
 - [x] ✅ **Backend — participant event registration**: `event_registrations`
-  with capacity/idempotent register, soft cancel, `GET /me/registrations`; events
-  annotate `registered`/`registration_count`/`spots_left`.
+  with atomic conditional capacity reservation, idempotent register, soft
+  cancel, `GET /me/registrations`; events annotate
+  `registered`/`registration_count`/`spots_left`.
 - [x] ✅ **Backend — test harness**: gated `POST /auth/dev-login` +
   `GET /auth/test-accounts` (404 unless `ENABLE_DEV_LOGIN=true` and non-prod);
   idempotent `scripts/seed_test_data.py` (10-account state matrix, seeded to Atlas).

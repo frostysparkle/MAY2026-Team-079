@@ -358,7 +358,9 @@ Nothing is a parallel copy of module state.
 
 Activates `event_registrations` (unique on `(user_id, event_id)`). Registrations
 are soft-cancellable (a cancelled row is re-activated, never duplicated) and
-capacity is checked against the count of active registrations.
+capacity is reserved with an atomic conditional counter on the event document,
+so concurrent registrations cannot oversubscribe an event. Cancellation
+releases one reservation only when an active registration actually changes.
 
 - `POST /events/{id}/register` *(auth)* — idempotent; `404 event_not_found`
   (unknown/unpublished), `409 event_full` (at capacity). Returns

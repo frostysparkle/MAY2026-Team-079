@@ -3,20 +3,84 @@
 Activates the `event_registrations` collection (unique index on
 (user_id, event_id) already exists). Registrations are soft-cancellable so a
 cancelled row is re-activated rather than duplicated (Correctness Property 4),
-and capacity is checked against the count of active registrations (Property 5).
+and an atomic counter on the event document reserves capacity before a
+registration is activated (Property 5).
 """
 
 from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
+from pymongo import ReturnDocument
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.events.service import EventNotFoundError, get_event
 
 
 class EventFullError(RuntimeError):
     pass
+
+
+async def _ensure_registration_counter(
+    registrations: AsyncCollection[dict[str, Any]],
+    events: AsyncCollection[dict[str, Any]],
+    event: dict[str, Any],
+) -> None:
+    """Backfill one legacy event's counter once before it is used for admission."""
+    if "registration_count" in event:
+        return
+
+    active_count = await count_active(registrations, str(event["_id"]))
+    await events.update_one(
+        {
+            "_id": event["_id"],
+            "registration_count": {"$exists": False},
+        },
+        {"$set": {"registration_count": active_count}},
+    )
+
+
+async def _reserve_capacity(
+    events: AsyncCollection[dict[str, Any]],
+    event: dict[str, Any],
+) -> None:
+    reserved = await events.find_one_and_update(
+        {
+            "_id": event["_id"],
+            "status": "published",
+            "$expr": {
+                "$lt": [
+                    {"$ifNull": ["$registration_count", 0]},
+                    "$capacity",
+                ]
+            },
+        },
+        {
+            "$inc": {"registration_count": 1},
+            "$set": {"updated_at": datetime.now(UTC)},
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if reserved is None:
+        still_published = await events.find_one(
+            {"_id": event["_id"], "status": "published"}
+        )
+        if still_published is None:
+            raise EventNotFoundError("Event not found.")
+        raise EventFullError("This event is at capacity.")
+
+
+async def _release_capacity(
+    events: AsyncCollection[dict[str, Any]], event_id: ObjectId
+) -> None:
+    await events.update_one(
+        {"_id": event_id, "registration_count": {"$gt": 0}},
+        {
+            "$inc": {"registration_count": -1},
+            "$set": {"updated_at": datetime.now(UTC)},
+        },
+    )
 
 
 async def count_active(
@@ -62,42 +126,78 @@ async def register(
 
     existing = await registrations.find_one({"user_id": user_id, "event_id": event_id})
     if existing is not None and existing.get("status") == "registered":
+        await _ensure_registration_counter(registrations, events, event)
         return existing  # idempotent — already registered
 
-    capacity = int(event.get("capacity", 0))
-    if capacity > 0 and await count_active(registrations, event_id) >= capacity:
-        raise EventFullError("This event is at capacity.")
+    await _ensure_registration_counter(registrations, events, event)
+    await _reserve_capacity(events, event)
 
     now = datetime.now(UTC)
-    if existing is not None:
-        await registrations.update_one(
-            {"_id": existing["_id"]},
-            {"$set": {"status": "registered", "updated_at": now}},
-        )
-        return {**existing, "status": "registered", "updated_at": now}
+    try:
+        if existing is not None:
+            result = await registrations.update_one(
+                {"_id": existing["_id"], "status": {"$ne": "registered"}},
+                {"$set": {"status": "registered", "updated_at": now}},
+            )
+            if result.modified_count:
+                return {**existing, "status": "registered", "updated_at": now}
 
-    doc = {
-        "user_id": user_id,
-        "event_id": event_id,
-        "status": "registered",
-        "created_at": now,
-        "updated_at": now,
-    }
-    result = await registrations.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    return doc
+            # A concurrent request activated the same row after our initial read.
+            await _release_capacity(events, event["_id"])
+            current = await registrations.find_one(
+                {
+                    "user_id": user_id,
+                    "event_id": event_id,
+                    "status": "registered",
+                }
+            )
+            if current is not None:
+                return current
+            raise RuntimeError("Registration changed during activation.")
+
+        doc = {
+            "user_id": user_id,
+            "event_id": event_id,
+            "status": "registered",
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = await registrations.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        return doc
+    except DuplicateKeyError:
+        # The unique (user_id, event_id) index makes concurrent retries
+        # idempotent. Return the winner and give our extra reservation back.
+        await _release_capacity(events, event["_id"])
+        current = await registrations.find_one(
+            {
+                "user_id": user_id,
+                "event_id": event_id,
+                "status": "registered",
+            }
+        )
+        if current is not None:
+            return current
+        raise
+    except PyMongoError:
+        await _release_capacity(events, event["_id"])
+        raise
 
 
 async def cancel(
     registrations: AsyncCollection[dict[str, Any]],
+    events: AsyncCollection[dict[str, Any]],
     user_id: ObjectId,
     event_id: str,
 ) -> None:
     """Soft-cancel an active registration. Idempotent (no-op if not registered)."""
-    await registrations.update_one(
+    cancelled = await registrations.find_one_and_update(
         {"user_id": user_id, "event_id": event_id, "status": "registered"},
         {"$set": {"status": "cancelled", "updated_at": datetime.now(UTC)}},
+        return_document=ReturnDocument.AFTER,
     )
+    if cancelled is not None and ObjectId.is_valid(event_id):
+        await _release_capacity(events, ObjectId(event_id))
 
 
 async def list_my_registrations(

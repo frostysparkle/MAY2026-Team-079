@@ -67,6 +67,7 @@ async def create_event(
         "start_time": payload.start_time,
         "end_time": payload.end_time,
         "capacity": payload.capacity,
+        "registration_count": 0,
         "instructions": payload.instructions,
         "status": payload.status,
         "created_by": created_by,
