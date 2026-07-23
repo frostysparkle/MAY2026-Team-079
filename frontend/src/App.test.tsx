@@ -2,9 +2,10 @@ import { render, screen } from '@testing-library/react';
 import App from './App';
 
 describe('App', () => {
-  it('renders the splash role-landing at "/"', () => {
+  it('renders the public landing page at "/"', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'Paradox Connect' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /I'm a Student/i })).toBeInTheDocument();
+    // Hero headline (the page's h1) and the primary Register CTA.
+    expect(screen.getByRole('heading', { level: 1, name: /paradox/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /register/i }).length).toBeGreaterThan(0);
   });
 });

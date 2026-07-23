@@ -6,7 +6,7 @@ import { StaffShell } from '@/components/layout/StaffShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Spinner } from '@/components/ui';
 // Entry screens load eagerly for instant first paint.
-import SplashPage from '@/pages/SplashPage';
+import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/LoginPage';
 
 // Everything else is route-split so the initial bundle stays small and each
@@ -64,7 +64,7 @@ function Lazy({ children }: { children: ReactNode }) {
  * only — the backend enforces RBAC server-side.
  */
 export const router = createBrowserRouter([
-  { path: ROUTES.splash, element: <SplashPage /> },
+  { path: ROUTES.splash, element: <LandingPage /> },
   { path: ROUTES.login, element: <LoginPage /> },
   { path: ROUTES.accessDenied, element: <Lazy><AccessDeniedPage /></Lazy> },
 
