@@ -18,7 +18,7 @@ export function PageHeader({
 }) {
   return (
     <header className="glass safe-top sticky top-0 z-30 border-b border-line/60">
-      <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+      <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3 lg:max-w-5xl lg:px-6">
         {onBack && (
           <button
             type="button"

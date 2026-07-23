@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
+import { StaffShell } from '@/components/layout/StaffShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Spinner } from '@/components/ui';
 // Entry screens load eagerly for instant first paint.
@@ -125,128 +126,89 @@ export const router = createBrowserRouter([
     ),
   },
 
-  // Staff scanning — organizer role or higher.
+  // Staff & admin area — organizer+ overall, with a shared responsive shell
+  // (desktop sidebar). Each screen keeps its own role gate; the backend also
+  // enforces RBAC regardless of what the client renders.
   {
-    path: ROUTES.scanner,
     element: (
       <ProtectedRoute minRole="organizer">
-        <Lazy><ScannerPage /></Lazy>
+        <StaffShell />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: ROUTES.scanResult,
-    element: (
-      <ProtectedRoute minRole="organizer">
-        <Lazy><ScanResultPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
+    children: [
+      // Organizer role or higher.
+      { path: ROUTES.scanner, element: <Lazy><ScannerPage /></Lazy> },
+      { path: ROUTES.scanResult, element: <Lazy><ScanResultPage /></Lazy> },
+      { path: ROUTES.newEvent, element: <Lazy><EventEditPage /></Lazy> },
+      { path: '/admin/events/:id/edit', element: <Lazy><EventEditPage /></Lazy> },
+      { path: ROUTES.manageMess, element: <Lazy><AdminMessPage /></Lazy> },
 
-  // Admin user management — admin role or higher.
-  {
-    path: ROUTES.users,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><UsersPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Event management — organizer role or higher.
-  {
-    path: ROUTES.newEvent,
-    element: (
-      <ProtectedRoute minRole="organizer">
-        <Lazy><EventEditPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/admin/events/:id/edit',
-    element: (
-      <ProtectedRoute minRole="organizer">
-        <Lazy><EventEditPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Query triage & contact directory management — admin role or higher.
-  {
-    path: ROUTES.manageQueries,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminQueriesPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: ROUTES.manageContacts,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminContactsPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Mess management — organizer role or higher (eligibility section is admin+).
-  {
-    path: ROUTES.manageMess,
-    element: (
-      <ProtectedRoute minRole="organizer">
-        <Lazy><AdminMessPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Hostel allocation management — admin role or higher.
-  {
-    path: ROUTES.manageHostel,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminHostelPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Live crowd dashboard — admin role or higher.
-  {
-    path: ROUTES.dashboard,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminDashboardPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Announcements — admin role or higher.
-  {
-    path: ROUTES.manageAnnouncements,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminAnnouncementsPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Operational overview — admin role or higher.
-  {
-    path: ROUTES.overview,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminOverviewPage /></Lazy>
-      </ProtectedRoute>
-    ),
-  },
-
-  // Payments admin (plans + reconciliation) — admin role or higher.
-  {
-    path: ROUTES.managePayments,
-    element: (
-      <ProtectedRoute minRole="admin">
-        <Lazy><AdminPaymentsPage /></Lazy>
-      </ProtectedRoute>
-    ),
+      // Admin role or higher.
+      {
+        path: ROUTES.users,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><UsersPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.manageQueries,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminQueriesPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.manageContacts,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminContactsPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.manageHostel,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminHostelPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.dashboard,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminDashboardPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.overview,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminOverviewPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.manageAnnouncements,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminAnnouncementsPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: ROUTES.managePayments,
+        element: (
+          <ProtectedRoute minRole="admin">
+            <Lazy><AdminPaymentsPage /></Lazy>
+          </ProtectedRoute>
+        ),
+      },
+    ],
   },
 
   { path: '*', element: <Lazy><PlaceholderPage title="Not Found" /></Lazy> },

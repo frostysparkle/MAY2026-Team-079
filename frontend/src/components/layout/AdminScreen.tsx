@@ -22,7 +22,9 @@ export function AdminScreen({
   return (
     <div className="min-h-full bg-canvas pb-16">
       <PageHeader title={title} subtitle={subtitle} onBack={onBack} right={right} />
-      <div className="animate-rise mx-auto flex max-w-2xl flex-col gap-5 p-4">{children}</div>
+      <div className="animate-rise mx-auto flex max-w-2xl flex-col gap-5 p-4 lg:max-w-5xl lg:p-6">
+        {children}
+      </div>
     </div>
   );
 }
