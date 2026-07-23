@@ -15,7 +15,7 @@ and the FastAPI backend. It reflects the **hybrid** integration decision:
 - **Base URL:** `VITE_API_BASE_URL` must include the API version prefix, e.g.
   `http://localhost:8000/api/v1`. All paths below are relative to that base.
 - **Auth:** authenticated requests send `Authorization: Bearer <access_token>`.
-  The token is the JWT returned by `POST /auth/google`.
+  The token is the JWT returned by `POST /auth/register` or `POST /auth/login`.
 - **Roles (5-tier, low → high):** `participant` < `organizer` < `staff` < `admin` < `super_admin`.
   The backend stores a `roles` array; the frontend displays the **highest-ranked** role.
 - **Operational scopes:** Admin and Super Admin roles are global. Organizer and
@@ -48,15 +48,20 @@ The adapter converts each backend user/participant object into the frontend
 
 ## Endpoints
 
-### 1. `POST /auth/google`
-Verify a Google Identity Services credential, upsert the user, return a session.
+### 1a. `POST /auth/register`
+Create a participant account and return a session. The request cannot choose an
+elevated role.
 
-**Request (frontend sends `{ idToken }`; adapter sends):**
+**Request:**
 ```json
-{ "credential": "<google-id-token>" }
+{
+  "email": "student@example.com",
+  "password": "at-least-eight-characters",
+  "full_name": "Student Name"
+}
 ```
 
-**Response `200`:**
+**Response `201`:**
 ```json
 {
   "access_token": "<jwt>",
@@ -68,8 +73,21 @@ Verify a Google Identity Services credential, upsert the user, return a session.
 ```
 Adapter returns to the app: `{ session: { token, participant }, isNewUser }`.
 
-**Errors:** `403 google_account_not_allowed` (bad/again-unverified domain),
-`401 invalid_google_credential`, `409 identity_conflict`, `503 database_unavailable`.
+**Errors:** `409 email_already_registered`, `422 validation error`,
+`503 authentication_not_configured|database_unavailable`.
+
+### 1b. `POST /auth/login`
+Authenticate an existing account and return the same session response.
+
+**Request:**
+```json
+{ "email": "student@example.com", "password": "account-password" }
+```
+
+**Response `200`:** same shape as registration, with `is_new_user: false`.
+
+**Errors:** `401 invalid_credentials`, `403 account_unavailable`,
+`422 validation error`, `503 authentication_not_configured|database_unavailable`.
 
 ### 2. `POST /profile/complete`  *(auth required)*
 Save the one-time profile and store the photo in the `photos` collection.
@@ -359,7 +377,7 @@ Hard-gated behind `enable_dev_login` (`APP_ENV != "production"` **and**
 ever operate on seeded `is_test` accounts. **Never enabled in production.**
 
 - `POST /auth/dev-login` *(gated)* — `{ "email": "..." }` → `{ access_token,
-  is_new_user, user }` for a seeded active user (same shape as Google login).
+  is_new_user, user }` for a seeded active user (same shape as normal login).
 - `GET /auth/test-accounts` *(gated)* — `{ accounts: [{ email, full_name, role,
   label }] }` for the account-switcher.
 - Seed/reset the account matrix with `python -m scripts.seed_test_data`.

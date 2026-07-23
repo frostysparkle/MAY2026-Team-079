@@ -6,6 +6,7 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.config import Settings
+from app.core.security import hash_password
 from app.db.collections import (
     ANNOUNCEMENTS,
     CONTACTS,
@@ -30,7 +31,6 @@ class BootstrapResult:
     collections: tuple[str, ...]
     super_admin_email: str | None
     super_admin_created: bool
-    legacy_password_users: int
 
 
 async def _create_collections(database: AsyncDatabase[dict[str, Any]]) -> None:
@@ -43,17 +43,12 @@ async def _create_collections(database: AsyncDatabase[dict[str, Any]]) -> None:
 async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
     users = database[USERS]
     existing_indexes = await users.index_information()
-    if "uq_users_username" in existing_indexes:
-        await users.drop_index("uq_users_username")
+    for obsolete_index in ("uq_users_username", "uq_users_google_subject"):
+        if obsolete_index in existing_indexes:
+            await users.drop_index(obsolete_index)
 
     await users.create_indexes(
         [
-            IndexModel(
-                [("google_subject", ASCENDING)],
-                unique=True,
-                partialFilterExpression={"google_subject": {"$type": "string"}},
-                name="uq_users_google_subject",
-            ),
             IndexModel(
                 [("email", ASCENDING)],
                 unique=True,
@@ -250,13 +245,12 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
     )
 
 
-def _validate_super_admin_email(settings: Settings, email: str) -> None:
-    if "@" not in email:
+def _validate_super_admin_credentials(email: str, password: str) -> None:
+    if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise RuntimeError("INITIAL_SUPER_ADMIN_EMAIL must be a valid email address.")
-    domain = email.rsplit("@", 1)[1]
-    if domain not in settings.allowed_google_domains:
+    if len(password) < 8 or len(password) > 128:
         raise RuntimeError(
-            "INITIAL_SUPER_ADMIN_EMAIL must use an allowed IITM Google domain."
+            "INITIAL_SUPER_ADMIN_PASSWORD must contain between 8 and 128 characters."
         )
 
 
@@ -264,11 +258,34 @@ async def _seed_initial_super_admin(
     database: AsyncDatabase[dict[str, Any]], settings: Settings
 ) -> bool:
     email = settings.initial_super_admin_email
-    if email is None:
+    password = settings.initial_super_admin_password
+    if email is None and password is None:
         return False
+    if email is None or password is None:
+        raise RuntimeError(
+            "INITIAL_SUPER_ADMIN_EMAIL and INITIAL_SUPER_ADMIN_PASSWORD must be "
+            "configured together."
+        )
 
-    _validate_super_admin_email(settings, email)
+    _validate_super_admin_credentials(email, password)
     users = database[USERS]
+    super_admin_count = await users.count_documents({"roles": "super_admin"})
+    if super_admin_count > 1:
+        raise RuntimeError(
+            "More than one Super Admin exists. Resolve that conflict before "
+            "initializing the database."
+        )
+
+    existing_super_admin = await users.find_one({"roles": "super_admin"})
+    if (
+        existing_super_admin is not None
+        and existing_super_admin.get("email") != email
+    ):
+        raise RuntimeError(
+            "A different Super Admin already exists. The configured Super Admin "
+            "cannot replace it during bootstrap."
+        )
+
     existing_user = await users.find_one({"email": email})
 
     if existing_user is not None:
@@ -277,17 +294,29 @@ async def _seed_initial_super_admin(
                 "INITIAL_SUPER_ADMIN_EMAIL belongs to an existing non-Super-Admin "
                 "user. Granting that role requires an explicit administrative action."
             )
+        if not existing_user.get("password_hash"):
+            now = datetime.now(UTC)
+            await users.update_one(
+                {"_id": existing_user["_id"]},
+                {
+                    "$set": {
+                        "password_hash": hash_password(password),
+                        "status": "active",
+                        "updated_at": now,
+                    }
+                },
+            )
         return False
 
     now = datetime.now(UTC)
     await users.insert_one(
         {
             "email": email,
-            "roles": ["super_admin"],
-            "status": "invited",
+            "password_hash": hash_password(password),
+            "roles": ["participant", "super_admin"],
+            "status": "active",
             "profile": {},
             "profile_complete": False,
-            "email_verified": False,
             "created_at": now,
             "updated_at": now,
         }
@@ -301,13 +330,9 @@ async def initialize_database(
     await _create_collections(database)
     await _create_indexes(database)
     super_admin_created = await _seed_initial_super_admin(database, settings)
-    legacy_password_users = await database[USERS].count_documents(
-        {"password_hash": {"$exists": True}}
-    )
 
     return BootstrapResult(
         collections=INITIAL_COLLECTIONS,
         super_admin_email=settings.initial_super_admin_email,
         super_admin_created=super_admin_created,
-        legacy_password_users=legacy_password_users,
     )

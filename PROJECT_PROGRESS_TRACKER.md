@@ -18,7 +18,11 @@ _Last updated: 23 Jul 2026_
 | **Backend — Sprint 1** | ✅ Auth complete; all 6 contract endpoints implemented |
 | Frontend ↔ Backend integration | � Code complete on `feature/frontend-backend-integration`; pending live end-to-end run |
 
-The frontend is fully built and runs today against an in-memory **mock API**. All six contract endpoints now exist on the backend, and the frontend has a real-API adapter that maps the backend's snake_case / `roles[]` shapes to its camelCase / single-`role` types. What remains is a **live end-to-end run** against a real MongoDB instance and real Google OAuth credentials (config only — no code blockers).
+The frontend is fully built and runs today against an in-memory **mock API**.
+The integration endpoints exist on the backend, and the frontend has a real-API
+adapter that maps the backend's snake_case / `roles[]` shapes to its camelCase /
+single-`role` types. What remains is a **live end-to-end run** against isolated
+MongoDB and Redis instances with the required JWT and QR encryption secrets.
 
 ---
 
@@ -34,7 +38,7 @@ The frontend is fully built and runs today against an in-memory **mock API**. Al
 - Typed **API contract** (`src/api/types.ts`) + swappable `ApiClient` (mock + real implementations).
 - **Mock API** with real TOTP verification, replay protection, seed accounts per role.
 - Reusable **UI component library** (Button, TextInput, ResultBanner, Spinner, Skeleton, Empty/Error states, Card, Nav Shell).
-- **Splash / role landing**, **Google Sign-in** (IITM domain check, distinct error states).
+- **Splash / role landing**, **email/password registration and sign-in**.
 - **Complete Your Profile** (single page, cascading Country→State→City, photo upload with validation + preview).
 - **Home dashboard** + **Profile** view.
 - **My QR ID** — on-device TOTP generation, works offline, per-checkpoint secret.
@@ -51,12 +55,12 @@ The frontend is fully built and runs today against an in-memory **mock API**. Al
 ### Backend (Ashwin) — Sprint 1 priority
 The frontend already defines the exact request/response shapes in `frontend/src/api/types.ts` and the expected endpoint paths in `frontend/src/api/realApi.ts`. These are the contract to implement.
 
-- 🔲 **Google OAuth verification** server-side (replaces the old email+password `POST /register`).
+- ✅ **Email/password authentication** server-side with salted password hashes and JWT sessions.
 - 🔲 **4-tier role model**: Participant → Organizer → Admin → Super Admin.
 - 🔲 **One-time first Super Admin seed** (script or direct DB insert) before anyone logs in.
 - 🔲 **`photos` collection** in MongoDB, separate from `participants`, linked by participant ID.
 - 🔲 Core endpoints matching the frontend contract:
-  - `POST /auth/google` — verify token, return session + `isNewUser`.
+  - `POST /auth/register` and `POST /auth/login` — create/authenticate an account and return a session.
   - `POST /profile/complete` — save profile, store photo in `photos`.
   - `GET /admin/users` — list users (admin+).
   - `PATCH /admin/participants/{id}/role` — **Super Admin only**.
@@ -80,12 +84,14 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 
 ### Ashwin (Backend) — start here, in order
 1. **Stand up the FastAPI project** + MongoDB connection and the `participants` + `photos` collections.
-2. **Implement `POST /auth/google`** (Google token verification + JWT session) — this unblocks the whole login flow.
+2. **Verify `POST /auth/register` and `POST /auth/login` end-to-end** against an isolated database.
 3. **Add the 4-tier role field** and the **first Super Admin seed** step.
 4. **Implement `POST /profile/complete`** (with photo → `photos` collection).
 5. Then the QR endpoints (`/qr/provision`, `/scan/verify`) using the shared TOTP params, and finally the admin endpoints.
 
-> Read `frontend/src/api/types.ts` (request/response shapes) and `frontend/src/api/realApi.ts` (paths, methods, auth header) first — they are the exact contract.
+> Read `frontend/src/api/types.ts` (request/response shapes) and
+> `frontend/src/api/realApi.ts` (paths, methods, auth header) first — they are
+> the exact contract.
 
 ### Ravi (Frontend) — currently
 - Frontend Sprint 1 is complete and committed. Now **available to support backend integration**: confirm the contract with Ashwin, then run the integration pass (mock → real) endpoint by endpoint as each backend route lands.
@@ -102,13 +108,16 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 | Photo persistence | `photos` collection + `POST /profile/complete` | Profile photo stored as data URL in mock only |
 | Deployment | Backend service on Render | Full staging environment blocked |
 
-**Action item:** quick Ravi ↔ Ashwin sync to confirm the API contract before backend build begins — Registration (Story 7.1) now differs from the original email/password plan.
+**Action item:** run the real-API integration suite against isolated MongoDB and
+Redis services before deployment.
 
 ---
 
 ## 6. Key Technical Decisions (finalized — everyone follow these)
 
-- **Auth:** Google Sign-in only, no passwords. Email domain must be one of the four IITM suffixes (`@ds`, `@es`, `@ee`, `@mg` `.study.iitm.ac.in`).
+- **Auth:** one email/password login for every user. Public registration grants
+  participant access only; the backend stores salted password hashes and issues
+  short-lived JWT sessions.
 - **RBAC:** 4 tiers — Participant → Organizer → Admin → Super Admin. Role is **always resolved server-side**; the splash role buttons carry no permission. Route guards are UI-only; the backend is the real security boundary.
 - **First Super Admin:** seeded once directly in the DB (backend task) — never created through the app UI.
 - **Profile:** one full page. Photo stored in a **separate `photos` collection**, linked by participant ID — never embedded in the profile document. Photo limits: JPG/PNG, ≤ 750 KB.
@@ -135,7 +144,7 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 - [x] ✅ Scaffold, tooling, config
 - [x] ✅ Reusable UI components + nav shell
 - [x] ✅ Splash / role landing
-- [x] ✅ Google Sign-in + domain check
+- [x] ✅ Email/password registration and sign-in
 - [x] ✅ Complete Your Profile
 - [x] ✅ Home + Profile
 - [x] ✅ My QR (offline TOTP)
@@ -148,7 +157,7 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 
 ### Backend (Sprint 1)
 - [x] ✅ FastAPI project + MongoDB setup
-- [x] ✅ `POST /auth/google` (OAuth verify + JWT)
+- [x] ✅ `POST /auth/register` + `POST /auth/login` (password hash + JWT)
 - [x] ✅ 5-tier roles (+ `staff`) + first Super Admin seed
 - [x] ✅ `POST /profile/complete` + `photos` collection
 - [x] ✅ `GET /admin/users`
@@ -201,7 +210,7 @@ The frontend already defines the exact request/response shapes in `frontend/src/
 ### Shared
 - [x] ✅ Ravi ↔ Ashwin API contract sync (`docs/api-contract.md`)
 - [ ] 🔲 Deployment (Vercel + Render)
-- [ ] 🔲 End-to-end test pass against live MongoDB + real Google OAuth
+- [ ] 🔲 End-to-end test pass against isolated MongoDB + Redis
 - [ ] 🔲 Payments integration (later sprint)
 
 ---

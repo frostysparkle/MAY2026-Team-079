@@ -1,7 +1,7 @@
 """Dev-only account switching (Task 3, Correctness Property 8).
 
 `POST /auth/dev-login` issues a normal session for a **seeded test account**
-without Google, and `GET /auth/test-accounts` lists those accounts for the
+without entering its password, and `GET /auth/test-accounts` lists those accounts for the
 switcher. Both are hard-gated: they return 404 unless `settings.enable_dev_login`
 is true (which is forced false when `APP_ENV=production`). Only users flagged
 `is_test` can be assumed, so real accounts are never reachable this way.

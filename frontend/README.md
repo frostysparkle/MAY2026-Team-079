@@ -24,8 +24,8 @@ npm run dev
 ```
 
 The app runs against an in-memory **mock API** by default (`VITE_USE_MOCK_API=true`),
-so no backend is required. A dev sign-in on the login screen stands in for Google
-Sign-in. Seed accounts (one per role):
+so no backend is required. The login screen uses the same email/password flow in
+mock and real-API modes. Seed accounts (one per role):
 
 - `student@mg.study.iitm.ac.in` — Participant
 - `organizer@ee.study.iitm.ac.in` — Organizer

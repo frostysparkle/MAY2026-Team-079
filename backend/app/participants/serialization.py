@@ -33,7 +33,6 @@ class ParticipantOut(BaseModel):
     email: str
     roles: list[Role]
     status: str
-    email_verified: bool
     profile_complete: bool
     created_at: str | None
     photo_url: str | None
@@ -57,7 +56,6 @@ def serialize_participant(
         email=user["email"],
         roles=user.get("roles", []),
         status=user.get("status", "active"),
-        email_verified=bool(user.get("email_verified")),
         profile_complete=bool(user.get("profile_complete")),
         created_at=_iso(user.get("created_at")),
         photo_url=photo_url,

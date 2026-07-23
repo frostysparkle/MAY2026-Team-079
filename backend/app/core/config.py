@@ -4,12 +4,6 @@ from os import getenv
 
 
 DEFAULT_DATABASE_NAME = "paradox_connect"
-DEFAULT_GOOGLE_DOMAINS = (
-    "ds.study.iitm.ac.in",
-    "es.study.iitm.ac.in",
-    "ee.study.iitm.ac.in",
-    "mg.study.iitm.ac.in",
-)
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173",)
 
 
@@ -38,12 +32,11 @@ class Settings:
     mongodb_uri: str | None
     mongodb_database: str
     app_env: str
-    google_client_id: str | None
-    allowed_google_domains: tuple[str, ...]
     jwt_secret: str | None
     jwt_issuer: str
     jwt_access_token_minutes: int
     initial_super_admin_email: str | None
+    initial_super_admin_password: str | None
     cors_origins: tuple[str, ...]
     payment_gateway: str
     payment_webhook_secret: str
@@ -62,20 +55,18 @@ def get_settings() -> Settings:
     uri = getenv("MONGODB_URI", "").strip() or None
     database = getenv("MONGODB_DATABASE", DEFAULT_DATABASE_NAME).strip()
     environment = getenv("APP_ENV", "development").strip() or "development"
-    google_client_id = getenv("GOOGLE_CLIENT_ID", "").strip() or None
     jwt_secret = getenv("JWT_SECRET", "").strip() or None
     initial_super_admin_email = (
         getenv("INITIAL_SUPER_ADMIN_EMAIL", "").strip().casefold() or None
+    )
+    initial_super_admin_password = (
+        getenv("INITIAL_SUPER_ADMIN_PASSWORD", "").strip() or None
     )
 
     return Settings(
         mongodb_uri=uri,
         mongodb_database=database or DEFAULT_DATABASE_NAME,
         app_env=environment or "development",
-        google_client_id=google_client_id,
-        allowed_google_domains=_csv_setting(
-            "ALLOWED_GOOGLE_DOMAINS", DEFAULT_GOOGLE_DOMAINS
-        ),
         jwt_secret=jwt_secret,
         jwt_issuer=getenv("JWT_ISSUER", "paradox-connect").strip()
         or "paradox-connect",
@@ -83,6 +74,7 @@ def get_settings() -> Settings:
             "JWT_ACCESS_TOKEN_MINUTES", 30
         ),
         initial_super_admin_email=initial_super_admin_email,
+        initial_super_admin_password=initial_super_admin_password,
         cors_origins=_csv_setting("CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
         payment_gateway=getenv("PAYMENT_GATEWAY", "mock").strip().lower() or "mock",
         # A real provider must set PAYMENT_WEBHOOK_SECRET; the mock gateway falls

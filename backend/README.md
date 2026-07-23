@@ -40,14 +40,15 @@ verification fails closed when either dependency is unavailable. Redis stores
 only expiring, hashed replay/rate-limit keys; MongoDB stores encrypted TOTP
 secret ciphertext and the durable scan audit log.
 
-Authentication fails closed when `GOOGLE_CLIENT_ID` or a JWT secret of at least
-32 characters is missing.
+Authentication uses email/password credentials and fails closed when the JWT
+signing secret is missing or shorter than 32 characters. Passwords are stored
+only as salted PBKDF2 hashes.
 
 ## Initialize MongoDB
 
 The initial database uses three collections:
 
-* `users` stores every person's verified Google identity, profile, status, and roles.
+* `users` stores every person's account credentials, profile, status, and roles.
 * `event_registrations` links a user to an event without growing the user document.
 * `staff_assignments` grants organizer or staff access for a particular scope.
 
@@ -57,54 +58,51 @@ workshop operations use `scope_type=checkpoint`. A `scope_id` of `*` is an
 explicit wildcard. Admin and Super Admin roles retain global access.
 
 After configuring `.env`, initialize the collections, indexes, and optional
-Super Admin invitation:
+initial Super Admin:
 
 ```powershell
 .venv-windows\Scripts\python.exe -m scripts.init_db
 ```
 
-Set `INITIAL_SUPER_ADMIN_EMAIL` to an allowed IITM Google account if the first
-Super Admin should be invited during initialization. The invitation has no
-password and cannot authenticate until that exact account signs in through
-Google and the backend verifies its token.
+Set both `INITIAL_SUPER_ADMIN_EMAIL` and `INITIAL_SUPER_ADMIN_PASSWORD` when the
+first Super Admin should be created during initialization. There is no default
+password. The password is hashed before storage and is never printed. Bootstrap
+refuses to replace a different Super Admin or promote an existing ordinary user.
 
-The command is idempotent. It also removes the obsolete unique `username` index,
-which would otherwise prevent multiple Google-only users from being created. It
-does not delete legacy password records; those accounts cannot authenticate and
-are reported as a warning. A legacy record with a verified matching email has
-its password fields removed when it first links to Google.
+The command is idempotent. It also removes obsolete unique `username` and
+`google_subject` indexes left by earlier authentication models.
 
 ### Initial indexes
 
-* Unique Google subjects, emails, and participant roll numbers.
+* Unique emails and participant roll numbers.
 * One event registration per `(user_id, event_id)` pair.
 * One staff assignment per `(user_id, role, scope_type, scope_id)` tuple.
 * One QR secret per `(user_id, checkpoint_context, scope_id)` tuple; event
   secrets use the concrete event ID as `scope_id`.
 
-## Google authentication
+## Email/password authentication
 
-The frontend obtains a Google Identity Services credential and sends it to:
+Public registration creates a participant account:
 
 ```http
-POST /api/v1/auth/google
+POST /api/v1/auth/register
 Content-Type: application/json
 ```
 
 ```json
-{"credential": "<google-id-token>"}
+{"email": "student@example.com", "password": "<password>", "full_name": "Student"}
 ```
 
-The backend verifies the Google signature, audience, expiry, verified email, and
-hosted IITM domain. It creates or finds the user using Google's stable `sub`
-claim, then returns a short-lived Paradox Connect JWT. Send that JWT on later
-requests as `Authorization: Bearer <token>`.
+Existing users sign in at `POST /api/v1/auth/login` with the same email/password
+shape (without `full_name`). Both endpoints return a short-lived Paradox Connect
+JWT. Send it on later requests as `Authorization: Bearer <token>`.
 
 `GET /api/v1/users/me` returns the authenticated user and is a convenient way to
 verify that the issued application JWT works.
 
-The API never accepts an email or role from the client as proof of identity.
-New users always start with the `participant` role.
+Public registration never accepts a role from the client. New accounts always
+start with the `participant` role; elevated roles and operational assignments
+must come from authorized server-side administration.
 
 ## Health endpoints
 
@@ -113,8 +111,6 @@ New users always start with the `participant` role.
 * `GET /api/v1/health/live` confirms that FastAPI is running.
 * `GET /api/v1/health/ready` confirms MongoDB, Redis, and QR encryption
   configuration are ready.
-* `GET /api/v1/health/google` confirms local Google/JWT configuration and checks
-  Google's OpenID Connect discovery endpoint without exposing credentials.
 
 `/live` works without external services. `/ready` returns HTTP 503 until MongoDB,
 Redis, and QR secret encryption are configured.

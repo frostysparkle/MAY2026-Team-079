@@ -6,8 +6,8 @@ understand *why* the code is shaped the way it is.
 
 ## Locked decisions (from the plan + architecture review)
 
-- **Google Sign-in only**, no password anywhere. Domain must match one of the four IITM
-  suffixes or registration is rejected.
+- **One email/password sign-in flow** for every user. Public registration always
+  creates a participant account; elevated roles are assigned by authorized admins.
 - **4-tier RBAC**: Participant → Organizer → Admin → Super Admin. Role is always resolved
   **server-side** after sign-in; the splash "role" buttons only choose which login screen to
   show and carry no permission.
@@ -25,14 +25,15 @@ understand *why* the code is shaped the way it is.
 2. **Per-checkpoint secret vs. QR payload.** The QR carries only `{ participant_id, current_code }`.
    The event/checkpoint context is supplied by the *organizer app* at scan time, not embedded in
    the QR. The verification API type reflects this (`checkpoint_context` on the request).
-3. **First Super Admin cannot be created in-app** — it is a one-time backend/DB step. There is no
-   frontend screen for it; the UI only exposes role assignment to an already-authenticated Super
-   Admin.
+3. **First Super Admin cannot be created in-app** — it is a one-time backend
+   bootstrap using explicitly configured email/password credentials. There is no
+   frontend screen for it; the UI only exposes role assignment to an
+   already-authenticated Super Admin.
 
 ## Edge cases the UI must handle
 
-- Google account with a non-IITM domain → clear, specific rejection message.
-- Google account already registered → distinct message (not the same as domain rejection).
+- Email already registered → direct the user to the sign-in mode.
+- Invalid credentials or disabled account → a clear error without revealing password data.
 - Camera permission denied on the scanner → graceful fallback + manual participant-ID entry.
 - Unrelated/invalid QR codes → ignored silently, no alert spam.
 - No participants yet (Admin list), no accommodation assigned, no menu set → explicit empty states.

@@ -11,25 +11,16 @@ from app.core.config import Settings, get_settings
 from app.main import create_app
 
 
-ALLOWED = (
-    "ds.study.iitm.ac.in",
-    "es.study.iitm.ac.in",
-    "ee.study.iitm.ac.in",
-    "mg.study.iitm.ac.in",
-)
-
-
 def _settings(enable_dev_login: bool) -> Settings:
     return Settings(
         mongodb_uri=None,
         mongodb_database="test",
         app_env="test",
-        google_client_id="cid",
-        allowed_google_domains=ALLOWED,
         jwt_secret="x" * 40,
         jwt_issuer="paradox-connect-test",
         jwt_access_token_minutes=30,
         initial_super_admin_email=None,
+        initial_super_admin_password=None,
         cors_origins=("http://localhost:5173",),
         payment_gateway="mock",
         payment_webhook_secret="s",

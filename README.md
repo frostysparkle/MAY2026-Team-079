@@ -27,7 +27,7 @@ with one integrated platform, built around a single participant profile. It cove
 | Frontend       | React.js (Progressive Web App)                                      |
 | Backend        | Python + FastAPI                                                    |
 | Database       | MongoDB                                                             |
-| Authentication | Google Sign-in (OAuth, IITM domains only) + JWT sessions           |
+| Authentication | Email/password credentials + JWT sessions                            |
 | Digital ID     | TOTP rotating QR (RFC 6238), per participant per checkpoint         |
 | Payments       | Certified third-party gateway, hosted checkout                     |
 | Hosting        | Vercel (frontend) · Render (backend) — free tier                   |

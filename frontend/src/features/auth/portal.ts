@@ -1,7 +1,7 @@
 /**
  * The "portal" a user picks on the splash screen. This is a UI hint only — it
  * decides which login copy to show next and carries NO permission. The real
- * role is always resolved server-side after Google Sign-in.
+ * role is always resolved server-side after authentication.
  */
 export type Portal = 'student' | 'organizer' | 'admin';
 

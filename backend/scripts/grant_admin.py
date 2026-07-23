@@ -1,11 +1,7 @@
-"""Grant a role (default: admin) to a user by email.
+"""Emergency maintenance command to set an existing user's role by email.
 
-If the user already exists, their roles are set to exactly [role]. If they do
-not exist yet, an "invited" account is created that is activated on the first
-verified Google sign-in with the same email (mirrors the initial super-admin
-seed in app/db/bootstrap.py).
-
-The email domain must be one of ALLOWED_GOOGLE_DOMAINS.
+The target must register through the application first. Normal role management
+belongs in the authenticated admin API; this command exists for local recovery.
 
 Usage:
     python -m scripts.grant_admin 23f1001524@ds.study.iitm.ac.in
@@ -29,16 +25,10 @@ from app.db.collections import USERS  # noqa: E402
 from app.db.mongo import MongoService  # noqa: E402
 
 
-def _validate(settings: Any, email: str, role: str) -> str:
+def _validate(email: str, role: str) -> str:
     email = email.strip().casefold()
-    if "@" not in email:
+    if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise SystemExit(f"'{email}' is not a valid email address.")
-    domain = email.rsplit("@", 1)[1]
-    if domain not in settings.allowed_google_domains:
-        raise SystemExit(
-            f"'{email}' does not use an allowed IITM domain "
-            f"({', '.join(settings.allowed_google_domains)})."
-        )
     if role not in ROLE_ORDER:
         raise SystemExit(
             f"'{role}' is not a valid role. Choose one of: {', '.join(ROLE_ORDER)}."
@@ -46,7 +36,7 @@ def _validate(settings: Any, email: str, role: str) -> str:
     return email
 
 
-async def _grant(db: Any, email: str, role: str) -> str:
+async def _grant(db: Any, email: str, role: str) -> None:
     users = db[USERS]
     now = datetime.now(UTC)
     existing = await users.find_one({"email": email})
@@ -56,45 +46,29 @@ async def _grant(db: Any, email: str, role: str) -> str:
             {"_id": existing["_id"]},
             {"$set": {"roles": [role], "updated_at": now}},
         )
-        return "updated"
+        return
 
-    await users.insert_one(
-        {
-            "email": email,
-            "roles": [role],
-            "status": "invited",
-            "profile": {},
-            "profile_complete": False,
-            "email_verified": False,
-            "created_at": now,
-            "updated_at": now,
-        }
+    raise SystemExit(
+        f"No account exists for '{email}'. Ask the user to register first."
     )
-    return "invited"
 
 
 async def _run(email: str, role: str) -> None:
     settings = get_settings()
     if settings.mongodb_uri is None:
         raise SystemExit("MONGODB_URI is not set. Add it to backend/.env first.")
-    email = _validate(settings, email, role)
+    email = _validate(email, role)
 
     mongo = MongoService(settings)
     mongo.connect()
     try:
         if not await mongo.ping():
             raise SystemExit("MongoDB is not reachable.")
-        outcome = await _grant(mongo.database, email, role)
+        await _grant(mongo.database, email, role)
     finally:
         await mongo.close()
 
-    if outcome == "updated":
-        print(f"'{email}' now has role '{role}'.")
-    else:
-        print(
-            f"Invited '{email}' as '{role}'. The account activates on their first "
-            "verified Google sign-in with this email."
-        )
+    print(f"'{email}' now has role '{role}'.")
 
 
 def main() -> None:

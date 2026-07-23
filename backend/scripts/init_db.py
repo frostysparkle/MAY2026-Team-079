@@ -30,14 +30,9 @@ async def _initialize() -> None:
     print(f"Collections: {', '.join(result.collections)}")
     if result.super_admin_email is not None:
         action = "created" if result.super_admin_created else "already existed"
-        print(f"Super Admin invitation '{result.super_admin_email}' {action}.")
+        print(f"Super Admin account '{result.super_admin_email}' {action}.")
     else:
         print("No initial Super Admin configured.")
-    if result.legacy_password_users:
-        print(
-            f"Warning: {result.legacy_password_users} legacy password user(s) remain. "
-            "They cannot sign in unless linked to a verified Google account."
-        )
 
 
 def main() -> None:

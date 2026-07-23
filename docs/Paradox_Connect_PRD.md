@@ -37,8 +37,9 @@ This revision incorporates decisions locked during Sprint 1 planning and the QR/
 
 - **Identity validation model refined (major).** The digital ID is now explicitly a **standard TOTP model** (RFC 6238 — HMAC-SHA1, 6-digit code, 30-second step, ±1 step tolerance): a secret is provisioned once while online, after which the **student device generates the QR entirely on-device with no per-refresh server call**. Only the *organizer's* verification step requires the network. Previous wording that implied the student's ID screen depends on connectivity, or that every refresh polls the server, is corrected. See the companion document `Paradox_Connect_QRTOTP_Architecture.md`.
 - **Per-event TOTP secret (new).** A **unique TOTP secret is provisioned per participant *per event/checkpoint context*** (e.g. hostel entry, a given event), not a single global secret per participant. A code valid for one event is therefore not valid at another. Updates FR-2.1.
-- **Login method locked: Google Sign-in only.** Registration and login are via Google OAuth against confirmed IITM domains — **no password field anywhere**. This replaces the earlier email + password `/register` assumption. Updates FR-7.1, Section 1.3, Section 7.2.
-- **Confirmed valid email domains:** `@ds.study.iitm.ac.in`, `@es.study.iitm.ac.in`, `@ee.study.iitm.ac.in`, `@mg.study.iitm.ac.in`.
+- **Login method updated: email and password.** Registration and login use one
+  credential flow for every user. Public registration creates participant access
+  only; elevated roles are assigned after registration by authorized admins.
 - **Roles expand to a 4-tier hierarchy:** Participant → Organizer → **Admin → Super Admin**. Only a Super Admin can change another user's role, and the first Super Admin is seeded directly in the database as a one-time setup step. Updates FR-7.3, Section 7.2.
 - **"Complete Your Profile" confirmed as a single full page**, with a **separate `photos` collection** in MongoDB linked by participant ID (photos are not embedded in the profile document).
 - **Section 8 (Admin) reframed** from a read-only participant list to **User Management**, adding a Super-Admin-only role-assignment control.
@@ -83,8 +84,17 @@ The following parameters were confirmed directly by the team and are treated as 
 - Scope: all 9 epics from the Milestone 1 research, plus a newly confirmed Payments epic (Section 6, Epic 10), are in scope for the MVP, tiered by priority within each epic (Section 5).
 - Performance target: the system must support 10,000+ concurrent active sessions/API calls during fest week — a real NFR, not a narrative figure.
 - Scaling approach (locked for MVP): a stateless backend design with a caching layer on the QR/TOTP verification path (the system's highest-traffic operation), to reduce per-request load on free-tier hosting. Full multi-service data distribution and load balancing across backend instances is deferred to the Future Roadmap (Section 11); the residual capacity risk on free-tier hosting for the MVP is documented, not eliminated (Risk R1, Section 9).
-- Registration eligibility: Paradox is exclusive to IITM students/staff; every participant profile is created via **Google Sign-in** using a valid IITM college email. There is no password-based registration. Confirmed valid domains: `@ds.study.iitm.ac.in`, `@es.study.iitm.ac.in`, `@ee.study.iitm.ac.in`, `@mg.study.iitm.ac.in`.
-- Identity mechanism: JWT-based session authentication (post Google Sign-in) with a **TOTP-powered rotating QR digital identity (RFC 6238)**. A TOTP secret is provisioned once per participant **per event/checkpoint context** while the device is online; the student's QR is then generated **on-device** from the cached secret, with **no server call on each refresh**. Verification of a scan happens server-side on the organizer's device, which requires connectivity. Full offline organizer-side validation remains out of scope for the MVP (Future Roadmap, Section 11).
+- Registration eligibility: every participant creates one account with a normalized
+  email address and password. Public registration assigns only participant access;
+  elevated and operational roles require an authorized administrative action.
+- Identity mechanism: JWT-based session authentication (after email/password
+  verification) with a **TOTP-powered rotating QR digital identity (RFC 6238)**.
+  A TOTP secret is provisioned once per participant **per event/checkpoint
+  context** while the device is online; the student's QR is then generated
+  **on-device** from the cached secret, with **no server call on each refresh**.
+  Verification of a scan happens server-side on the organizer's device, which
+  requires connectivity. Full offline organizer-side validation remains out of
+  scope for the MVP (Future Roadmap, Section 11).
 - Backend framework: Python + FastAPI (confirmed).
 - Payments: basic fee collection for hostel accommodation and mess/meal plans is in scope, processed through a certified third-party payment gateway with hosted checkout (e.g., a Razorpay/Stripe-style provider). Paradox Connect does not collect, handle, or store raw card/payment data directly (Section 6, Epic 10).
 - Deployment: ₹0 infrastructure budget; free-tier/open-source services only (Vercel for frontend, Render for backend), while the system is designed and documented to production-grade standards.
@@ -514,13 +524,16 @@ Participants view verified emergency/support contacts for hostel, mess, events, 
 
 **P0 — Must Have (MVP core)** *(Ref: Story 7.1)*
 
-A participant registers once via **Google Sign-in** using their IITM college email, creating a single profile reused across all modules. No password is set or stored.
+A participant registers once with an email address and password, creating a
+single profile reused across all modules. Only a salted password hash is stored.
 
 ***Acceptance Criteria***
 
-- Registration is completed through Google Sign-in; there is no email + password form anywhere in the flow.
-- The Google account's email domain must match one of the confirmed IITM suffixes (`@ds.study.iitm.ac.in`, `@es.study.iitm.ac.in`, `@ee.study.iitm.ac.in`, `@mg.study.iitm.ac.in`); any other domain is rejected with a clear message.
-- A participant cannot create more than one profile using the same Google account/college email.
+- Registration requires a valid email, a password of at least eight characters,
+  and optionally a display name.
+- Public registration always assigns participant access and ignores no
+  client-supplied elevated role because no such field exists in the request.
+- A participant cannot create more than one profile using the same normalized email.
 - On first successful sign-in, the participant is routed to **Complete Your Profile** (a single page); details entered there are not re-requested for subsequent events or workshops.
 
 **FR-7.2 Shared Profile Across Services**
@@ -676,7 +689,9 @@ Admins can view which participants have paid, have a pending payment, or have no
 ### 7.2 Security
 
 - All traffic served over HTTPS; no endpoint accepts unencrypted requests.
-- Authentication is via **Google Sign-in (OAuth)**; no passwords are collected or stored, so there is no local password hash to protect. Google OAuth tokens are verified server-side, and the domain is checked against the confirmed IITM suffixes before a session is issued.
+- Authentication uses **email/password credentials**. Passwords are stored only
+  as salted PBKDF2 hashes and are never returned or logged. A short-lived JWT is
+  issued only after the credentials and account status are verified.
 - The per-participant, per-event **TOTP secret is stored encrypted at rest** (encryption key held outside the database), sent to the device exactly once over HTTPS, and never re-exposed by a later API call. On the device it is held in encrypted client-side storage (encrypted IndexedDB via Web Crypto). **Lost/changed-device recovery** is: log in again → generate a **new** secret → invalidate the previous secret → only the new device can generate valid codes. The previous secret is never reissued or downloaded again; there is deliberately no endpoint that re-exposes an existing secret. This same "regenerate ID" mechanism is the revocation path for a lost or compromised device.
 - Role-based access control (RBAC) enforced server-side (not just hidden in the UI) across a **four-tier hierarchy: Participant → Organizer → Admin → Super Admin**. Only a Super Admin can change another user's role; the role-assignment endpoint rejects calls from any lower tier.
 - TOTP codes are verified server-side on every scan; a stale, out-of-window, or already-used code is rejected (replay protection, via shared Redis state). Scan attempts are rate-limited on a **composite key of participant ID + scanner device + IP address** (not participant ID alone), so brute-force attempts cannot be spread cheaply across many participant IDs.
@@ -711,7 +726,7 @@ These are confirmed decisions, recorded here as constraints on implementation �
 | Frontend               | React.js, built and delivered as a Progressive Web App (PWA).                                                                                                                                                                                                                                                                                                              |
 | Backend                | Python + FastAPI.                                                                                                                                                                                                                                                                                                                                                          |
 | Database               | MongoDB, including a separate `photos` collection linked to participants by ID.                                                                                                                                                                                                                                                                                            |
-| Authentication         | **Google Sign-in (OAuth), no passwords**, restricted to the four confirmed IITM domains; JWT-based session tokens after sign-in. Digital identity is a **TOTP rotating QR (RFC 6238), one secret per participant per event/checkpoint**, generated on-device and verified server-side on scan. **Fixed TOTP parameters (frontend and backend must match): HMAC-SHA1, 6 digits, 30-second step, ±1 step (~90s) window, Base32-encoded 160-bit secret** (`pyotp` backend / `otpauth` frontend). The organizer app supplies the checkpoint context at scan; the QR carries only `{ participant_id, current_code }`. |
+| Authentication         | **Email/password credentials** with salted password hashes and short-lived JWT session tokens. Digital identity is a **TOTP rotating QR (RFC 6238), one secret per participant per event/checkpoint**, generated on-device and verified server-side on scan. **Fixed TOTP parameters (frontend and backend must match): HMAC-SHA1, 6 digits, 30-second step, ±1 step (~90s) window, Base32-encoded 160-bit secret** (`pyotp` backend / `otpauth` frontend). The organizer app supplies the checkpoint context at scan; the QR carries only `{ participant_id, current_code }`. |
 | Authorization          | Four-tier RBAC: Participant → Organizer → Admin → Super Admin. Only Super Admin can assign roles; first Super Admin seeded directly in the database.                                                                                                                                                                                                                       |
 | Scaling approach (MVP) | Stateless backend design with a shared **Redis** caching layer on the QR/TOTP verification path (highest-traffic operation), which also holds replay-protection state, rate-limit counters, and temporary verification state across instances. Full multi-service data distribution and load balancing is deferred to the Future Roadmap (Section 11).                     |
 | Timezone               | **India Standard Time (IST)** is the official application timezone; all human-facing timestamps (logs, receipts, schedules) use IST. TOTP itself is computed on Unix epoch time (timezone-independent), so a correct device clock is what matters, not the display timezone.                                                                                              |
@@ -719,7 +734,7 @@ These are confirmed decisions, recorded here as constraints on implementation �
 | Hosting (presentation) | Vercel (frontend) and Render (backend), free tier.                                                                                                                                                                                                                                                                                                                         |
 | Version Control        | Git & GitHub.                                                                                                                                                                                                                                                                                                                                                              |
 | Budget                 | ₹0 infrastructure budget. Free-tier/open-source services only for deployment, while the system is designed and documented to production-grade architecture and engineering practices.                                                                                                                                                                                      |
-| Integration            | Standalone/greenfield for MVP with respect to IITM's own systems — no integration with existing IITM SSO, hostel/mess databases, or fest website in this release. The third-party payment gateway is a separate, necessary external integration for fee collection. Google OAuth is used as the sign-in provider only, not as an integration with IITM's internal systems. |
+| Integration            | Standalone/greenfield for MVP with respect to IITM's own systems — no integration with existing IITM SSO, hostel/mess databases, or fest website in this release. The third-party payment gateway is a separate, necessary external integration for fee collection. |
 
 ## 9. Risks & Open Questions
 
@@ -755,7 +770,7 @@ These are explicitly unresolved and should not be treated as decided by omission
 - Integration testing for the payment flow specifically: initiate payment → gateway hosted checkout → success/failure callback → status update on the participant profile, including a simulated failed/late-webhook case (Risk R8).
 - Load/performance testing specifically simulating the 10,000+ concurrent session target ahead of fest week — the highest-risk NFR (see Risk R1) and therefore the highest-priority test to run early, not last. This should explicitly test the stateless-backend + cached-verification design under load, not just functional correctness.
 - User acceptance testing (UAT) with a small group of real PORs/volunteers before go-live, to partially offset the single-interview research gap (Risk R4).
-- Security testing: verify RBAC boundaries hold server-side (a Participant-role account cannot reach Admin routes even by direct API call, and a regular Admin cannot call the Super-Admin-only role-assignment endpoint), verify Google OAuth tokens and JWT session tokens are never exposed in logs or responses, verify the TOTP secret is never returned by any endpoint after initial provisioning, and verify payment webhook/callback signatures are checked rather than trusted at face value.
+- Security testing: verify RBAC boundaries hold server-side (a Participant-role account cannot reach Admin routes even by direct API call, and a regular Admin cannot call the Super-Admin-only role-assignment endpoint), verify passwords and JWT session tokens are never exposed in logs or responses, verify the TOTP secret is never returned by any endpoint after initial provisioning, and verify payment webhook/callback signatures are checked rather than trusted at face value.
 
 Detailed test cases and full QA documentation are out of scope for this PRD and belong to a later milestone, per team direction.
 
@@ -766,7 +781,10 @@ Detailed test cases and full QA documentation are out of scope for this PRD and 
 - Hostel and mess payment flows (Epic 10) work end-to-end against the gateway's sandbox/test mode, including a handled failure case.
 - The system has been demonstrated handling the target concurrent load in a test/staging environment — or, if free-tier constraints prevent full-scale testing, this is explicitly documented as an accepted risk rather than silently skipped.
 - The full query lifecycle (raise → assign → track → resolve) is functional end-to-end.
-- Security basics are in place: HTTPS enforced, Google OAuth verified server-side, TOTP secrets encrypted at rest and never re-exposed, four-tier RBAC (including Super-Admin-only role assignment) enforced server-side, payment callbacks signature-verified.
+- Security basics are in place: HTTPS enforced, password hashes and JWT
+  authentication handled server-side, TOTP secrets encrypted at rest and never
+  re-exposed, RBAC (including Super-Admin-only role assignment) enforced
+  server-side, and payment callbacks signature-verified.
 
 ### 10.3 Release Plan
 

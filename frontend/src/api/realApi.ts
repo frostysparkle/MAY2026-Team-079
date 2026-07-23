@@ -132,7 +132,6 @@ interface BackendUser {
   email: string;
   roles?: string[];
   status?: string;
-  email_verified?: boolean;
   profile_complete?: boolean;
   created_at?: string;
   photo_url?: string | null;

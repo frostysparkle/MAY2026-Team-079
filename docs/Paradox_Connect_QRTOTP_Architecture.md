@@ -33,7 +33,7 @@ byte-for-byte identically to both libraries (no case changes, no added padding).
 
 ## Phase 1 — Provisioning (one-time, online)
 
-1. Student completes registration via Google Sign-in.
+1. Student completes registration with their email and password.
 2. Backend generates a **distinct TOTP secret per participant per event/checkpoint context** — not one global secret per participant. A secret valid for one event/checkpoint is never valid at another, even for the same participant. Each secret is provisioned (once, while online) for the specific context it applies to.
 3. Each secret is stored **encrypted at rest** in MongoDB, keyed by `(participant_id, checkpoint_context)` (encryption key kept outside the database — environment variable or secret manager, never alongside the data).
 4. A context's secret is sent to the device **exactly once**, over HTTPS, as part of the registration/profile-completion (or event-provisioning) response. It is never re-sent or re-exposed by any later API call.

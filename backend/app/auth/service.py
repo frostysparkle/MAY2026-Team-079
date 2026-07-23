@@ -43,7 +43,6 @@ async def register_user(
     user = {
         "email": email,
         "password_hash": hash_password(password),
-        "email_verified": False,
         "roles": ["participant"],
         "status": "active",
         "profile": {"full_name": full_name} if full_name else {},
