@@ -6,12 +6,15 @@ from typing import Any
 import pyotp
 import pytest
 from bson import ObjectId
+from cryptography.fernet import Fernet
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
+from app.qr.crypto import SecretCipher
 from app.qr.schemas import ProvisionSecretRequest, VerifyScanRequest
 from app.qr.service import (
     EventRegistrationRequiredError,
+    ScanRateLimitExceededError,
     provision_secret,
     verify_scan,
 )
@@ -41,6 +44,8 @@ class FakeCollection:
         for doc in self.docs:
             if _matches(doc, query):
                 doc.update(deepcopy(update.get("$set", {})))
+                for key in update.get("$unset", {}):
+                    doc.pop(key, None)
                 for key, value in update.get("$setOnInsert", {}).items():
                     doc.setdefault(key, deepcopy(value))
                 return SimpleNamespace(matched_count=1, modified_count=1)
@@ -74,6 +79,40 @@ class FakeCollection:
         return SimpleNamespace(inserted_id=saved["_id"])
 
 
+class FakeVerificationState:
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed = allowed
+        self.used: set[tuple[str, str, str, int]] = set()
+
+    async def allow_attempt(
+        self,
+        participant_id: str,
+        scanner_device_id: str,
+        scanner_ip: str,
+    ) -> bool:
+        del participant_id, scanner_device_id, scanner_ip
+        return self.allowed
+
+    async def mark_code_used(
+        self,
+        participant_id: str,
+        checkpoint_context: str,
+        scope_id: str,
+        step: int,
+        ttl_seconds: int,
+    ) -> bool:
+        del ttl_seconds
+        key = (participant_id, checkpoint_context, scope_id, step)
+        if key in self.used:
+            return False
+        self.used.add(key)
+        return True
+
+
+def _cipher() -> SecretCipher:
+    return SecretCipher(Fernet.generate_key().decode("ascii"))
+
+
 def test_event_scope_is_required_by_the_api_models():
     with pytest.raises(ValidationError):
         ProvisionSecretRequest(checkpoint_context="event")
@@ -98,13 +137,25 @@ def test_event_secret_requires_registration_and_is_stored_per_event():
             [{"_id": event_id, "status": "published"}]
         )
         registrations = FakeCollection()
-        secrets = FakeCollection()
+        secrets = FakeCollection(
+            [
+                {
+                    "_id": ObjectId(),
+                    "user_id": user_id,
+                    "checkpoint_context": "event",
+                    "scope_id": str(event_id),
+                    "secret_base32": pyotp.random_base32(),
+                }
+            ]
+        )
+        cipher = _cipher()
 
         with pytest.raises(EventRegistrationRequiredError):
             await provision_secret(
                 secrets,
                 events,
                 registrations,
+                cipher,
                 user_id,
                 "event",
                 str(event_id),
@@ -122,6 +173,7 @@ def test_event_secret_requires_registration_and_is_stored_per_event():
             secrets,
             events,
             registrations,
+            cipher,
             user_id,
             "event",
             str(event_id),
@@ -129,6 +181,8 @@ def test_event_secret_requires_registration_and_is_stored_per_event():
 
         assert secret
         assert secrets.docs[0]["scope_id"] == str(event_id)
+        assert "secret_base32" not in secrets.docs[0]
+        assert cipher.decrypt(secrets.docs[0]["secret_ciphertext"]) == secret
 
     asyncio.run(run())
 
@@ -139,6 +193,7 @@ def test_event_scan_rejects_unregistered_and_inactive_participants():
         scanner_id = ObjectId()
         event_id = ObjectId()
         secret = pyotp.random_base32()
+        cipher = _cipher()
         events = FakeCollection(
             [{"_id": event_id, "status": "published"}]
         )
@@ -149,7 +204,7 @@ def test_event_scan_rejects_unregistered_and_inactive_participants():
                     "user_id": user_id,
                     "checkpoint_context": "event",
                     "scope_id": str(event_id),
-                    "secret_base32": secret,
+                    "secret_ciphertext": cipher.encrypt(secret),
                 }
             ]
         )
@@ -164,10 +219,14 @@ def test_event_scan_rejects_unregistered_and_inactive_participants():
             registrations,
             secrets,
             logs,
+            cipher,
+            FakeVerificationState(),
             str(user_id),
             pyotp.TOTP(secret).now(),
             "event",
             scanner_id,
+            "scanner-device",
+            "127.0.0.1",
             event_id=str(event_id),
         )
         assert outcome.result == "not_eligible"
@@ -180,10 +239,14 @@ def test_event_scan_rejects_unregistered_and_inactive_participants():
             registrations,
             secrets,
             logs,
+            cipher,
+            FakeVerificationState(),
             str(user_id),
             pyotp.TOTP(secret).now(),
             "event",
             scanner_id,
+            "scanner-device",
+            "127.0.0.1",
             event_id=str(event_id),
         )
         assert outcome.result == "not_eligible"
@@ -199,6 +262,7 @@ def test_registered_event_scan_uses_the_exact_event_scope():
         first_event = ObjectId()
         second_event = ObjectId()
         secret = pyotp.random_base32()
+        cipher = _cipher()
         events = FakeCollection(
             [
                 {"_id": first_event, "status": "published"},
@@ -225,7 +289,7 @@ def test_registered_event_scan_uses_the_exact_event_scope():
                     "user_id": user_id,
                     "checkpoint_context": "event",
                     "scope_id": str(first_event),
-                    "secret_base32": secret,
+                    "secret_ciphertext": cipher.encrypt(secret),
                 }
             ]
         )
@@ -234,6 +298,7 @@ def test_registered_event_scan_uses_the_exact_event_scope():
             [{"_id": user_id, "status": "active", "profile": {}}]
         )
         code = pyotp.TOTP(secret).now()
+        verification_state = FakeVerificationState()
 
         wrong_scope = await verify_scan(
             users,
@@ -241,10 +306,14 @@ def test_registered_event_scan_uses_the_exact_event_scope():
             registrations,
             secrets,
             logs,
+            cipher,
+            verification_state,
             str(user_id),
             code,
             "event",
             scanner_id,
+            "scanner-device",
+            "127.0.0.1",
             event_id=str(second_event),
         )
         assert wrong_scope.result == "wrong_checkpoint"
@@ -255,13 +324,53 @@ def test_registered_event_scan_uses_the_exact_event_scope():
             registrations,
             secrets,
             logs,
+            cipher,
+            verification_state,
             str(user_id),
             code,
             "event",
             scanner_id,
+            "scanner-device",
+            "127.0.0.1",
             event_id=str(first_event),
         )
         assert valid.result == "valid"
         assert logs.docs[-1]["event_id"] == str(first_event)
+
+        duplicate = await verify_scan(
+            users,
+            events,
+            registrations,
+            secrets,
+            logs,
+            cipher,
+            verification_state,
+            str(user_id),
+            code,
+            "event",
+            scanner_id,
+            "scanner-device",
+            "127.0.0.1",
+            event_id=str(first_event),
+        )
+        assert duplicate.result == "duplicate"
+
+        with pytest.raises(ScanRateLimitExceededError):
+            await verify_scan(
+                users,
+                events,
+                registrations,
+                secrets,
+                logs,
+                cipher,
+                FakeVerificationState(allowed=False),
+                str(user_id),
+                code,
+                "event",
+                scanner_id,
+                "scanner-device",
+                "127.0.0.1",
+                event_id=str(first_event),
+            )
 
     asyncio.run(run())

@@ -136,6 +136,12 @@ Verify a scanned QR against the per-checkpoint secret. The QR carries only
 `{ participant_id, current_code }`; the organizer app supplies
 `checkpoint_context` and the concrete `event_id` for event scans.
 
+The scanner sends its stable browser identifier in
+`X-Scanner-Device-ID`. The backend combines that identifier with participant ID
+and source IP for Redis-backed rate limiting. Used TOTP steps are claimed
+atomically in Redis with an expiry matching the validation window, so replay is
+rejected consistently across API instances.
+
 **Request:**
 ```json
 {
@@ -156,6 +162,10 @@ Verify a scanned QR against the per-checkpoint secret. The QR carries only
 ```
 `result` is one of: `valid`, `expired`, `unknown_participant`, `duplicate`,
 `wrong_checkpoint`, `not_eligible`, `payment_pending`.
+
+`429 scan_rate_limited` is returned when the composite scan-attempt limit is
+exceeded. `503 verification_state_unavailable` fails closed when Redis is not
+available.
 
 ## Events (Epic 1)
 

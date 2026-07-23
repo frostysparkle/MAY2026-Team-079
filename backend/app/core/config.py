@@ -51,6 +51,10 @@ class Settings:
     hostel_fee_amount: int
     frontend_base_url: str
     enable_dev_login: bool
+    redis_url: str | None
+    qr_secret_encryption_key: str | None
+    qr_scan_rate_limit: int
+    qr_scan_rate_window_seconds: int
 
 
 @lru_cache
@@ -96,5 +100,13 @@ def get_settings() -> Settings:
         enable_dev_login=(
             environment != "production"
             and getenv("ENABLE_DEV_LOGIN", "").strip().lower() == "true"
+        ),
+        redis_url=getenv("REDIS_URL", "").strip() or None,
+        qr_secret_encryption_key=(
+            getenv("QR_SECRET_ENCRYPTION_KEY", "").strip() or None
+        ),
+        qr_scan_rate_limit=_positive_int_setting("QR_SCAN_RATE_LIMIT", 10),
+        qr_scan_rate_window_seconds=_positive_int_setting(
+            "QR_SCAN_RATE_WINDOW_SECONDS", 60
         ),
     )

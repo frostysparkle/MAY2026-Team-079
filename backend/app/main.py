@@ -24,18 +24,24 @@ from app.profile.routes import router as profile_router
 from app.qr.routes import router as qr_router
 from app.queries.routes import router as queries_router
 from app.core.errors import ApiError, api_error_handler, validation_error_handler
+from app.core.redis import RedisService
 from app.db.mongo import MongoService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    mongo = MongoService(get_settings())
+    settings = get_settings()
+    mongo = MongoService(settings)
+    redis = RedisService(settings)
     mongo.connect()
+    redis.connect()
     app.state.mongo = mongo
+    app.state.redis = redis
 
     try:
         yield
     finally:
+        await redis.close()
         await mongo.close()
 
 
@@ -52,7 +58,7 @@ def create_app() -> FastAPI:
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Scanner-Device-ID"],
     )
     application.add_exception_handler(ApiError, api_error_handler)
     application.add_exception_handler(

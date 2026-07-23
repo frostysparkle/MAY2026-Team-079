@@ -92,6 +92,7 @@ import type {
 } from './types';
 import { ROLES, type Role } from '@/config/constants';
 import { env } from '@/config/env';
+import { getScannerDeviceId } from '@/lib/scannerDevice';
 
 /** JWT is persisted by the auth store under this key. */
 const TOKEN_KEY = 'pc_token';
@@ -573,6 +574,7 @@ export const realApi: ApiClient = {
       detail?: string;
     }>('/scan/verify', {
       method: 'POST',
+      headers: { 'X-Scanner-Device-ID': getScannerDeviceId() },
       body: JSON.stringify({
         participant_id: req.participantId,
         current_code: req.currentCode,

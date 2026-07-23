@@ -134,7 +134,7 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
     )
 
     # Event secrets are isolated by event; fixed checkpoints use their context
-    # name as scope_id. Re-provisioning rotates only the selected scope.
+    # name as scope_id. Only authenticated ciphertext is stored.
     qr_secrets = database[QR_SECRETS]
     qr_secret_indexes = await qr_secrets.index_information()
     if "uq_qr_secrets_user_context" in qr_secret_indexes:
@@ -153,11 +153,16 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
         ]
     )
 
-    # Scan audit log + replay protection is isolated by concrete event/checkpoint.
+    # Scan logs remain the durable audit trail. Expiring replay state lives in
+    # Redis so every API instance observes the same used-code marker.
     scan_logs = database[SCAN_LOGS]
     scan_log_indexes = await scan_logs.index_information()
-    if "uq_scan_logs_replay" in scan_log_indexes:
-        await scan_logs.drop_index("uq_scan_logs_replay")
+    for obsolete_index in (
+        "uq_scan_logs_replay",
+        "uq_scan_logs_scope_replay",
+    ):
+        if obsolete_index in scan_log_indexes:
+            await scan_logs.drop_index(obsolete_index)
     await scan_logs.create_indexes(
         [
             IndexModel(
@@ -167,9 +172,7 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
                     ("scope_id", ASCENDING),
                     ("step", ASCENDING),
                 ],
-                unique=True,
-                partialFilterExpression={"step": {"$exists": True}},
-                name="uq_scan_logs_scope_replay",
+                name="ix_scan_logs_scope_step",
             ),
             IndexModel(
                 [("participant_id", ASCENDING), ("scanned_at", ASCENDING)],

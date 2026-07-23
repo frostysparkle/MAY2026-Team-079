@@ -37,6 +37,10 @@ def _settings(enable_dev_login: bool) -> Settings:
         hostel_fee_amount=2000,
         frontend_base_url="http://localhost:5173",
         enable_dev_login=enable_dev_login,
+        redis_url=None,
+        qr_secret_encryption_key=None,
+        qr_scan_rate_limit=10,
+        qr_scan_rate_window_seconds=60,
     )
 
 

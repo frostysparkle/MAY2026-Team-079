@@ -1,8 +1,9 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import PyMongoError
+from redis.exceptions import RedisError
 
 from app.auth.dependencies import (
     get_current_user,
@@ -18,6 +19,8 @@ from app.auth.dependencies import (
 from app.auth.scopes import ensure_scope_access
 from app.core.errors import ApiError
 from app.participants.serialization import resolve_photo_url
+from app.qr.crypto import SecretCipher
+from app.qr.dependencies import get_secret_cipher, get_verification_state
 from app.qr.schemas import (
     ProvisionSecretRequest,
     ProvisionSecretResponse,
@@ -28,9 +31,12 @@ from app.qr.schemas import (
 from app.qr.service import (
     EventCheckpointUnavailableError,
     EventRegistrationRequiredError,
+    ScanRateLimitExceededError,
+    StoredQrSecretInvalidError,
     provision_secret,
     verify_scan,
 )
+from app.qr.verification_state import RedisVerificationState
 
 
 router = APIRouter(tags=["qr"])
@@ -53,12 +59,14 @@ async def provision_secret_route(
     registrations: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
     ],
+    secret_cipher: Annotated[SecretCipher, Depends(get_secret_cipher)],
 ) -> ProvisionSecretResponse:
     try:
         secret = await provision_secret(
             qr_secrets,
             events,
             registrations,
+            secret_cipher,
             current_user["_id"],
             body.checkpoint_context,
             body.event_id,
@@ -97,7 +105,17 @@ async def provision_secret_route(
 )
 async def verify_scan_route(
     body: VerifyScanRequest,
+    request: Request,
     actor: Annotated[dict[str, Any], Depends(get_current_user)],
+    scanner_device_id: Annotated[
+        str,
+        Header(
+            alias="X-Scanner-Device-ID",
+            min_length=8,
+            max_length=128,
+            pattern=r"^[A-Za-z0-9._:-]+$",
+        ),
+    ],
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
     ],
@@ -124,6 +142,10 @@ async def verify_scan_route(
         AsyncCollection[dict[str, Any]] | None,
         Depends(get_photos_collection_optional),
     ],
+    secret_cipher: Annotated[SecretCipher, Depends(get_secret_cipher)],
+    verification_state: Annotated[
+        RedisVerificationState, Depends(get_verification_state)
+    ],
 ) -> VerifyScanResponse:
     try:
         await ensure_scope_access(
@@ -141,13 +163,35 @@ async def verify_scan_route(
             registrations,
             qr_secrets,
             scan_logs,
+            secret_cipher,
+            verification_state,
             body.participant_id,
             body.current_code,
             body.checkpoint_context,
             actor["_id"],
+            scanner_device_id,
+            request.client.host if request.client is not None else "unknown",
             hostel_allocations=hostel_allocations,
             event_id=body.event_id,
         )
+    except ScanRateLimitExceededError as exc:
+        raise ApiError(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            code="scan_rate_limited",
+            message="Too many scan attempts. Try again shortly.",
+        ) from exc
+    except StoredQrSecretInvalidError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="digital_id_unavailable",
+            message=str(exc),
+        ) from exc
+    except RedisError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="verification_state_unavailable",
+            message="QR verification state is temporarily unavailable.",
+        ) from exc
     except PyMongoError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

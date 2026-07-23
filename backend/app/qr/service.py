@@ -4,9 +4,10 @@ from typing import Any
 
 from bson import ObjectId
 from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.errors import DuplicateKeyError
 
-from app.qr.totp import generate_secret, verify_and_step
+from app.qr.crypto import SecretCipher, SecretDecryptionError
+from app.qr.totp import REPLAY_TTL_SECONDS, generate_secret, verify_and_step
+from app.qr.verification_state import VerificationState
 
 
 class EventCheckpointUnavailableError(RuntimeError):
@@ -14,6 +15,14 @@ class EventCheckpointUnavailableError(RuntimeError):
 
 
 class EventRegistrationRequiredError(RuntimeError):
+    pass
+
+
+class ScanRateLimitExceededError(RuntimeError):
+    pass
+
+
+class StoredQrSecretInvalidError(RuntimeError):
     pass
 
 
@@ -54,6 +63,7 @@ async def provision_secret(
     qr_secrets: AsyncCollection[dict[str, Any]],
     events: AsyncCollection[dict[str, Any]],
     registrations: AsyncCollection[dict[str, Any]],
+    secret_cipher: SecretCipher,
     user_id: ObjectId,
     checkpoint_context: str,
     event_id: str | None,
@@ -69,6 +79,7 @@ async def provision_secret(
         )
 
     secret = generate_secret()
+    ciphertext = secret_cipher.encrypt(secret)
     now = datetime.now(UTC)
     await qr_secrets.update_one(
         {
@@ -81,10 +92,11 @@ async def provision_secret(
                 "user_id": user_id,
                 "checkpoint_context": checkpoint_context,
                 "scope_id": scope_id,
-                "secret_base32": secret,
+                "secret_ciphertext": ciphertext,
                 "updated_at": now,
             },
             "$setOnInsert": {"created_at": now},
+            "$unset": {"secret_base32": ""},
         },
         upsert=True,
     )
@@ -141,10 +153,14 @@ async def verify_scan(
     registrations: AsyncCollection[dict[str, Any]],
     qr_secrets: AsyncCollection[dict[str, Any]],
     scan_logs: AsyncCollection[dict[str, Any]],
+    secret_cipher: SecretCipher,
+    verification_state: VerificationState,
     participant_id: str,
     current_code: str,
     checkpoint_context: str,
     scanned_by: ObjectId,
+    scanner_device_id: str,
+    scanner_ip: str,
     hostel_allocations: AsyncCollection[dict[str, Any]] | None = None,
     event_id: str | None = None,
 ) -> ScanOutcome:
@@ -152,6 +168,11 @@ async def verify_scan(
         scope_id = checkpoint_scope_id(checkpoint_context, event_id)
     except EventCheckpointUnavailableError:
         return ScanOutcome("wrong_checkpoint")
+
+    if not await verification_state.allow_attempt(
+        participant_id, scanner_device_id, scanner_ip
+    ):
+        raise ScanRateLimitExceededError("Too many scan attempts.")
 
     if not ObjectId.is_valid(participant_id):
         await _audit(
@@ -233,7 +254,19 @@ async def verify_scan(
         )
         return ScanOutcome("wrong_checkpoint")
 
-    step = verify_and_step(secret_doc["secret_base32"], current_code)
+    ciphertext = secret_doc.get("secret_ciphertext")
+    if not isinstance(ciphertext, str):
+        raise StoredQrSecretInvalidError(
+            "The participant's digital ID must be provisioned again."
+        )
+    try:
+        secret = secret_cipher.decrypt(ciphertext)
+    except SecretDecryptionError as exc:
+        raise StoredQrSecretInvalidError(
+            "The participant's digital ID cannot be verified."
+        ) from exc
+
+    step = verify_and_step(secret, current_code)
     if step is None:
         await _audit(
             scan_logs,
@@ -272,7 +305,23 @@ async def verify_scan(
             )
             return ScanOutcome("not_eligible", detail="No accommodation assigned.")
 
-    # Replay protection includes the concrete event/checkpoint scope.
+    if not await verification_state.mark_code_used(
+        participant_id,
+        checkpoint_context,
+        scope_id,
+        step,
+        REPLAY_TTL_SECONDS,
+    ):
+        await _audit(
+            scan_logs,
+            participant_id,
+            checkpoint_context,
+            scope_id,
+            "duplicate",
+            scanned_by,
+        )
+        return ScanOutcome("duplicate")
+
     log: dict[str, Any] = {
         "participant_id": participant_id,
         "checkpoint_context": checkpoint_context,
@@ -284,10 +333,7 @@ async def verify_scan(
     }
     if checkpoint_context == "event":
         log["event_id"] = scope_id
-    try:
-        await scan_logs.insert_one(log)
-    except DuplicateKeyError:
-        return ScanOutcome("duplicate")
+    await scan_logs.insert_one(log)
 
     detail: str | None = None
     if allocation is not None:

@@ -29,6 +29,17 @@ Generate a local JWT signing secret and place the result in `.env`:
 .venv-windows\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+QR verification also requires Redis plus a Fernet key held outside MongoDB:
+
+```powershell
+.\.venv-windows\Scripts\python.exe -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set the output as `QR_SECRET_ENCRYPTION_KEY` and configure `REDIS_URL`. Scan
+verification fails closed when either dependency is unavailable. Redis stores
+only expiring, hashed replay/rate-limit keys; MongoDB stores encrypted TOTP
+secret ciphertext and the durable scan audit log.
+
 Authentication fails closed when `GOOGLE_CLIENT_ID` or a JWT secret of at least
 32 characters is missing.
 
@@ -100,11 +111,13 @@ New users always start with the `participant` role.
 * `GET /` confirms that FastAPI is running and points to the database check.
 * `GET /ping-db` returns MongoDB reachability in the starter response format.
 * `GET /api/v1/health/live` confirms that FastAPI is running.
-* `GET /api/v1/health/ready` confirms that MongoDB is configured and reachable.
+* `GET /api/v1/health/ready` confirms MongoDB, Redis, and QR encryption
+  configuration are ready.
 * `GET /api/v1/health/google` confirms local Google/JWT configuration and checks
   Google's OpenID Connect discovery endpoint without exposing credentials.
 
-`/live` works without MongoDB. `/ready` returns HTTP 503 until `MONGODB_URI` points to a reachable database.
+`/live` works without external services. `/ready` returns HTTP 503 until MongoDB,
+Redis, and QR secret encryption are configured.
 
 ## Test accounts (manual QA)
 

@@ -14,6 +14,7 @@ import pyotp
 PERIOD_SECONDS = 30
 DIGITS = 6
 WINDOW = 1
+REPLAY_TTL_SECONDS = PERIOD_SECONDS * (2 * WINDOW + 1)
 
 
 def generate_secret() -> str:
