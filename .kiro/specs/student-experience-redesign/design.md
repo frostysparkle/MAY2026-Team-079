@@ -4,7 +4,7 @@
 
 This design reorients Paradox Connect around a single student journey and adds a
 test-account harness, building on the existing modules rather than replacing
-them. Auth (Google Sign-in), profile, events, mess, hostel, payments (mock
+them. Auth (email + password), profile, events, mess, hostel, payments (mock
 gateway), announcements, attendance, and the on-device QR all remain the source
 of truth. We add three things:
 
@@ -72,8 +72,8 @@ sequenceDiagram
   participant BE as Backend
   S->>FE: Open app (unauthenticated)
   FE->>S: Student landing (primary CTA: Register/Sign in)
-  S->>FE: Google sign-in (IITM domain)
-  FE->>BE: POST /auth/google
+  S->>FE: Enter email + password (register or sign in)
+  FE->>BE: POST /auth/register or POST /auth/login
   BE-->>FE: session + participant
   FE->>BE: GET /me/journey
   BE-->>FE: { nextStep: "profile", ... }
@@ -170,10 +170,10 @@ Computed by `app/journey/service.py` from: `users.profile_complete`,
 | `POST /events/{id}/register` | student | Register (capacity-checked); idempotent | 7 |
 | `DELETE /events/{id}/register` | student | Cancel registration | 7 |
 | `GET /me/registrations` | student | My registered events (with event details) | 7,8 |
-| `POST /auth/dev-login` `{ email }` | dev-only | Issue a session for a seeded account (no Google) | 10 |
+| `POST /auth/dev-login` `{ email }` | dev-only | Issue a session for a seeded account (no password) | 10 |
 | `GET /auth/test-accounts` | dev-only | List seeded accounts for the switcher | 10 |
 
-Existing endpoints reused unchanged: `/auth/google`, `/profile/complete`,
+Existing endpoints reused unchanged: `/auth/register`, `/auth/login`, `/profile/complete`,
 `/mess/*`, `/hostel/*`, `/payments/*`, `/events` (list/detail get two extra
 read-only fields below), `/announcements`, `/qr/*`, `/scan/verify`.
 
@@ -384,9 +384,9 @@ authorized on the backend.
 3. **Event pass = existing QR, not a new secret.** Preserves the audited TOTP
    model and offline behavior (Req 9.1, 12.1) instead of minting per-event
    secrets.
-4. **Dev login over fake Google tokens.** A gated, first-class dev endpoint is
-   safer and clearer than mocking Google server-side, and is impossible to reach
-   in production (Req 10.4).
+4. **Dev login over shared test passwords.** A gated, first-class dev endpoint is
+   safer and clearer than distributing shared credentials, and is impossible to
+   reach in production (Req 10.4).
 5. **Reference (techfest.org) informs IA only.** Journey spine, event
    presentation, and nav hierarchy are adapted to a mobile-first PWA; no visual
    cloning.

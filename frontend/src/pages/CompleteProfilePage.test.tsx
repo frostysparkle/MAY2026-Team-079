@@ -1,10 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import CompleteProfilePage from './CompleteProfilePage';
 import { useAuthStore } from '@/stores/authStore';
 import type { Participant } from '@/api/types';
+
+// Validation blocks the submit before any network call, but stub the api so the
+// page never reaches the real backend under test.
+vi.mock('@/api', async () => {
+  const actual = await vi.importActual<typeof import('@/api/ApiClient')>('@/api/ApiClient');
+  return { ApiClientError: actual.ApiClientError, api: { completeProfile: vi.fn() } };
+});
 
 const newUser: Participant = {
   id: 'p_new',

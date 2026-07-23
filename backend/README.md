@@ -70,6 +70,10 @@ first Super Admin should be created during initialization. There is no default
 password. The password is hashed before storage and is never printed. Bootstrap
 refuses to replace a different Super Admin or promote an existing ordinary user.
 
+`ALLOWED_EMAIL_DOMAINS` (comma-separated, defaulting to the four IITM BS-degree
+domains) restricts the email domains accepted by the `scripts.grant_admin`
+maintenance command. Leave it unset to use the defaults.
+
 The command is idempotent. It also removes obsolete unique `username` and
 `google_subject` indexes left by earlier authentication models and reconciles
 the atomic event-registration counters for existing events. Run it as a

@@ -23,14 +23,11 @@ cp .env.example .env.local   # optional; sensible defaults work out of the box
 npm run dev
 ```
 
-The app runs against an in-memory **mock API** by default (`VITE_USE_MOCK_API=true`),
-so no backend is required. The login screen uses the same email/password flow in
-mock and real-API modes. Seed accounts (one per role):
-
-- `student@mg.study.iitm.ac.in` — Participant
-- `organizer@ee.study.iitm.ac.in` — Organizer
-- `admin@es.study.iitm.ac.in` — Admin
-- `superadmin@ds.study.iitm.ac.in` — Super Admin
+The app talks to the real FastAPI backend, so point `VITE_API_BASE_URL` at a
+running backend (including the `/api/v1` prefix). For realistic local data, seed
+the backend test accounts and use the dev-only account switcher
+(`VITE_ENABLE_DEV_SWITCHER=true`, dev builds only) — see `backend/README.md`
+(`scripts.seed_test_data` + `/auth/dev-login`).
 
 ## Scripts
 
@@ -49,7 +46,7 @@ mock and real-API modes. Seed accounts (one per role):
 
 ```
 src/
-  api/          Typed API client, mock + real implementations, contract types
+  api/          Typed ApiClient interface, real backend adapter, contract types
   components/   Reusable UI primitives, layout shell, route guard
   config/       env, constants (roles, TOTP params, domains), routes
   features/     Feature logic (auth, profile, qr, scan)
@@ -60,10 +57,10 @@ src/
 
 ## Notes for the team
 
-- **No backend yet.** Everything goes through `src/api` behind the `ApiClient`
-  interface. Flip `VITE_USE_MOCK_API=false` (and set `VITE_API_BASE_URL`) to use
-  the real backend once endpoints exist. The request/response types in
-  `src/api/types.ts` are the contract for the backend developer.
+- **Single API boundary.** Everything goes through `src/api` behind the
+  `ApiClient` interface — components never call `fetch` directly. Set
+  `VITE_API_BASE_URL` to your backend. The request/response types in
+  `src/api/types.ts` are the shared contract with the backend.
 - **Offline digital ID.** The My QR page generates TOTP codes on-device from a
   per-checkpoint secret cached in encrypted IndexedDB — no server call on refresh.
   Test offline behavior with `npm run build && npm run preview`, then toggle the

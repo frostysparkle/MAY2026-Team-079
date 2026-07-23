@@ -392,7 +392,7 @@ function HowItWorks() {
 /* -------------------------------------------------------------- faq --- */
 
 const FAQS = [
-  { q: 'Who can register?', a: 'Any eligible participant can create an account with their email and a password. New accounts receive participant access only.' },
+  { q: 'Who can register?', a: 'Any IIT Madras student. Register with your email and a password, then complete your profile to get your pass.' },
   { q: 'Is accommodation or a meal plan required?', a: 'No. Both are optional. You can register for events without booking a stay or mess plan, and add them later during onboarding.' },
   { q: 'How does the digital pass work?', a: 'Your identity generates a rotating QR code on your device. It refreshes every 30 seconds and keeps working offline, so entry is fast even with a weak network.' },
   { q: 'Do I need to install anything?', a: 'No app store needed. Paradox Connect is a progressive web app — open it in your browser and optionally add it to your home screen for an app-like experience.' },

@@ -7,8 +7,6 @@
 export const env = {
   // Must include the backend version prefix, e.g. http://localhost:8000/api/v1
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1',
-  // Default to the mock API so the app runs with no backend and no config.
-  useMockApi: (import.meta.env.VITE_USE_MOCK_API ?? 'true') !== 'false',
   // Dev-only account switcher (Req 10). Never enable in a production build.
   enableDevSwitcher:
     import.meta.env.DEV && (import.meta.env.VITE_ENABLE_DEV_SWITCHER ?? 'true') !== 'false',

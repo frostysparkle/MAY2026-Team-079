@@ -3,8 +3,8 @@
 ## Introduction
 
 Paradox Connect is a mobile-first PWA for the IIT Madras BS fest, Paradox. The
-platform already has working modules for authentication (Google Sign-in, IITM
-domains), profile completion, events, mess, hostel, queries/contacts,
+platform already has working modules for authentication (email + password),
+profile completion, events, mess, hostel, queries/contacts,
 announcements, attendance, payments (mock gateway), and an admin/operations
 surface.
 
@@ -59,12 +59,11 @@ without having to understand internal roles.
 
 1. WHEN an unauthenticated user opens the application root THE SYSTEM SHALL
    present a student-oriented landing whose primary call to action is "Register
-   / Sign in as a student" using a college Google account.
+   / Sign in as a student" using an email and password.
 2. THE SYSTEM SHALL provide access to Organizer and Admin entry points from the
    landing WITHOUT making them the primary or most prominent action.
-3. WHEN a user signs in with a Google account whose domain is not an approved
-   IITM domain THE SYSTEM SHALL reject the sign-in and display a clear message
-   naming the accepted domains.
+3. WHEN a user registers or signs in THE SYSTEM SHALL validate the email and
+   password and display a clear message when the credentials are invalid.
 4. WHEN a returning student signs in THE SYSTEM SHALL route them to the next
    incomplete onboarding step, or to the student home if onboarding is complete.
 5. THE SYSTEM SHALL treat the resolved server-side role as the source of truth

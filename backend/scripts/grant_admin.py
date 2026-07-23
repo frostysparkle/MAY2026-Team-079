@@ -25,10 +25,16 @@ from app.db.collections import USERS  # noqa: E402
 from app.db.mongo import MongoService  # noqa: E402
 
 
-def _validate(email: str, role: str) -> str:
+def _validate(settings: Any, email: str, role: str) -> str:
     email = email.strip().casefold()
     if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise SystemExit(f"'{email}' is not a valid email address.")
+    domain = email.rsplit("@", 1)[1]
+    if domain not in settings.allowed_email_domains:
+        raise SystemExit(
+            f"'{email}' does not use an allowed IITM domain "
+            f"({', '.join(settings.allowed_email_domains)})."
+        )
     if role not in ROLE_ORDER:
         raise SystemExit(
             f"'{role}' is not a valid role. Choose one of: {', '.join(ROLE_ORDER)}."
@@ -57,7 +63,7 @@ async def _run(email: str, role: str) -> None:
     settings = get_settings()
     if settings.mongodb_uri is None:
         raise SystemExit("MONGODB_URI is not set. Add it to backend/.env first.")
-    email = _validate(email, role)
+    email = _validate(settings, email, role)
 
     mongo = MongoService(settings)
     mongo.connect()

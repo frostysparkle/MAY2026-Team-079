@@ -16,6 +16,7 @@ def _settings(enable_dev_login: bool) -> Settings:
         mongodb_uri=None,
         mongodb_database="test",
         app_env="test",
+        allowed_email_domains=("ds.study.iitm.ac.in",),
         jwt_secret="x" * 40,
         jwt_issuer="paradox-connect-test",
         jwt_access_token_minutes=30,

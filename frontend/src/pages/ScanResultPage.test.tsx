@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ScanResultPage from './ScanResultPage';
-import { mockApi } from '@/api/mock/mockApi';
-import { generateCode } from '@/lib/totp';
+import { api } from '@/api';
+import type { VerifyScanResponse } from '@/api/types';
 import type { PendingScan } from '@/features/scan/types';
+
+// The real backend owns TOTP verification (SHA1/6/30/±1) and replay/context
+// checks — those are covered by the backend pytest suite. Here we stub the
+// typed api and assert only that the page renders the right outcome UI.
+vi.mock('@/api', async () => {
+  const actual = await vi.importActual<typeof import('@/api/ApiClient')>('@/api/ApiClient');
+  return { ApiClientError: actual.ApiClientError, api: { verifyScan: vi.fn() } };
+});
 
 async function renderResult(scan: PendingScan) {
   return render(
@@ -18,38 +26,20 @@ async function renderResult(scan: PendingScan) {
 }
 
 describe('ScanResultPage', () => {
-  beforeEach(async () => {
-    await mockApi.login({
-      email: 'fullstack@ds.study.iitm.ac.in',
-      password: 'password123',
-    });
-  });
+  beforeEach(() => vi.mocked(api.verifyScan).mockReset());
 
   it('shows Valid for a correct, current code', async () => {
-    const { participantId, secretBase32 } = await mockApi.provisionSecret({
-      checkpointContext: 'event',
-      eventId: 'e_keynote',
-    });
-    await renderResult({
-      participantId,
-      currentCode: generateCode(secretBase32),
-      checkpoint: 'event',
-      eventId: 'e_keynote',
-    });
+    vi.mocked(api.verifyScan).mockResolvedValue({
+      result: 'valid',
+      participant: { id: 'p_1', fullName: 'Test Student', photoUrl: null },
+    } as VerifyScanResponse);
+    await renderResult({ participantId: 'p_1', currentCode: '123456', checkpoint: 'event' });
     expect(await screen.findByText('Valid')).toBeInTheDocument();
   });
 
   it('shows Expired QR for a wrong/expired code', async () => {
-    const { participantId } = await mockApi.provisionSecret({
-      checkpointContext: 'event',
-      eventId: 'e_keynote',
-    });
-    await renderResult({
-      participantId,
-      currentCode: '000000',
-      checkpoint: 'event',
-      eventId: 'e_keynote',
-    });
+    vi.mocked(api.verifyScan).mockResolvedValue({ result: 'expired' } as VerifyScanResponse);
+    await renderResult({ participantId: 'p_1', currentCode: '000000', checkpoint: 'event' });
     expect(await screen.findByText('Expired QR')).toBeInTheDocument();
   });
 });

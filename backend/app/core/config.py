@@ -4,6 +4,12 @@ from os import getenv
 
 
 DEFAULT_DATABASE_NAME = "paradox_connect"
+DEFAULT_EMAIL_DOMAINS = (
+    "ds.study.iitm.ac.in",
+    "es.study.iitm.ac.in",
+    "ee.study.iitm.ac.in",
+    "mg.study.iitm.ac.in",
+)
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173",)
 
 
@@ -32,6 +38,7 @@ class Settings:
     mongodb_uri: str | None
     mongodb_database: str
     app_env: str
+    allowed_email_domains: tuple[str, ...]
     jwt_secret: str | None
     jwt_issuer: str
     jwt_access_token_minutes: int
@@ -67,6 +74,9 @@ def get_settings() -> Settings:
         mongodb_uri=uri,
         mongodb_database=database or DEFAULT_DATABASE_NAME,
         app_env=environment or "development",
+        allowed_email_domains=_csv_setting(
+            "ALLOWED_EMAIL_DOMAINS", DEFAULT_EMAIL_DOMAINS
+        ),
         jwt_secret=jwt_secret,
         jwt_issuer=getenv("JWT_ISSUER", "paradox-connect").strip()
         or "paradox-connect",

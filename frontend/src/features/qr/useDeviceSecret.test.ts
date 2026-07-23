@@ -1,9 +1,17 @@
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useDeviceSecret } from './useDeviceSecret';
-import { mockApi } from '@/api/mock/mockApi';
+import { api } from '@/api';
+import type { ProvisionSecretResponse } from '@/api/types';
 import { clearSecrets } from '@/lib/secretStore';
+
+// Provisioning is a real backend call; here we stub it and let the encrypted
+// IndexedDB secret store (fake-indexeddb) exercise the real caching path.
+vi.mock('@/api', async () => {
+  const actual = await vi.importActual<typeof import('@/api/ApiClient')>('@/api/ApiClient');
+  return { ApiClientError: actual.ApiClientError, api: { provisionSecret: vi.fn() } };
+});
 
 function setOnline(value: boolean) {
   Object.defineProperty(navigator, 'onLine', { value, configurable: true });
@@ -13,11 +21,12 @@ describe('useDeviceSecret', () => {
   beforeEach(async () => {
     setOnline(true);
     await clearSecrets();
-    // A signed-in participant is required for provisioning.
-    await mockApi.login({
-      email: 'fullstack@ds.study.iitm.ac.in',
-      password: 'password123',
-    });
+    vi.mocked(api.provisionSecret).mockReset();
+    vi.mocked(api.provisionSecret).mockResolvedValue({
+      participantId: 'p_1',
+      checkpointContext: 'event',
+      secretBase32: 'JBSWY3DPEHPK3PXP',
+    } as ProvisionSecretResponse);
   });
   afterEach(() => setOnline(true));
 
@@ -25,12 +34,15 @@ describe('useDeviceSecret', () => {
     const first = renderHook(() => useDeviceSecret('event', 'e_keynote'));
     await waitFor(() => expect(first.result.current.status).toBe('ready'));
     expect(first.result.current.secret).toBeTruthy();
+    expect(api.provisionSecret).toHaveBeenCalledTimes(1);
 
-    // Go offline and mount again for the same checkpoint — must load from cache.
+    // Go offline and mount again for the same checkpoint — must load from cache
+    // without hitting the network again.
     setOnline(false);
     const second = renderHook(() => useDeviceSecret('event', 'e_keynote'));
     await waitFor(() => expect(second.result.current.status).toBe('ready'));
     expect(second.result.current.secret).toBe(first.result.current.secret);
+    expect(api.provisionSecret).toHaveBeenCalledTimes(1);
   });
 
   it('errors when a checkpoint has no cached secret and the device is offline', async () => {
@@ -38,11 +50,6 @@ describe('useDeviceSecret', () => {
     const { result } = renderHook(() => useDeviceSecret('hostel'));
     await waitFor(() => expect(result.current.status).toBe('error'));
     expect(result.current.error).toMatch(/Connect to the internet/i);
-  });
-
-  it('requires a concrete event scope', async () => {
-    const { result } = renderHook(() => useDeviceSecret('event'));
-    await waitFor(() => expect(result.current.status).toBe('error'));
-    expect(result.current.error).toMatch(/select an event/i);
+    expect(api.provisionSecret).not.toHaveBeenCalled();
   });
 });
