@@ -6,7 +6,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import PyMongoError
 
-from app.auth.google import GoogleTokenVerifier
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.security import (
@@ -137,15 +136,6 @@ def get_photos_collection_optional(
         return request.app.state.mongo.database[PHOTOS]
     except RuntimeError:
         return None
-
-
-def get_google_verifier(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> GoogleTokenVerifier:
-    return GoogleTokenVerifier(
-        client_id=settings.google_client_id,
-        allowed_domains=settings.allowed_google_domains,
-    )
 
 
 async def get_current_user(

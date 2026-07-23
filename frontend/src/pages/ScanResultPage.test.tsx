@@ -19,7 +19,7 @@ async function renderResult(scan: PendingScan) {
 
 describe('ScanResultPage', () => {
   beforeEach(async () => {
-    await mockApi.loginWithGoogle({ idToken: 'student@mg.study.iitm.ac.in' });
+    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
   });
 
   it('shows Valid for a correct, current code', async () => {

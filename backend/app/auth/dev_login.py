@@ -19,7 +19,7 @@ from app.auth.dependencies import (
     get_users_collection,
 )
 from app.auth.roles import ROLE_ORDER
-from app.auth.schemas import GoogleLoginResponse
+from app.auth.schemas import AuthResponse
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.security import create_access_token
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/auth", tags=["dev"])
 
 # Ensure the forward-referenced ParticipantOut is resolvable for response_model,
 # regardless of import order.
-GoogleLoginResponse.model_rebuild(_types_namespace={"ParticipantOut": ParticipantOut})
+AuthResponse.model_rebuild(_types_namespace={"ParticipantOut": ParticipantOut})
 
 
 class DevLoginRequest(BaseModel):
@@ -73,8 +73,8 @@ def _highest_role(roles: list[str] | None) -> str:
 
 @router.post(
     "/dev-login",
-    response_model=GoogleLoginResponse,
-    summary="DEV ONLY: assume a seeded test account (no Google)",
+    response_model=AuthResponse,
+    summary="DEV ONLY: assume a seeded test account (no password)",
 )
 async def dev_login_route(
     body: DevLoginRequest,
@@ -84,7 +84,7 @@ async def dev_login_route(
         AsyncCollection[dict[str, Any]] | None,
         Depends(get_photos_collection_optional),
     ],
-) -> GoogleLoginResponse:
+) -> AuthResponse:
     try:
         user = await users.find_one(
             {"email": body.email.strip().casefold(), "is_test": True}
@@ -104,7 +104,7 @@ async def dev_login_route(
 
     token = create_access_token(str(user["_id"]), settings)
     photo_url = await resolve_photo_url(photos, user["_id"])
-    return GoogleLoginResponse(
+    return AuthResponse(
         access_token=token,
         expires_in=settings.jwt_access_token_minutes * 60,
         is_new_user=False,

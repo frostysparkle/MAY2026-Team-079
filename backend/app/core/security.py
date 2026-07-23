@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -13,6 +16,49 @@ class SecurityConfigurationError(RuntimeError):
 
 class InvalidAccessTokenError(ValueError):
     pass
+
+
+# --- Password hashing (PBKDF2-HMAC-SHA256, stdlib only) ---------------------
+
+_PBKDF2_ALGORITHM = "pbkdf2_sha256"
+_PBKDF2_ITERATIONS = 240_000
+_PBKDF2_SALT_BYTES = 16
+
+
+def hash_password(password: str) -> str:
+    """Return a self-describing PBKDF2 hash: ``algo$iterations$salt$hash``."""
+    salt = secrets.token_bytes(_PBKDF2_SALT_BYTES)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, _PBKDF2_ITERATIONS
+    )
+    return "$".join(
+        [
+            _PBKDF2_ALGORITHM,
+            str(_PBKDF2_ITERATIONS),
+            salt.hex(),
+            derived.hex(),
+        ]
+    )
+
+
+def verify_password(password: str, stored_hash: str | None) -> bool:
+    """Constant-time verification of a password against a stored PBKDF2 hash."""
+    if not stored_hash:
+        return False
+    try:
+        algorithm, iterations_raw, salt_hex, expected_hex = stored_hash.split("$")
+        if algorithm != _PBKDF2_ALGORITHM:
+            return False
+        iterations = int(iterations_raw)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(expected_hex)
+    except (ValueError, AttributeError):
+        return False
+
+    derived = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, iterations
+    )
+    return hmac.compare_digest(derived, expected)
 
 
 def _jwt_secret(settings: Settings) -> str:

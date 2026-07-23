@@ -38,9 +38,16 @@ export interface Participant {
 
 /* ------------------------------------------------------------------ auth --- */
 
-export interface GoogleLoginRequest {
-  /** The ID token returned by Google Sign-in, verified server-side. */
-  idToken: string;
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  /** Optional display name captured at sign-up; profile is completed later. */
+  fullName?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
 }
 
 export interface AuthSession {
@@ -48,9 +55,9 @@ export interface AuthSession {
   participant: Participant;
 }
 
-export interface GoogleLoginResponse {
+export interface AuthResponse {
   session: AuthSession;
-  /** True on first sign-in → route to Complete Your Profile. */
+  /** True on first sign-in (registration) → route to Complete Your Profile. */
   isNewUser: boolean;
 }
 

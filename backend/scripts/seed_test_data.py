@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.core.config import get_settings  # noqa: E402
+from app.core.security import hash_password  # noqa: E402
 from app.db.collections import (  # noqa: E402
     EVENT_REGISTRATIONS,
     EVENTS,
@@ -37,6 +38,10 @@ from app.db.mongo import MongoService  # noqa: E402
 
 DOMAIN = "ds.study.iitm.ac.in"
 NOW = datetime.now(UTC)
+
+# Shared password for every seeded QA account, so they work with the
+# email/password login form. Dev/test only — never seed real accounts this way.
+SEED_PASSWORD = "Paradox@2026"
 
 
 def email(local: str) -> str:
@@ -72,7 +77,7 @@ async def _user(db: Any, local: str, *, order: int, label: str, roles=None,
     )
     doc = {
         "email": email(local),
-        "google_subject": f"seed-{local}",
+        "password_hash": hash_password(SEED_PASSWORD),
         "roles": roles or ["participant"],
         "status": "active",
         "email_verified": True,
@@ -228,8 +233,11 @@ async def _run(reset_only: bool) -> None:
         print(f"  {k}: {v}")
     print(
         "\nAccounts use @ds.study.iitm.ac.in (e.g. newbie@, hosteler@, fullstack@, "
-        "volunteer@, warden@).\nEnable ENABLE_DEV_LOGIN=true (dev only) to switch "
-        "between them from the app."
+        f"volunteer@, warden@).\nAll seeded accounts share the password: {SEED_PASSWORD}\n"
+        "  - warden@ds.study.iitm.ac.in  → admin\n"
+        "  - volunteer@ds.study.iitm.ac.in → organizer\n"
+        "Sign in with email + password, or enable ENABLE_DEV_LOGIN=true (dev only) "
+        "to switch between them from the app."
     )
 
 

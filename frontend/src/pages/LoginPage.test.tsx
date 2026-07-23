@@ -11,6 +11,7 @@ function renderLogin() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/complete-profile" element={<div>Complete Your Profile</div>} />
+        <Route path="/onboarding" element={<div>Onboarding</div>} />
         <Route path="/app" element={<div>Home Screen</div>} />
         <Route path="/admin/users" element={<div>User Management</div>} />
       </Routes>
@@ -18,20 +19,36 @@ function renderLogin() {
   );
 }
 
+const submitButton = (container: HTMLElement) =>
+  container.querySelector('button[type="submit"]') as HTMLButtonElement;
+
 describe('LoginPage', () => {
   beforeEach(() => useAuthStore.getState().clear());
 
-  it('shows a specific error for a non-IITM email', async () => {
-    renderLogin();
-    await userEvent.type(screen.getByLabelText(/college email/i), 'someone@gmail.com');
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByText(/not a valid IITM email/i)).toBeInTheDocument();
+  it('shows an error for incorrect credentials', async () => {
+    const { container } = renderLogin();
+    await userEvent.type(screen.getByLabelText(/^email/i), 'nobody@example.com');
+    await userEvent.type(screen.getByLabelText(/^password/i), 'password123');
+    await userEvent.click(submitButton(container));
+    expect(await screen.findByText(/incorrect email or password/i)).toBeInTheDocument();
   });
 
   it('signs in a seeded admin and routes to User Management', async () => {
-    renderLogin();
-    await userEvent.click(screen.getByRole('button', { name: /admin@es\.study\.iitm\.ac\.in/i }));
+    const { container } = renderLogin();
+    await userEvent.type(screen.getByLabelText(/^email/i), 'admin@es.study.iitm.ac.in');
+    await userEvent.type(screen.getByLabelText(/^password/i), 'password123');
+    await userEvent.click(submitButton(container));
     expect(await screen.findByText('User Management')).toBeInTheDocument();
     expect(useAuthStore.getState().participant?.role).toBe('admin');
+  });
+
+  it('registers a new account and routes into onboarding', async () => {
+    const { container } = renderLogin();
+    await userEvent.click(screen.getByRole('button', { name: 'Register' }));
+    await userEvent.type(screen.getByLabelText(/^email/i), 'fresh@example.com');
+    await userEvent.type(screen.getByLabelText(/^password/i), 'password123');
+    await userEvent.click(submitButton(container));
+    expect(await screen.findByText('Onboarding')).toBeInTheDocument();
+    expect(useAuthStore.getState().participant?.profileComplete).toBe(false);
   });
 });

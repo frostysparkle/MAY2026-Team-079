@@ -14,7 +14,7 @@ describe('useDeviceSecret', () => {
     setOnline(true);
     await clearSecrets();
     // A signed-in participant is required for provisioning.
-    await mockApi.loginWithGoogle({ idToken: 'student@mg.study.iitm.ac.in' });
+    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
   });
   afterEach(() => setOnline(true));
 

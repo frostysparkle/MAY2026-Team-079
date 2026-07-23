@@ -6,25 +6,21 @@ from pymongo.errors import PyMongoError
 
 from app.auth.dependencies import (
     get_current_user,
-    get_google_verifier,
     get_photos_collection_optional,
     get_users_collection,
 )
-from app.auth.google import (
-    GoogleAccountNotAllowedError,
-    GoogleIdentityConfigurationError,
-    GoogleIdentityError,
-    GoogleIdentityUnavailableError,
-    GoogleTokenVerifier,
-)
 from app.auth.schemas import (
-    GoogleLoginRequest,
-    GoogleLoginResponse,
+    AuthResponse,
+    LoginRequest,
+    RegisterRequest,
 )
 from app.auth.service import (
     AccountUnavailableError,
-    IdentityConflictError,
-    login_google_user,
+    EmailAlreadyRegisteredError,
+    InvalidCredentialsError,
+    LoginResult,
+    authenticate_user,
+    register_user,
 )
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
@@ -41,7 +37,7 @@ users_router = APIRouter(prefix="/users", tags=["users"])
 
 # Resolve the forward reference to ParticipantOut declared in schemas.py
 # (kept there to avoid a circular import at module load).
-GoogleLoginResponse.model_rebuild()
+AuthResponse.model_rebuild()
 
 
 async def _participant_response(
@@ -52,14 +48,28 @@ async def _participant_response(
     return serialize_participant(user, photo_url)
 
 
+async def _auth_response(
+    result: LoginResult,
+    settings: Settings,
+    photos: AsyncCollection[dict[str, Any]] | None,
+) -> AuthResponse:
+    access_token = create_access_token(str(result.user["_id"]), settings)
+    return AuthResponse(
+        access_token=access_token,
+        expires_in=settings.jwt_access_token_minutes * 60,
+        is_new_user=result.is_new_user,
+        user=await _participant_response(result.user, photos),
+    )
+
+
 @router.post(
-    "/google",
-    response_model=GoogleLoginResponse,
-    summary="Sign in with a Google Identity Services credential",
+    "/register",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new account with an email and password",
 )
-async def login_with_google(
-    body: GoogleLoginRequest,
-    verifier: Annotated[GoogleTokenVerifier, Depends(get_google_verifier)],
+async def register(
+    body: RegisterRequest,
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
     ],
@@ -68,39 +78,55 @@ async def login_with_google(
         Depends(get_photos_collection_optional),
     ],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> GoogleLoginResponse:
+) -> AuthResponse:
     try:
-        identity = await verifier.verify(body.credential)
-        result = await login_google_user(users, identity)
-        access_token = create_access_token(str(result.user["_id"]), settings)
-    except GoogleIdentityConfigurationError as exc:
-        raise ApiError(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="google_auth_not_configured",
-            message="Google authentication is not configured.",
-        ) from exc
-    except GoogleIdentityUnavailableError as exc:
-        raise ApiError(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="google_auth_unavailable",
-            message="Google identity verification is temporarily unavailable.",
-        ) from exc
-    except GoogleAccountNotAllowedError as exc:
-        raise ApiError(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="google_account_not_allowed",
-            message=str(exc),
-        ) from exc
-    except GoogleIdentityError as exc:
-        raise ApiError(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code="invalid_google_credential",
-            message=str(exc),
-        ) from exc
-    except IdentityConflictError as exc:
+        result = await register_user(
+            users, body.email, body.password, body.full_name
+        )
+        return await _auth_response(result, settings, photos)
+    except EmailAlreadyRegisteredError as exc:
         raise ApiError(
             status_code=status.HTTP_409_CONFLICT,
-            code="identity_conflict",
+            code="email_already_registered",
+            message=str(exc),
+        ) from exc
+    except SecurityConfigurationError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="authentication_not_configured",
+            message="Application authentication is not configured.",
+        ) from exc
+    except PyMongoError as exc:
+        raise ApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="database_unavailable",
+            message="The database is temporarily unavailable.",
+        ) from exc
+
+
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    summary="Sign in with an email and password",
+)
+async def login(
+    body: LoginRequest,
+    users: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_users_collection)
+    ],
+    photos: Annotated[
+        AsyncCollection[dict[str, Any]] | None,
+        Depends(get_photos_collection_optional),
+    ],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AuthResponse:
+    try:
+        result = await authenticate_user(users, body.email, body.password)
+        return await _auth_response(result, settings, photos)
+    except InvalidCredentialsError as exc:
+        raise ApiError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="invalid_credentials",
             message=str(exc),
         ) from exc
     except AccountUnavailableError as exc:
@@ -121,13 +147,6 @@ async def login_with_google(
             code="database_unavailable",
             message="The database is temporarily unavailable.",
         ) from exc
-
-    return GoogleLoginResponse(
-        access_token=access_token,
-        expires_in=settings.jwt_access_token_minutes * 60,
-        is_new_user=result.is_new_user,
-        user=await _participant_response(result.user, photos),
-    )
 
 
 @users_router.get(

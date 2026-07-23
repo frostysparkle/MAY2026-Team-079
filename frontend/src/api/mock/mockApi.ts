@@ -11,8 +11,9 @@ import { Secret } from 'otpauth';
 import type { ApiClient } from '@/api/ApiClient';
 import { ApiClientError } from '@/api/ApiClient';
 import type {
-  GoogleLoginRequest,
-  GoogleLoginResponse,
+  RegisterRequest,
+  LoginRequest,
+  AuthResponse,
   CompleteProfileRequest,
   CompleteProfileResponse,
   ListUsersResponse,
@@ -73,7 +74,7 @@ import type {
   MyRegistrationsResponse,
   TestAccount,
 } from '@/api/types';
-import { IITM_EMAIL_DOMAINS, TOTP, roleRank } from '@/config/constants';
+import { TOTP, roleRank } from '@/config/constants';
 import { verifyCode } from '@/lib/totp';
 import { resolveJourney } from '@/features/journey/resolve';
 import {
@@ -264,7 +265,8 @@ onboarding.p_participant = {
 
 const delay = (ms = 160) => new Promise((r) => setTimeout(r, ms));
 
-const isIitmEmail = (email: string) => IITM_EMAIL_DOMAINS.some((d) => email.endsWith(d));
+/** In-memory password store for the mock (email → password). */
+const passwords = new Map<string, string>();
 
 /** Deterministic Base32 secret from a seed (mulberry32 → 20 bytes). */
 function deterministicSecret(seed: string): string {
@@ -287,26 +289,30 @@ function deterministicSecret(seed: string): string {
 const secretKey = (id: string, ctx: string) => `${id}:${ctx}`;
 
 export const mockApi: ApiClient = {
-  async loginWithGoogle({ idToken }: GoogleLoginRequest): Promise<GoogleLoginResponse> {
+  async register({ email, password, fullName }: RegisterRequest): Promise<AuthResponse> {
     await delay();
-    // In mock mode the "idToken" is simply the chosen Google email.
-    const email = idToken.trim().toLowerCase();
-    if (!isIitmEmail(email)) {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized.includes('@')) {
+      throw new ApiClientError(422, 'invalid_email', 'Enter a valid email address.');
+    }
+    if (password.length < 8) {
       throw new ApiClientError(
-        403,
-        'invalid_domain',
-        'Please sign in with a valid IITM email address.',
+        422,
+        'weak_password',
+        'Password must be at least 8 characters.',
       );
     }
-    const existing = participants.find((p) => p.email === email);
-    if (existing) {
-      currentId = existing.id;
-      return { session: { token: `mock.${existing.id}`, participant: existing }, isNewUser: false };
+    if (participants.some((p) => p.email.toLowerCase() === normalized)) {
+      throw new ApiClientError(
+        409,
+        'email_already_registered',
+        'An account with this email already exists. Try signing in instead.',
+      );
     }
     const created: Participant = {
       id: `p_${Date.now()}`,
-      email,
-      fullName: '',
+      email: normalized,
+      fullName: fullName?.trim() ?? '',
       role: 'participant',
       age: null,
       gender: null,
@@ -322,8 +328,24 @@ export const mockApi: ApiClient = {
       createdAt: new Date().toISOString(),
     };
     participants.push(created);
+    passwords.set(normalized, password);
     currentId = created.id;
     return { session: { token: `mock.${created.id}`, participant: created }, isNewUser: true };
+  },
+
+  async login({ email, password }: LoginRequest): Promise<AuthResponse> {
+    await delay();
+    const normalized = email.trim().toLowerCase();
+    const existing = participants.find((p) => p.email.toLowerCase() === normalized);
+    // Seeded fixtures have no stored password, so accept any non-empty password
+    // for them; registered accounts must match the password used at sign-up.
+    const stored = passwords.get(normalized);
+    const ok = existing && (stored ? stored === password : password.length > 0);
+    if (!ok || !existing) {
+      throw new ApiClientError(401, 'invalid_credentials', 'Incorrect email or password.');
+    }
+    currentId = existing.id;
+    return { session: { token: `mock.${existing.id}`, participant: existing }, isNewUser: false };
   },
 
   async completeProfile(req: CompleteProfileRequest): Promise<CompleteProfileResponse> {
@@ -1090,7 +1112,7 @@ export const mockApi: ApiClient = {
     return { registrations };
   },
 
-  async devLogin(email: string): Promise<GoogleLoginResponse> {
+  async devLogin(email: string): Promise<AuthResponse> {
     await delay();
     const target = email.trim().toLowerCase();
     const p = participants.find((x) => x.email.toLowerCase() === target);

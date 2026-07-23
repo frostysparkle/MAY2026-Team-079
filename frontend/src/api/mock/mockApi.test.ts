@@ -3,26 +3,38 @@ import { mockApi } from './mockApi';
 import { generateCode } from '@/lib/totp';
 
 describe('mockApi', () => {
-  it('rejects a non-IITM email domain', async () => {
-    await expect(mockApi.loginWithGoogle({ idToken: 'someone@gmail.com' })).rejects.toMatchObject({
-      code: 'invalid_domain',
-    });
+  it('rejects registration with a weak password', async () => {
+    await expect(
+      mockApi.register({ email: 'weak@ds.study.iitm.ac.in', password: 'short' }),
+    ).rejects.toMatchObject({ code: 'weak_password' });
+  });
+
+  it('rejects invalid credentials on login', async () => {
+    await expect(
+      mockApi.login({ email: 'nobody@ds.study.iitm.ac.in', password: 'password123' }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
   });
 
   it('logs in a seeded participant without treating them as new', async () => {
-    const res = await mockApi.loginWithGoogle({ idToken: 'student@mg.study.iitm.ac.in' });
+    const res = await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
     expect(res.isNewUser).toBe(false);
     expect(res.session.participant.role).toBe('participant');
   });
 
-  it('creates a new participant for an unseen IITM email', async () => {
-    const res = await mockApi.loginWithGoogle({ idToken: 'brandnew@ds.study.iitm.ac.in' });
+  it('registers a new participant with an incomplete profile', async () => {
+    const res = await mockApi.register({ email: 'brandnew@ds.study.iitm.ac.in', password: 'password123' });
     expect(res.isNewUser).toBe(true);
     expect(res.session.participant.profileComplete).toBe(false);
   });
 
+  it('rejects registering an email that already exists', async () => {
+    await expect(
+      mockApi.register({ email: 'student@mg.study.iitm.ac.in', password: 'password123' }),
+    ).rejects.toMatchObject({ code: 'email_already_registered' });
+  });
+
   it('verifies a freshly generated code, then rejects its replay as duplicate', async () => {
-    await mockApi.loginWithGoogle({ idToken: 'student@mg.study.iitm.ac.in' });
+    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
     const { participantId, secretBase32 } = await mockApi.provisionSecret({
       checkpointContext: 'event',
     });
@@ -44,7 +56,7 @@ describe('mockApi', () => {
   });
 
   it('rejects a code from a different checkpoint context (per-context secrets)', async () => {
-    await mockApi.loginWithGoogle({ idToken: 'student@mg.study.iitm.ac.in' });
+    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
     const { participantId, secretBase32 } = await mockApi.provisionSecret({
       checkpointContext: 'event',
     });

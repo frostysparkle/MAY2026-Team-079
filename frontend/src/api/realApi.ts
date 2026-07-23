@@ -11,8 +11,9 @@
 import type { ApiClient } from './ApiClient';
 import { ApiClientError } from './ApiClient';
 import type {
-  GoogleLoginRequest,
-  GoogleLoginResponse,
+  RegisterRequest,
+  LoginRequest,
+  AuthResponse,
   CompleteProfileRequest,
   CompleteProfileResponse,
   ListUsersResponse,
@@ -462,15 +463,33 @@ function toParticipant(user: BackendUser): Participant {
 /* ------------------------------------------------------------ client --- */
 
 export const realApi: ApiClient = {
-  async loginWithGoogle(req: GoogleLoginRequest): Promise<GoogleLoginResponse> {
+  async register(req: RegisterRequest): Promise<AuthResponse> {
     const body = await request<{
       access_token: string;
       is_new_user: boolean;
       user: BackendUser;
-    }>('/auth/google', {
+    }>('/auth/register', {
       method: 'POST',
-      // Frontend calls this "idToken"; the backend field is "credential".
-      body: JSON.stringify({ credential: req.idToken }),
+      body: JSON.stringify({
+        email: req.email,
+        password: req.password,
+        full_name: req.fullName,
+      }),
+    });
+    return {
+      session: { token: body.access_token, participant: toParticipant(body.user) },
+      isNewUser: body.is_new_user,
+    };
+  },
+
+  async login(req: LoginRequest): Promise<AuthResponse> {
+    const body = await request<{
+      access_token: string;
+      is_new_user: boolean;
+      user: BackendUser;
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: req.email, password: req.password }),
     });
     return {
       session: { token: body.access_token, participant: toParticipant(body.user) },
@@ -1023,7 +1042,7 @@ export const realApi: ApiClient = {
     return { registrations };
   },
 
-  async devLogin(email: string): Promise<GoogleLoginResponse> {
+  async devLogin(email: string): Promise<AuthResponse> {
     const body = await request<{
       access_token: string;
       is_new_user: boolean;

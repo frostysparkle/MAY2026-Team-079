@@ -4,8 +4,9 @@
  * with zero component changes.
  */
 import type {
-  GoogleLoginRequest,
-  GoogleLoginResponse,
+  RegisterRequest,
+  LoginRequest,
+  AuthResponse,
   CompleteProfileRequest,
   CompleteProfileResponse,
   ListUsersResponse,
@@ -64,7 +65,8 @@ import type {
 
 export interface ApiClient {
   // Auth
-  loginWithGoogle(req: GoogleLoginRequest): Promise<GoogleLoginResponse>;
+  register(req: RegisterRequest): Promise<AuthResponse>;
+  login(req: LoginRequest): Promise<AuthResponse>;
 
   // Profile
   completeProfile(req: CompleteProfileRequest): Promise<CompleteProfileResponse>;
@@ -136,7 +138,7 @@ export interface ApiClient {
   listMyRegistrations(): Promise<MyRegistrationsResponse>;
 
   // Dev-only test harness
-  devLogin(email: string): Promise<GoogleLoginResponse>;
+  devLogin(email: string): Promise<AuthResponse>;
   listTestAccounts(): Promise<TestAccount[]>;
 
   // Payments (Epic 10)
