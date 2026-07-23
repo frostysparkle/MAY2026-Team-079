@@ -116,6 +116,7 @@ export default function HomePage() {
         </Link>
       )}
 
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       {/* My events */}
       <section className="flex flex-col gap-3">
         <SectionHeader title="My events" to={ROUTES.passes} linkLabel="My Pass" />
@@ -197,11 +198,12 @@ export default function HomePage() {
             </Card>
           ))}
       </section>
+      </div>
 
       {/* Quick links */}
       <section className="flex flex-col gap-3">
         <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted">Quick links</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Tile to={ROUTES.passes} icon="🎟️" title="My Pass" subtitle="Digital ID & passes" tint="brand" />
           <Tile to={ROUTES.events} icon="📅" title="Events" subtitle="Schedule & venues" tint="violet" />
           <Tile to={ROUTES.mess} icon="🍽️" title="Mess" subtitle="Menu & pass" tint="amber" />

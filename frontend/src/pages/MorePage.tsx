@@ -44,7 +44,7 @@ export default function MorePage() {
         <p className="text-sm text-muted">Everything else, one tap away.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {STUDENT_ITEMS.map((item) => (
           <Link key={item.to} to={item.to} className="block">
             <Card interactive className="flex h-full flex-col gap-2 p-4">
