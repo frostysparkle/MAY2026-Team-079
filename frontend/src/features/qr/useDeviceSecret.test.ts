@@ -14,18 +14,21 @@ describe('useDeviceSecret', () => {
     setOnline(true);
     await clearSecrets();
     // A signed-in participant is required for provisioning.
-    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
+    await mockApi.login({
+      email: 'fullstack@ds.study.iitm.ac.in',
+      password: 'password123',
+    });
   });
   afterEach(() => setOnline(true));
 
   it('provisions a secret online, then serves it from cache when offline', async () => {
-    const first = renderHook(() => useDeviceSecret('event'));
+    const first = renderHook(() => useDeviceSecret('event', 'e_keynote'));
     await waitFor(() => expect(first.result.current.status).toBe('ready'));
     expect(first.result.current.secret).toBeTruthy();
 
     // Go offline and mount again for the same checkpoint — must load from cache.
     setOnline(false);
-    const second = renderHook(() => useDeviceSecret('event'));
+    const second = renderHook(() => useDeviceSecret('event', 'e_keynote'));
     await waitFor(() => expect(second.result.current.status).toBe('ready'));
     expect(second.result.current.secret).toBe(first.result.current.secret);
   });
@@ -35,5 +38,11 @@ describe('useDeviceSecret', () => {
     const { result } = renderHook(() => useDeviceSecret('hostel'));
     await waitFor(() => expect(result.current.status).toBe('error'));
     expect(result.current.error).toMatch(/Connect to the internet/i);
+  });
+
+  it('requires a concrete event scope', async () => {
+    const { result } = renderHook(() => useDeviceSecret('event'));
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.error).toMatch(/select an event/i);
   });
 });

@@ -115,11 +115,14 @@ export interface AssignRoleResponse {
  */
 export interface ProvisionSecretRequest {
   checkpointContext: CheckpointType;
+  /** Required when provisioning the digital ID for a specific event. */
+  eventId?: string;
 }
 
 export interface ProvisionSecretResponse {
   participantId: string;
   checkpointContext: CheckpointType;
+  eventId?: string;
   /** Base32-encoded TOTP secret. Stored encrypted client-side, never re-fetched. */
   secretBase32: string;
 }
@@ -140,7 +143,7 @@ export interface VerifyScanRequest {
   currentCode: string;
   /** Supplied by the organizer app, NOT embedded in the QR. */
   checkpointContext: CheckpointType;
-  /** Optional event this scan counts toward (event checkpoints, Epic 3). */
+  /** Required event scope for event checkpoints. */
   eventId?: string;
 }
 

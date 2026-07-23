@@ -6,9 +6,11 @@ from pymongo.errors import PyMongoError
 
 from app.auth.dependencies import (
     get_current_user,
+    get_events_collection,
     get_hostel_allocations_collection,
     get_photos_collection_optional,
     get_qr_secrets_collection,
+    get_registrations_collection,
     get_scan_logs_collection,
     get_users_collection,
 )
@@ -22,7 +24,12 @@ from app.qr.schemas import (
     VerifyScanRequest,
     VerifyScanResponse,
 )
-from app.qr.service import provision_secret, verify_scan
+from app.qr.service import (
+    EventCheckpointUnavailableError,
+    EventRegistrationRequiredError,
+    provision_secret,
+    verify_scan,
+)
 
 
 router = APIRouter(tags=["qr"])
@@ -39,11 +46,34 @@ async def provision_secret_route(
     qr_secrets: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_qr_secrets_collection)
     ],
+    events: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_events_collection)
+    ],
+    registrations: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
+    ],
 ) -> ProvisionSecretResponse:
     try:
         secret = await provision_secret(
-            qr_secrets, current_user["_id"], body.checkpoint_context
+            qr_secrets,
+            events,
+            registrations,
+            current_user["_id"],
+            body.checkpoint_context,
+            body.event_id,
         )
+    except EventCheckpointUnavailableError as exc:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="event_not_found",
+            message="Event not found.",
+        ) from exc
+    except EventRegistrationRequiredError as exc:
+        raise ApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="event_registration_required",
+            message=str(exc),
+        ) from exc
     except PyMongoError as exc:
         raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -54,6 +84,7 @@ async def provision_secret_route(
     return ProvisionSecretResponse(
         participant_id=str(current_user["_id"]),
         checkpoint_context=body.checkpoint_context,
+        event_id=body.event_id,
         secret_base32=secret,
     )
 
@@ -68,6 +99,12 @@ async def verify_scan_route(
     actor: Annotated[dict[str, Any], Depends(require_role("organizer"))],
     users: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_users_collection)
+    ],
+    events: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_events_collection)
+    ],
+    registrations: Annotated[
+        AsyncCollection[dict[str, Any]], Depends(get_registrations_collection)
     ],
     qr_secrets: Annotated[
         AsyncCollection[dict[str, Any]], Depends(get_qr_secrets_collection)
@@ -86,6 +123,8 @@ async def verify_scan_route(
     try:
         outcome = await verify_scan(
             users,
+            events,
+            registrations,
             qr_secrets,
             scan_logs,
             body.participant_id,

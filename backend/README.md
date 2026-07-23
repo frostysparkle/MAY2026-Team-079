@@ -63,6 +63,8 @@ its password fields removed when it first links to Google.
 * Unique Google subjects, emails, and participant roll numbers.
 * One event registration per `(user_id, event_id)` pair.
 * One staff assignment per `(user_id, role, scope_type, scope_id)` tuple.
+* One QR secret per `(user_id, checkpoint_context, scope_id)` tuple; event
+  secrets use the concrete event ID as `scope_id`.
 
 ## Google authentication
 

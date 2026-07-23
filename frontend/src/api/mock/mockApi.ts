@@ -286,7 +286,8 @@ function deterministicSecret(seed: string): string {
   return new Secret({ buffer: bytes.buffer }).base32;
 }
 
-const secretKey = (id: string, ctx: string) => `${id}:${ctx}`;
+const secretKey = (id: string, ctx: string, eventId?: string) =>
+  `${id}:${ctx}:${eventId ?? ctx}`;
 
 export const mockApi: ApiClient = {
   async register({ email, password, fullName }: RegisterRequest): Promise<AuthResponse> {
@@ -392,11 +393,24 @@ export const mockApi: ApiClient = {
 
   async provisionSecret({
     checkpointContext,
+    eventId,
   }: ProvisionSecretRequest): Promise<ProvisionSecretResponse> {
     await delay();
     if (!currentId) throw new ApiClientError(401, 'not_authenticated', 'Please sign in again.');
-    const secretBase32 = deterministicSecret(secretKey(currentId, checkpointContext));
-    return { participantId: currentId, checkpointContext, secretBase32 };
+    if (checkpointContext === 'event') {
+      if (!eventId || !events.some((event) => event.id === eventId && event.status === 'published')) {
+        throw new ApiClientError(404, 'event_not_found', 'Event not found.');
+      }
+      if (!isRegistered(currentId, eventId)) {
+        throw new ApiClientError(
+          403,
+          'event_registration_required',
+          'Register for this event before provisioning its digital ID.',
+        );
+      }
+    }
+    const secretBase32 = deterministicSecret(secretKey(currentId, checkpointContext, eventId));
+    return { participantId: currentId, checkpointContext, eventId, secretBase32 };
   },
 
   async verifyScan({
@@ -408,16 +422,26 @@ export const mockApi: ApiClient = {
     await delay();
     const p = participants.find((x) => x.id === participantId);
     if (!p) return { result: 'unknown_participant' };
+    if (
+      checkpointContext === 'event' &&
+      (!eventId ||
+        !events.some((event) => event.id === eventId && event.status === 'published'))
+    ) {
+      return { result: 'wrong_checkpoint' };
+    }
+    if (checkpointContext === 'event' && !isRegistered(participantId, eventId ?? '')) {
+      return { result: 'not_eligible', detail: 'Participant is not registered for this event.' };
+    }
 
     // Recompute the same deterministic secret the device was provisioned with.
-    const secret = deterministicSecret(secretKey(participantId, checkpointContext));
+    const secret = deterministicSecret(secretKey(participantId, checkpointContext, eventId));
     const now = Date.now();
     const delta = verifyCode(secret, currentCode, now);
     if (delta === null) return { result: 'expired' };
 
     // Replay protection keyed on the exact matched 30s step.
     const step = Math.floor(now / 1000 / TOTP.period) + delta;
-    const replayKey = `${participantId}:${checkpointContext}:${step}`;
+    const replayKey = `${participantId}:${checkpointContext}:${eventId ?? checkpointContext}:${step}`;
     if (usedCodes.has(replayKey)) return { result: 'duplicate' };
     usedCodes.add(replayKey);
 

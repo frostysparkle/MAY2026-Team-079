@@ -34,9 +34,13 @@ describe('mockApi', () => {
   });
 
   it('verifies a freshly generated code, then rejects its replay as duplicate', async () => {
-    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
+    await mockApi.login({
+      email: 'fullstack@ds.study.iitm.ac.in',
+      password: 'password123',
+    });
     const { participantId, secretBase32 } = await mockApi.provisionSecret({
       checkpointContext: 'event',
+      eventId: 'e_keynote',
     });
     const code = generateCode(secretBase32);
 
@@ -44,6 +48,7 @@ describe('mockApi', () => {
       participantId,
       currentCode: code,
       checkpointContext: 'event',
+      eventId: 'e_keynote',
     });
     expect(first.result).toBe('valid');
 
@@ -51,14 +56,19 @@ describe('mockApi', () => {
       participantId,
       currentCode: code,
       checkpointContext: 'event',
+      eventId: 'e_keynote',
     });
     expect(replay.result).toBe('duplicate');
   });
 
   it('rejects a code from a different checkpoint context (per-context secrets)', async () => {
-    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
+    await mockApi.login({
+      email: 'fullstack@ds.study.iitm.ac.in',
+      password: 'password123',
+    });
     const { participantId, secretBase32 } = await mockApi.provisionSecret({
       checkpointContext: 'event',
+      eventId: 'e_keynote',
     });
     // Code generated for the event secret, scanned at the mess checkpoint.
     // Because each checkpoint has its own secret, the event code does not verify.

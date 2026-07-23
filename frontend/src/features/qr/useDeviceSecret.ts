@@ -14,7 +14,7 @@ type Status = 'loading' | 'ready' | 'error';
  * After the first successful provisioning the QR works fully offline, since code
  * generation never touches the network again.
  */
-export function useDeviceSecret(context: CheckpointType) {
+export function useDeviceSecret(context: CheckpointType, eventId?: string) {
   const [secret, setSecret] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +23,13 @@ export function useDeviceSecret(context: CheckpointType) {
     setStatus('loading');
     setError(null);
     setSecret(null);
+    if (context === 'event' && !eventId) {
+      setStatus('error');
+      setError('Register for and select an event to prepare its digital ID.');
+      return;
+    }
     try {
-      const cached = await loadSecret(context);
+      const cached = await loadSecret(context, eventId);
       if (cached) {
         setSecret(cached);
         setStatus('ready');
@@ -36,15 +41,18 @@ export function useDeviceSecret(context: CheckpointType) {
         setError('Connect to the internet once to set up this checkpoint, then it works offline.');
         return;
       }
-      const { secretBase32 } = await api.provisionSecret({ checkpointContext: context });
-      await saveSecret(context, secretBase32);
+      const { secretBase32 } = await api.provisionSecret({
+        checkpointContext: context,
+        eventId,
+      });
+      await saveSecret(context, secretBase32, eventId);
       setSecret(secretBase32);
       setStatus('ready');
     } catch {
       setStatus('error');
       setError('Could not set up your digital ID. Please try again.');
     }
-  }, [context]);
+  }, [context, eventId]);
 
   useEffect(() => {
     void ensure();

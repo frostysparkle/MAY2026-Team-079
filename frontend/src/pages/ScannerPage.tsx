@@ -52,7 +52,10 @@ export default function ScannerPage() {
   useEffect(() => {
     api
       .listEvents()
-      .then((r) => setEvents(r.events))
+      .then((r) => {
+        setEvents(r.events);
+        setEventId((current) => current || r.events[0]?.id || '');
+      })
       .catch(() => undefined);
   }, []);
 
@@ -71,6 +74,7 @@ export default function ScannerPage() {
         (decodedText) => {
           const payload = decodeQrPayload(decodedText);
           if (!payload) return; // ignore unrelated/invalid QR silently
+          if (checkpointRef.current === 'event' && !eventIdRef.current) return;
           if (stopped) return;
           stopped = true;
           scanner
@@ -128,8 +132,8 @@ export default function ScannerPage() {
 
       {checkpoint === 'event' && (
         <Select
-          label="Event (for attendance)"
-          placeholder="Not tied to an event"
+          label="Event"
+          placeholder="Select an event"
           value={eventId}
           onChange={(e) => setEventId(e.target.value)}
           options={events.map((e) => ({ value: e.id, label: `${e.title} · ${e.eventDate}` }))}
@@ -159,7 +163,11 @@ export default function ScannerPage() {
           onChange={(e) => setManualCode(e.target.value)}
         />
         <Button
-          disabled={!manualId.trim() || manualCode.trim().length !== 6}
+          disabled={
+            !manualId.trim() ||
+            manualCode.trim().length !== 6 ||
+            (checkpoint === 'event' && !eventId)
+          }
           onClick={() =>
             goToResult({
               participantId: manualId.trim(),

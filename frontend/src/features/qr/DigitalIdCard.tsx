@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { api } from '@/api';
+import type { MyRegistration } from '@/api/types';
 import { CHECKPOINT_TYPES, TOTP, type CheckpointType } from '@/config/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useDeviceSecret } from '@/features/qr/useDeviceSecret';
 import { encodeQrPayload } from '@/features/qr/payload';
 import { generateCode, secondsRemaining } from '@/lib/totp';
-import { Spinner, ErrorState, Avatar } from '@/components/ui';
+import { Spinner, ErrorState, Avatar, Select } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 const CHECKPOINT_LABELS: Record<CheckpointType, string> = {
@@ -24,7 +26,25 @@ const CHECKPOINT_LABELS: Record<CheckpointType, string> = {
 export function DigitalIdCard() {
   const participant = useAuthStore((s) => s.participant);
   const [checkpoint, setCheckpoint] = useState<CheckpointType>('event');
-  const { secret, status, error, retry } = useDeviceSecret(checkpoint);
+  const [registeredEvents, setRegisteredEvents] = useState<MyRegistration[]>([]);
+  const [eventId, setEventId] = useState('');
+  const scopedEventId = checkpoint === 'event' ? eventId || undefined : undefined;
+  const { secret, status, error, retry } = useDeviceSecret(checkpoint, scopedEventId);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .listMyRegistrations()
+      .then(({ registrations }) => {
+        if (!active) return;
+        setRegisteredEvents(registrations);
+        setEventId((current) => current || registrations[0]?.eventId || '');
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -59,6 +79,22 @@ export function DigitalIdCard() {
           </button>
         ))}
       </div>
+
+      {checkpoint === 'event' && (
+        <Select
+          label="Registered event"
+          placeholder={
+            registeredEvents.length > 0 ? 'Select an event' : 'No registered events'
+          }
+          value={eventId}
+          disabled={registeredEvents.length === 0}
+          onChange={(event) => setEventId(event.target.value)}
+          options={registeredEvents.map((event) => ({
+            value: event.eventId,
+            label: `${event.title} · ${event.eventDate}`,
+          }))}
+        />
+      )}
 
       {/* The ID card */}
       <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-brand-dark p-5 shadow-lift">

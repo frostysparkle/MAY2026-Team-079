@@ -549,14 +549,19 @@ export const realApi: ApiClient = {
     const body = await request<{
       participant_id: string;
       checkpoint_context: ProvisionSecretRequest['checkpointContext'];
+      event_id?: string | null;
       secret_base32: string;
     }>('/qr/provision', {
       method: 'POST',
-      body: JSON.stringify({ checkpoint_context: req.checkpointContext }),
+      body: JSON.stringify({
+        checkpoint_context: req.checkpointContext,
+        ...(req.eventId ? { event_id: req.eventId } : {}),
+      }),
     });
     return {
       participantId: body.participant_id,
       checkpointContext: body.checkpoint_context,
+      eventId: body.event_id ?? undefined,
       secretBase32: body.secret_base32,
     };
   },

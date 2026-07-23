@@ -19,24 +19,37 @@ async function renderResult(scan: PendingScan) {
 
 describe('ScanResultPage', () => {
   beforeEach(async () => {
-    await mockApi.login({ email: 'student@mg.study.iitm.ac.in', password: 'password123' });
+    await mockApi.login({
+      email: 'fullstack@ds.study.iitm.ac.in',
+      password: 'password123',
+    });
   });
 
   it('shows Valid for a correct, current code', async () => {
     const { participantId, secretBase32 } = await mockApi.provisionSecret({
       checkpointContext: 'event',
+      eventId: 'e_keynote',
     });
     await renderResult({
       participantId,
       currentCode: generateCode(secretBase32),
       checkpoint: 'event',
+      eventId: 'e_keynote',
     });
     expect(await screen.findByText('Valid')).toBeInTheDocument();
   });
 
   it('shows Expired QR for a wrong/expired code', async () => {
-    const { participantId } = await mockApi.provisionSecret({ checkpointContext: 'event' });
-    await renderResult({ participantId, currentCode: '000000', checkpoint: 'event' });
+    const { participantId } = await mockApi.provisionSecret({
+      checkpointContext: 'event',
+      eventId: 'e_keynote',
+    });
+    await renderResult({
+      participantId,
+      currentCode: '000000',
+      checkpoint: 'event',
+      eventId: 'e_keynote',
+    });
     expect(await screen.findByText('Expired QR')).toBeInTheDocument();
   });
 });

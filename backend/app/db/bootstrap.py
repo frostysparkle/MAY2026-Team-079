@@ -133,31 +133,43 @@ async def _create_indexes(database: AsyncDatabase[dict[str, Any]]) -> None:
         [IndexModel([("user_id", ASCENDING)], unique=True, name="uq_photos_user")]
     )
 
-    # One TOTP secret per participant per checkpoint context. Re-provisioning
-    # overwrites the row (rotates the secret).
-    await database[QR_SECRETS].create_indexes(
+    # Event secrets are isolated by event; fixed checkpoints use their context
+    # name as scope_id. Re-provisioning rotates only the selected scope.
+    qr_secrets = database[QR_SECRETS]
+    qr_secret_indexes = await qr_secrets.index_information()
+    if "uq_qr_secrets_user_context" in qr_secret_indexes:
+        await qr_secrets.drop_index("uq_qr_secrets_user_context")
+    await qr_secrets.create_indexes(
         [
             IndexModel(
-                [("user_id", ASCENDING), ("checkpoint_context", ASCENDING)],
+                [
+                    ("user_id", ASCENDING),
+                    ("checkpoint_context", ASCENDING),
+                    ("scope_id", ASCENDING),
+                ],
                 unique=True,
-                name="uq_qr_secrets_user_context",
+                name="uq_qr_secrets_user_scope",
             )
         ]
     )
 
-    # Scan audit log + replay protection: a matched (participant, context, step)
-    # can only be recorded once.
-    await database[SCAN_LOGS].create_indexes(
+    # Scan audit log + replay protection is isolated by concrete event/checkpoint.
+    scan_logs = database[SCAN_LOGS]
+    scan_log_indexes = await scan_logs.index_information()
+    if "uq_scan_logs_replay" in scan_log_indexes:
+        await scan_logs.drop_index("uq_scan_logs_replay")
+    await scan_logs.create_indexes(
         [
             IndexModel(
                 [
                     ("participant_id", ASCENDING),
                     ("checkpoint_context", ASCENDING),
+                    ("scope_id", ASCENDING),
                     ("step", ASCENDING),
                 ],
                 unique=True,
                 partialFilterExpression={"step": {"$exists": True}},
-                name="uq_scan_logs_replay",
+                name="uq_scan_logs_scope_replay",
             ),
             IndexModel(
                 [("participant_id", ASCENDING), ("scanned_at", ASCENDING)],

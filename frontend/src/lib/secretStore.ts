@@ -49,8 +49,20 @@ async function getWrapKey(): Promise<CryptoKey> {
   return key;
 }
 
-/** Encrypt and store a checkpoint's TOTP secret. Overwrites any existing one. */
-export async function saveSecret(context: CheckpointType, secretBase32: string): Promise<void> {
+function secretKey(context: CheckpointType, eventId?: string): string {
+  if (context === 'event') {
+    if (!eventId) throw new Error('An event ID is required for an event secret.');
+    return `${context}:${eventId}`;
+  }
+  return context;
+}
+
+/** Encrypt and store a scoped TOTP secret. Overwrites only the selected scope. */
+export async function saveSecret(
+  context: CheckpointType,
+  secretBase32: string,
+  eventId?: string,
+): Promise<void> {
   const key = await getWrapKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -59,13 +71,18 @@ export async function saveSecret(context: CheckpointType, secretBase32: string):
     new TextEncoder().encode(secretBase32),
   );
   const db = await getDb();
-  await db.put(SECRET_STORE, { iv, ciphertext } satisfies StoredSecret, context);
+  await db.put(SECRET_STORE, { iv, ciphertext } satisfies StoredSecret, secretKey(context, eventId));
 }
 
-/** Load and decrypt a checkpoint's TOTP secret, or null if none is stored. */
-export async function loadSecret(context: CheckpointType): Promise<string | null> {
+/** Load and decrypt a scoped TOTP secret, or null if none is stored. */
+export async function loadSecret(
+  context: CheckpointType,
+  eventId?: string,
+): Promise<string | null> {
   const db = await getDb();
-  const record = (await db.get(SECRET_STORE, context)) as StoredSecret | undefined;
+  const record = (await db.get(SECRET_STORE, secretKey(context, eventId))) as
+    | StoredSecret
+    | undefined;
   if (!record) return null;
   const key = await getWrapKey();
   const plaintext = await crypto.subtle.decrypt(

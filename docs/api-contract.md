@@ -98,22 +98,38 @@ Adapter maps each item to `{ id, fullName, email, role, createdAt }`.
 Sets the user's `roles` to `[role]`.
 
 ### 5. `POST /qr/provision`  *(auth required)*
-Issue the per-checkpoint TOTP secret **once**. Re-provisioning rotates the secret.
+Issue a scope-specific TOTP secret **once**. Re-provisioning rotates the secret.
 The secret is returned only here and never re-exposed by any later call.
 
-**Request:** `{ "checkpoint_context": "event" }`  (`event|mess|hostel|workshop`)
+For an event checkpoint, `event_id` is required and the participant must have
+an active registration for that published event. Non-event checkpoints reject
+`event_id`.
+
+**Request:** `{ "checkpoint_context": "event", "event_id": "…" }`
+(`event|mess|hostel|workshop`)
 **Response `200`:**
 ```json
-{ "participant_id": "…", "checkpoint_context": "event", "secret_base32": "…" }
+{
+  "participant_id": "…",
+  "checkpoint_context": "event",
+  "event_id": "…",
+  "secret_base32": "…"
+}
 ```
 
 ### 6. `POST /scan/verify`  *(organizer+ required)*
 Verify a scanned QR against the per-checkpoint secret. The QR carries only
-`{ participant_id, current_code }`; the organizer app supplies `checkpoint_context`.
+`{ participant_id, current_code }`; the organizer app supplies
+`checkpoint_context` and the concrete `event_id` for event scans.
 
 **Request:**
 ```json
-{ "participant_id": "…", "current_code": "123456", "checkpoint_context": "event" }
+{
+  "participant_id": "…",
+  "current_code": "123456",
+  "checkpoint_context": "event",
+  "event_id": "…"
+}
 ```
 
 **Response `200`:**
@@ -204,12 +220,14 @@ is set.
 
 ## Attendance & Crowd (Epic 3)
 
-Event scans may carry an optional `event_id` (organizer app supplies it) so
-attendance is counted **per event** as distinct valid-scanning participants —
-re-entry within the window does not double-count. Crowd status: `available`
+Event scans require an `event_id` (organizer app supplies it). The backend
+requires a published event, an active participant account, and an active event
+registration before accepting the event-scoped TOTP. Attendance is counted
+**per event** as distinct valid-scanning participants — re-entry within the
+window does not double-count. Crowd status: `available`
 (<70%), `filling_fast` (70–99%), `full` (≥100%).
 
-- `POST /scan/verify` gains an optional `event_id` (event checkpoint only).
+- `POST /scan/verify` requires `event_id` for event checkpoints.
 - `GET /attendance/events/{event_id}` *(organizer+)* → `{ event_id, capacity, attendance, remaining, at_capacity }` (FR-3.1/3.2).
 - `GET /attendance/events/{event_id}/crowd` *(auth)* → `{ event_id, status }` (FR-3.3).
 - `GET /attendance/dashboard` *(admin+)* → `{ events: [{ event_id, title, venue, capacity, attendance, remaining, at_capacity, status }] }` (FR-3.4).
