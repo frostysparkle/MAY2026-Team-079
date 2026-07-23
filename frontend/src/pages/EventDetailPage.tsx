@@ -101,7 +101,7 @@ export default function EventDetailPage() {
         <>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{event.title}</h1>
+              <h1 className="text-xl font-bold text-ink">{event.title}</h1>
               <p className="text-sm text-muted">{event.venue}</p>
               {crowd && (
                 <span
@@ -170,16 +170,16 @@ export default function EventDetailPage() {
           {canManage && attendance && (
             <Card className="flex items-center justify-around gap-3 text-center">
               <div>
-                <p className="text-xl font-bold text-gray-900">{attendance.attendance}</p>
+                <p className="text-xl font-bold text-ink">{attendance.attendance}</p>
                 <p className="text-xs text-muted">Checked in</p>
               </div>
               <div>
-                <p className="text-xl font-bold text-gray-900">{attendance.remaining}</p>
+                <p className="text-xl font-bold text-ink">{attendance.remaining}</p>
                 <p className="text-xs text-muted">Remaining</p>
               </div>
               <div>
                 <p
-                  className={`text-xl font-bold ${attendance.atCapacity ? 'text-danger' : 'text-gray-900'}`}
+                  className={`text-xl font-bold ${attendance.atCapacity ? 'text-danger' : 'text-ink'}`}
                 >
                   {attendance.atCapacity ? 'Full' : attendance.capacity}
                 </p>
@@ -196,9 +196,9 @@ export default function EventDetailPage() {
           </Card>
 
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-gray-800">Entry instructions</h2>
+            <h2 className="mb-1 text-sm font-semibold text-ink">Entry instructions</h2>
             {event.instructions.trim() ? (
-              <p className="whitespace-pre-line text-sm text-gray-700">{event.instructions}</p>
+              <p className="whitespace-pre-line text-sm text-ink">{event.instructions}</p>
             ) : (
               <p className="text-sm text-muted">No specific instructions for this event.</p>
             )}
@@ -213,7 +213,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3 text-sm">
       <span className="text-muted">{label}</span>
-      <span className="font-medium text-gray-900">{value}</span>
+      <span className="font-medium text-ink">{value}</span>
     </div>
   );
 }

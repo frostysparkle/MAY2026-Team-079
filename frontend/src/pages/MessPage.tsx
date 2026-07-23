@@ -63,12 +63,12 @@ export default function MessPage() {
           {/* Digital mess pass (FR-4.2). */}
           <Card
             className={
-              pass?.eligible ? 'border-green-300 bg-green-50' : 'border-line bg-gray-50'
+              pass?.eligible ? 'border-green-300 bg-green-50' : 'border-line bg-surface-2'
             }
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-semibold text-gray-900">Digital Mess Pass</p>
+                <p className="font-semibold text-ink">Digital Mess Pass</p>
                 <p className="text-sm text-muted">
                   {pass?.eligible
                     ? 'Active — show your QR at the mess checkpoint.'
@@ -88,17 +88,17 @@ export default function MessPage() {
 
           {/* Menu (FR-4.1). */}
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-gray-800">Menu &amp; timings</h2>
+            <h2 className="text-sm font-semibold text-ink">Menu &amp; timings</h2>
             {menu.length === 0 ? (
               <EmptyState title="No menu published" description="Check back closer to mealtime." icon="🍽️" />
             ) : (
               Object.entries(byLocation).map(([location, items]) => (
                 <Card key={location} className="flex flex-col gap-3">
-                  <p className="font-semibold text-gray-900">{location}</p>
+                  <p className="font-semibold text-ink">{location}</p>
                   {items.map((item) => (
                     <div key={item.id} className="border-t border-line pt-2 first:border-0 first:pt-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-800">
+                        <span className="text-sm font-medium text-ink">
                           {MEAL_LABEL[item.meal]}
                         </span>
                         <span className="text-xs text-muted">

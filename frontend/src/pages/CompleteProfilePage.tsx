@@ -7,6 +7,7 @@ import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { resolvePostLoginRoute } from '@/features/auth/postLoginRoute';
 import { Button, ResultBanner, Select, TextInput } from '@/components/ui';
+import { AuthLayout } from '@/features/auth/AuthLayout';
 import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
 
@@ -114,14 +115,11 @@ export default function CompleteProfilePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Complete Your Profile</h1>
-        <p className="mt-1 text-sm text-muted">
-          You only need to do this once — it is reused across every module.
-        </p>
-      </div>
-
+    <AuthLayout
+      size="md"
+      title="Complete your profile"
+      subtitle="You only need to do this once — it’s reused across every module."
+    >
       {submitError && (
         <ResultBanner variant="error" title="Could not save">
           {submitError}
@@ -136,7 +134,7 @@ export default function CompleteProfilePage() {
         noValidate
       >
         <fieldset className="flex flex-col gap-4">
-          <legend className="mb-1 text-sm font-semibold text-gray-800">Personal</legend>
+          <legend className="mb-1 text-sm font-semibold text-ink">Personal</legend>
           <TextInput
             label="Full Name"
             required
@@ -176,17 +174,17 @@ export default function CompleteProfilePage() {
         </fieldset>
 
         <fieldset className="flex flex-col gap-4">
-          <legend className="mb-1 text-sm font-semibold text-gray-800">Location</legend>
+          <legend className="mb-1 text-sm font-semibold text-ink">Location</legend>
           <LocationSelect onChange={setLocation} errors={customErrors.location} />
         </fieldset>
 
         <fieldset className="flex flex-col gap-4">
-          <legend className="mb-1 text-sm font-semibold text-gray-800">Photo</legend>
+          <legend className="mb-1 text-sm font-semibold text-ink">Photo</legend>
           <PhotoUpload value={photo} onChange={setPhoto} error={customErrors.photo} />
         </fieldset>
 
         <fieldset className="flex flex-col gap-4">
-          <legend className="mb-1 text-sm font-semibold text-gray-800">Academic</legend>
+          <legend className="mb-1 text-sm font-semibold text-ink">Academic</legend>
           <Select
             label="Program"
             required
@@ -219,6 +217,6 @@ export default function CompleteProfilePage() {
           Save and continue
         </Button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

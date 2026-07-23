@@ -109,7 +109,7 @@ export default function AdminMessPage() {
 
       {/* Menu management (organizer+). */}
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(addItem)} noValidate>
-        <p className="text-sm font-semibold text-gray-800">Add menu entry</p>
+        <p className="text-sm font-semibold text-ink">Add menu entry</p>
         <TextInput
           label="Location"
           required
@@ -152,13 +152,13 @@ export default function AdminMessPage() {
       </form>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Current menu</p>
+        <p className="text-sm font-semibold text-ink">Current menu</p>
         {loading && <Skeleton className="h-16" />}
         {!loading &&
           menu.map((m) => (
             <Card key={m.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">
+                <p className="font-medium text-ink">
                   {m.location} · {m.meal}
                 </p>
                 <p className="truncate text-xs text-muted">
@@ -180,7 +180,7 @@ export default function AdminMessPage() {
       {isAdmin && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-800">Mess passes</p>
+            <p className="text-sm font-semibold text-ink">Mess passes</p>
             {eligibleCount !== null && (
               <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
                 {eligibleCount} opted in
@@ -192,7 +192,7 @@ export default function AdminMessPage() {
             eligibility.map((p) => (
               <Card key={p.id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-gray-900">
+                  <p className="truncate font-medium text-ink">
                     {p.fullName || '(profile incomplete)'}
                   </p>
                   <p className="truncate text-xs text-muted">{p.email}</p>

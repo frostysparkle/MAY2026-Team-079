@@ -144,7 +144,7 @@ export default function EventEditPage() {
         />
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="instructions" className="text-sm font-medium text-gray-700">
+          <label htmlFor="instructions" className="text-sm font-medium text-ink">
             Entry instructions <span className="text-danger">*</span>
           </label>
           <textarea

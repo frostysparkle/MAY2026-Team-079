@@ -56,7 +56,7 @@ export default function HostelPage() {
           <Card className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-lg font-bold text-gray-900">{allocation.hostelBlock}</p>
+                <p className="text-lg font-bold text-ink">{allocation.hostelBlock}</p>
                 <p className="text-sm text-muted">Room {allocation.room}</p>
               </div>
               <span
@@ -72,9 +72,9 @@ export default function HostelPage() {
           </Card>
 
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-gray-800">Check-in instructions</h2>
+            <h2 className="mb-1 text-sm font-semibold text-ink">Check-in instructions</h2>
             {allocation.instructions.trim() ? (
-              <p className="whitespace-pre-line text-sm text-gray-700">{allocation.instructions}</p>
+              <p className="whitespace-pre-line text-sm text-ink">{allocation.instructions}</p>
             ) : (
               <p className="text-sm text-muted">No specific instructions provided.</p>
             )}
@@ -82,8 +82,8 @@ export default function HostelPage() {
 
           {allocation.coordinator && (
             <div>
-              <h2 className="mb-1 text-sm font-semibold text-gray-800">Hostel coordinator</h2>
-              <p className="text-sm text-gray-700">{allocation.coordinator}</p>
+              <h2 className="mb-1 text-sm font-semibold text-ink">Hostel coordinator</h2>
+              <p className="text-sm text-ink">{allocation.coordinator}</p>
             </div>
           )}
 

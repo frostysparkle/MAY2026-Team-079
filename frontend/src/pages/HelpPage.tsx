@@ -28,7 +28,7 @@ const STATUS_LABEL: Record<SupportQuery['status'], string> = {
 };
 
 const STATUS_BADGE: Record<SupportQuery['status'], string> = {
-  open: 'bg-gray-100 text-gray-700',
+  open: 'bg-surface-2 text-muted',
   assigned: 'bg-blue-100 text-blue-700',
   in_progress: 'bg-amber-100 text-amber-700',
   resolved: 'bg-green-100 text-green-700',
@@ -100,7 +100,7 @@ export default function HelpPage() {
 
       {/* Emergency contacts — always visible, no query needed (FR-6.5). */}
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-gray-800">Emergency contacts</h2>
+        <h2 className="text-sm font-semibold text-ink">Emergency contacts</h2>
         {loading ? (
           <Skeleton className="h-16" />
         ) : emergency.length === 0 ? (
@@ -112,7 +112,7 @@ export default function HelpPage() {
 
       {/* Raise a query (FR-6.1). */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-gray-800">Raise a query</h2>
+        <h2 className="text-sm font-semibold text-ink">Raise a query</h2>
         {submitError && (
           <ResultBanner variant="error" title="Could not submit">
             {submitError}
@@ -128,7 +128,7 @@ export default function HelpPage() {
             {...register('category', { required: 'Please choose a category.' })}
           />
           <div className="flex flex-col gap-1">
-            <label htmlFor="description" className="text-sm font-medium text-gray-700">
+            <label htmlFor="description" className="text-sm font-medium text-ink">
               Description <span className="text-danger">*</span>
             </label>
             <textarea
@@ -152,7 +152,7 @@ export default function HelpPage() {
 
       {/* Track my queries (FR-6.2). */}
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-gray-800">My queries</h2>
+        <h2 className="text-sm font-semibold text-ink">My queries</h2>
         {loading ? (
           <Skeleton className="h-16" />
         ) : myQueries.length === 0 ? (
@@ -170,7 +170,7 @@ export default function HelpPage() {
                   {STATUS_LABEL[q.status]}
                 </span>
               </div>
-              <p className="text-sm text-gray-800">{q.description}</p>
+              <p className="text-sm text-ink">{q.description}</p>
             </Card>
           ))
         )}
@@ -178,7 +178,7 @@ export default function HelpPage() {
 
       {/* Contact directory (FR-6.4). */}
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-gray-800">Contact directory</h2>
+        <h2 className="text-sm font-semibold text-ink">Contact directory</h2>
         {loading ? (
           <Skeleton className="h-16" />
         ) : directory.length === 0 ? (
@@ -196,7 +196,7 @@ function ContactRow({ contact, highlight }: { contact: Contact; highlight?: bool
     <Card className={highlight ? 'border-danger/40 bg-danger/5' : undefined}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium text-gray-900">{contact.name}</p>
+          <p className="font-medium text-ink">{contact.name}</p>
           <p className="truncate text-xs text-muted">
             {contact.role} · {contact.category}
           </p>

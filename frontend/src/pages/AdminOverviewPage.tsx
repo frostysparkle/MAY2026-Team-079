@@ -56,7 +56,7 @@ export default function AdminOverviewPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Link to={ROUTES.dashboard} className="block">
             <Card className="h-full transition-colors hover:border-brand">
-              <p className="text-sm font-semibold text-gray-800">📅 Events &amp; Crowd</p>
+              <p className="text-sm font-semibold text-ink">📅 Events &amp; Crowd</p>
               <div className="mt-2 flex items-end gap-4">
                 <Stat value={data.events.active} label="Active" />
                 <Stat value={data.events.totalCheckedIn} label="Checked in" />
@@ -71,7 +71,7 @@ export default function AdminOverviewPage() {
 
           <Link to={ROUTES.manageQueries} className="block">
             <Card className="h-full transition-colors hover:border-brand">
-              <p className="text-sm font-semibold text-gray-800">🗂️ Open Queries</p>
+              <p className="text-sm font-semibold text-ink">🗂️ Open Queries</p>
               <div className="mt-2 flex items-end gap-4">
                 <Stat value={data.queries.unresolved} label="Unresolved" danger={data.queries.unresolved > 0} />
                 <Stat value={data.queries.inProgress} label="In progress" />
@@ -82,7 +82,7 @@ export default function AdminOverviewPage() {
 
           <Link to={ROUTES.manageHostel} className="block">
             <Card className="h-full transition-colors hover:border-brand">
-              <p className="text-sm font-semibold text-gray-800">🏨 Hostel</p>
+              <p className="text-sm font-semibold text-ink">🏨 Hostel</p>
               <div className="mt-2 flex items-end gap-4">
                 <Stat value={data.hostel.allocations} label="Allocated" />
                 <Stat value={data.hostel.checkedIn} label="Checked in" />
@@ -92,7 +92,7 @@ export default function AdminOverviewPage() {
 
           <Link to={ROUTES.manageMess} className="block">
             <Card className="h-full transition-colors hover:border-brand">
-              <p className="text-sm font-semibold text-gray-800">🍽️ Mess</p>
+              <p className="text-sm font-semibold text-ink">🍽️ Mess</p>
               <div className="mt-2 flex items-end gap-4">
                 <Stat value={data.mess.eligible} label="Opted in" />
               </div>
@@ -107,7 +107,7 @@ export default function AdminOverviewPage() {
 function Stat({ value, label, danger }: { value: number; label: string; danger?: boolean }) {
   return (
     <div>
-      <p className={`text-2xl font-bold ${danger ? 'text-danger' : 'text-gray-900'}`}>{value}</p>
+      <p className={`text-2xl font-bold ${danger ? 'text-danger' : 'text-ink'}`}>{value}</p>
       <p className="text-xs text-muted">{label}</p>
     </div>
   );

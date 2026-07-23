@@ -60,12 +60,12 @@ export default function AnnouncementsPage() {
         items.map((a) => (
           <Card key={a.id} className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="font-semibold text-gray-900">{a.title}</p>
+              <p className="font-semibold text-ink">{a.title}</p>
               <span className="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
                 {AUDIENCE_LABEL[a.audience]}
               </span>
             </div>
-            <p className="whitespace-pre-line text-sm text-gray-700">{a.body}</p>
+            <p className="whitespace-pre-line text-sm text-ink">{a.body}</p>
             <p className="text-xs text-muted">
               {a.senderName ?? 'Core Team'} · {a.createdAt.slice(0, 10)}
             </p>

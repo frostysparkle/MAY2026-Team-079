@@ -72,7 +72,7 @@ export default function ScanResultPage() {
 
           {response.participant && (
             <div className="flex items-center gap-3 rounded-xl border border-line p-4">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-gray-100">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-surface-2">
                 {response.participant.photoUrl ? (
                   <img
                     src={response.participant.photoUrl}
@@ -86,7 +86,7 @@ export default function ScanResultPage() {
                 )}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">{response.participant.fullName}</p>
+                <p className="font-semibold text-ink">{response.participant.fullName}</p>
                 <p className="text-xs text-muted">ID: {response.participant.id}</p>
               </div>
             </div>

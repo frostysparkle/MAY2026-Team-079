@@ -108,7 +108,7 @@ export default function ScannerPage() {
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-medium text-gray-700">Checkpoint</p>
+        <p className="mb-2 text-sm font-medium text-ink">Checkpoint</p>
         <div className="flex gap-2 overflow-x-auto">
           {CHECKPOINT_TYPES.map((c) => (
             <button
@@ -117,7 +117,7 @@ export default function ScannerPage() {
               aria-pressed={checkpoint === c}
               className={cn(
                 'rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap',
-                checkpoint === c ? 'bg-brand text-white' : 'bg-gray-100 text-muted',
+                checkpoint === c ? 'bg-brand text-white' : 'bg-surface-2 text-muted',
               )}
             >
               {CHECKPOINT_LABELS[c]}
@@ -146,7 +146,7 @@ export default function ScannerPage() {
       )}
 
       <div className="flex flex-col gap-3 rounded-xl border border-dashed border-line p-4">
-        <p className="text-sm font-medium text-gray-700">Manual entry (fallback)</p>
+        <p className="text-sm font-medium text-ink">Manual entry (fallback)</p>
         <TextInput
           label="Participant ID"
           value={manualId}

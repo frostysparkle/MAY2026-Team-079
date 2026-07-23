@@ -51,17 +51,17 @@ export function PaymentStep({ journey }: { journey: Journey }) {
         {pending.items.map((item) => (
           <li
             key={item.kind}
-            className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"
+            className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 text-sm"
           >
-            <span className="text-gray-800">{item.label}</span>
-            <span className="font-semibold text-gray-900">
+            <span className="text-ink">{item.label}</span>
+            <span className="font-semibold text-ink">
               {money(item.amount, item.currency)}
             </span>
           </li>
         ))}
       </ul>
 
-      <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
+      <div className="flex items-center justify-between border-t border-line pt-3 text-sm">
         <span className="font-medium text-muted">Total due</span>
         <span className="text-lg font-black text-ink">
           {money(pending.total, pending.currency)}

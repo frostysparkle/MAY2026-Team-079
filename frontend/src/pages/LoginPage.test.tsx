@@ -23,14 +23,14 @@ describe('LoginPage', () => {
 
   it('shows a specific error for a non-IITM email', async () => {
     renderLogin();
-    await userEvent.type(screen.getByLabelText(/any IITM email/i), 'someone@gmail.com');
+    await userEvent.type(screen.getByLabelText(/college email/i), 'someone@gmail.com');
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText(/not a valid IITM email/i)).toBeInTheDocument();
   });
 
   it('signs in a seeded admin and routes to User Management', async () => {
     renderLogin();
-    await userEvent.click(screen.getByRole('button', { name: 'admin@es.study.iitm.ac.in' }));
+    await userEvent.click(screen.getByRole('button', { name: /admin@es\.study\.iitm\.ac\.in/i }));
     expect(await screen.findByText('User Management')).toBeInTheDocument();
     expect(useAuthStore.getState().participant?.role).toBe('admin');
   });

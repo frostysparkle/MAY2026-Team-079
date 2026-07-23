@@ -89,7 +89,7 @@ export default function AdminAnnouncementsPage() {
     >
 
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(send)} noValidate>
-        <p className="text-sm font-semibold text-gray-800">Compose</p>
+        <p className="text-sm font-semibold text-ink">Compose</p>
         <TextInput
           label="Title"
           required
@@ -97,7 +97,7 @@ export default function AdminAnnouncementsPage() {
           {...register('title', { required: 'Title is required.' })}
         />
         <div className="flex flex-col gap-1">
-          <label htmlFor="body" className="text-sm font-medium text-gray-700">
+          <label htmlFor="body" className="text-sm font-medium text-ink">
             Message <span className="text-danger">*</span>
           </label>
           <textarea
@@ -136,14 +136,14 @@ export default function AdminAnnouncementsPage() {
       </form>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Sent log</p>
+        <p className="text-sm font-semibold text-ink">Sent log</p>
         {loading && <Skeleton className="h-20" />}
         {!loading && log.length === 0 && <p className="text-sm text-muted">Nothing sent yet.</p>}
         {!loading &&
           log.map((a) => (
             <Card key={a.id} className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">{a.title}</p>
+                <p className="font-medium text-ink">{a.title}</p>
                 <p className="truncate text-xs text-muted">
                   {a.audience.replace('_', ' ')} · {a.senderName ?? 'Core Team'} ·{' '}
                   {a.createdAt.slice(0, 10)}

@@ -81,7 +81,7 @@ export default function AdminHostelPage() {
     >
 
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(assign)} noValidate>
-        <p className="text-sm font-semibold text-gray-800">Assign allocation</p>
+        <p className="text-sm font-semibold text-ink">Assign allocation</p>
         <Select
           label="Participant"
           required
@@ -112,7 +112,7 @@ export default function AdminHostelPage() {
       </form>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Current allocations</p>
+        <p className="text-sm font-semibold text-ink">Current allocations</p>
         {loading && <Skeleton className="h-20" />}
         {!loading && allocations.length === 0 && (
           <p className="text-sm text-muted">No allocations yet.</p>
@@ -121,7 +121,7 @@ export default function AdminHostelPage() {
           allocations.map((a) => (
             <Card key={a.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium text-gray-900">
+                <p className="truncate font-medium text-ink">
                   {a.fullName || '(profile incomplete)'}
                   {a.checkedIn && (
                     <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">

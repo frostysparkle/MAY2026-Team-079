@@ -35,11 +35,11 @@ export function PhotoUpload({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-gray-700">
+      <span className="text-sm font-medium text-ink">
         Photo <span className="text-danger">*</span>
       </span>
       <div className="flex items-center gap-4">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-gray-50 text-xs text-muted">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-surface-2 text-xs text-muted">
           {value ? (
             <img
               src={value}

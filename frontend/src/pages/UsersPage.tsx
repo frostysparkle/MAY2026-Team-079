@@ -103,7 +103,7 @@ export default function UsersPage() {
                       ))}
                     </select>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-muted">
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted">
                       {ROLE_LABELS[u.role]}
                     </span>
                   )

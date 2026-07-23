@@ -4,6 +4,7 @@ import { ROUTES } from '@/config/routes';
 import { useJourney } from '@/features/journey/useJourney';
 import { STEP_META, stepProgress } from '@/features/journey/steps';
 import type { Journey, JourneyStepState } from '@/api/types';
+import { AuthLayout } from '@/features/auth/AuthLayout';
 import { ErrorState, Skeleton } from '@/components/ui';
 import { AccommodationStep } from './steps/AccommodationStep';
 import { MessStep } from './steps/MessStep';
@@ -32,22 +33,24 @@ export default function OnboardingLayout() {
 
   if (status === 'loading') {
     return (
-      <main className="mx-auto flex min-h-full max-w-md flex-col gap-4 p-6">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-48" />
-      </main>
+      <AuthLayout>
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-48" />
+        </div>
+      </AuthLayout>
     );
   }
 
   if (status === 'error' || !journey) {
     return (
-      <main className="mx-auto flex min-h-full max-w-md items-center p-6">
+      <AuthLayout>
         <ErrorState
           description="Could not load your setup progress."
           onRetry={() => void reload()}
         />
-      </main>
+      </AuthLayout>
     );
   }
 
@@ -59,21 +62,20 @@ export default function OnboardingLayout() {
   };
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col gap-6 p-6">
-      <ProgressHeader journey={journey} />
+    <AuthLayout header={<ProgressHeader journey={journey} />}>
       {journey.nextStep === 'accommodation' && <AccommodationStep onDone={advance} />}
       {journey.nextStep === 'mess' && <MessStep onDone={advance} />}
       {journey.nextStep === 'payment' && <PaymentStep journey={journey} />}
       {journey.nextStep === 'events' && <EventsStep />}
-    </main>
+    </AuthLayout>
   );
 }
 
 const DOT: Record<JourneyStepState, string> = {
   done: 'bg-brand text-white',
   current: 'bg-brand text-white ring-4 ring-brand/20',
-  upcoming: 'bg-gray-200 text-gray-500',
-  skipped: 'bg-gray-100 text-gray-400',
+  upcoming: 'bg-surface-2 text-muted',
+  skipped: 'bg-surface-2 text-muted/60',
 };
 
 function ProgressHeader({ journey }: { journey: Journey }) {

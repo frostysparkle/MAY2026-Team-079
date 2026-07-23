@@ -59,7 +59,7 @@ export function ListItem({
     >
       {leading}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-gray-800">{title}</div>
+        <div className="truncate text-sm font-medium text-ink">{title}</div>
         {subtitle && <div className="truncate text-xs text-muted">{subtitle}</div>}
       </div>
       {trailing}

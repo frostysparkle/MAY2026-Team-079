@@ -73,7 +73,7 @@ export default function AdminQueriesPage() {
               </span>
               <span className="text-xs text-muted">{q.createdAt.slice(0, 10)}</span>
             </div>
-            <p className="text-sm text-gray-800">{q.description}</p>
+            <p className="text-sm text-ink">{q.description}</p>
             <div className="flex flex-wrap gap-2">
               <label className="flex items-center gap-1 text-xs text-muted">
                 Team

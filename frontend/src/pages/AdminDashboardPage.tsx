@@ -62,7 +62,7 @@ export default function AdminDashboardPage() {
             <Card className="transition-colors hover:border-brand">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-gray-900">{e.title}</p>
+                  <p className="font-semibold text-ink">{e.title}</p>
                   <p className="truncate text-sm text-muted">{e.venue}</p>
                 </div>
                 <span
@@ -73,15 +73,15 @@ export default function AdminDashboardPage() {
               </div>
               <div className="mt-3 flex items-center justify-around text-center">
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{e.attendance}</p>
+                  <p className="text-lg font-bold text-ink">{e.attendance}</p>
                   <p className="text-xs text-muted">In</p>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{e.remaining}</p>
+                  <p className="text-lg font-bold text-ink">{e.remaining}</p>
                   <p className="text-xs text-muted">Left</p>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{e.capacity}</p>
+                  <p className="text-lg font-bold text-ink">{e.capacity}</p>
                   <p className="text-xs text-muted">Cap</p>
                 </div>
               </div>

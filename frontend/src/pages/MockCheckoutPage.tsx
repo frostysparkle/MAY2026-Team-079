@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/api';
 import { ROUTES } from '@/config/routes';
+import { AuthLayout } from '@/features/auth/AuthLayout';
 import { Button, Card } from '@/components/ui';
 
 /**
@@ -31,13 +32,13 @@ export default function MockCheckoutPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col justify-center gap-6 p-6">
-      <Card className="flex flex-col gap-4">
+    <AuthLayout>
+      <Card className="flex flex-col gap-4 shadow-lift">
         <div className="text-center">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">
             Secure checkout (simulated)
           </p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
+          <p className="mt-2 text-3xl font-black text-ink">
             {currency === 'INR' ? `₹${amount}` : `${currency} ${amount}`}
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -51,6 +52,6 @@ export default function MockCheckoutPage() {
           Cancel payment
         </Button>
       </Card>
-    </main>
+    </AuthLayout>
   );
 }

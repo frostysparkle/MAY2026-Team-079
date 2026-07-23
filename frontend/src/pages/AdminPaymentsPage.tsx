@@ -12,7 +12,7 @@ const STATUS_BADGE: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
   pending: 'bg-amber-100 text-amber-700',
   failed: 'bg-red-100 text-red-700',
-  not_started: 'bg-gray-100 text-gray-600',
+  not_started: 'bg-surface-2 text-muted',
 };
 
 const FILTERS = ['all', 'paid', 'pending', 'failed', 'not_started'] as const;
@@ -91,7 +91,7 @@ export default function AdminPaymentsPage() {
 
       {/* Meal plan management (FR-10.2 config). */}
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(addPlan)} noValidate>
-        <p className="text-sm font-semibold text-gray-800">Add meal plan</p>
+        <p className="text-sm font-semibold text-ink">Add meal plan</p>
         <TextInput
           label="Name"
           required
@@ -116,13 +116,13 @@ export default function AdminPaymentsPage() {
       </form>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Meal plans</p>
+        <p className="text-sm font-semibold text-ink">Meal plans</p>
         {loading && <Skeleton className="h-16" />}
         {!loading &&
           plans.map((p) => (
             <Card key={p.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium text-gray-900">
+                <p className="truncate font-medium text-ink">
                   {p.name} · ₹{p.amount}
                 </p>
                 <p className="truncate text-xs text-muted">{p.description || '—'}</p>
@@ -140,7 +140,7 @@ export default function AdminPaymentsPage() {
 
       {/* Reconciliation (FR-10.4). */}
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Reconciliation</p>
+        <p className="text-sm font-semibold text-ink">Reconciliation</p>
         <div className="flex gap-3">
           <Select
             label="Hostel"
@@ -163,7 +163,7 @@ export default function AdminPaymentsPage() {
           filtered.map((r) => (
             <Card key={r.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium text-gray-900">
+                <p className="truncate font-medium text-ink">
                   {r.fullName || '(profile incomplete)'}
                 </p>
                 <p className="truncate text-xs text-muted">{r.email}</p>

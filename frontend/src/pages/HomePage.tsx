@@ -23,7 +23,7 @@ const PAY_BADGE: Record<string, string> = {
   created: 'bg-amber-100 text-amber-700',
   pending: 'bg-amber-100 text-amber-700',
   failed: 'bg-red-100 text-red-700',
-  not_started: 'bg-gray-100 text-gray-600',
+  not_started: 'bg-surface-2 text-muted',
 };
 const PAY_LABEL: Record<string, string> = {
   paid: 'Paid',
@@ -240,7 +240,7 @@ function SectionHeader({ title, to, linkLabel }: { title: string; to: string; li
 function StatusRow({ label, status }: { label: string; status: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-gray-800">{label}</span>
+      <span className="text-ink">{label}</span>
       <span
         className={`rounded-full px-2 py-0.5 text-xs font-medium ${PAY_BADGE[status] ?? PAY_BADGE.not_started}`}
       >

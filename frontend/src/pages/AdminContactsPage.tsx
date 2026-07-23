@@ -83,7 +83,7 @@ export default function AdminContactsPage() {
     >
 
       <form className="flex flex-col gap-3 rounded-xl border border-line p-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-        <p className="text-sm font-semibold text-gray-800">Add a contact</p>
+        <p className="text-sm font-semibold text-ink">Add a contact</p>
         <TextInput
           label="Name"
           required
@@ -111,7 +111,7 @@ export default function AdminContactsPage() {
           {...register('phone', { required: 'Phone is required.' })}
         />
         <TextInput label="Email (optional)" type="email" {...register('email')} />
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" {...register('isEmergency')} />
           Show in emergency contacts
         </label>
@@ -121,7 +121,7 @@ export default function AdminContactsPage() {
       </form>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-gray-800">Current contacts</p>
+        <p className="text-sm font-semibold text-ink">Current contacts</p>
         {status === 'loading' && <Skeleton className="h-20" />}
         {status === 'error' && (
           <ErrorState description="Could not load contacts." onRetry={() => void load()} />
@@ -130,7 +130,7 @@ export default function AdminContactsPage() {
           contacts.map((c) => (
             <Card key={c.id} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">
+                <p className="font-medium text-ink">
                   {c.name}
                   {c.isEmergency && (
                     <span className="ml-2 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-medium text-danger">

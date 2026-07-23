@@ -18,7 +18,7 @@ export function ErrorState({
       <div className="text-4xl" aria-hidden>
         ⚠️
       </div>
-      <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+      <h2 className="text-base font-semibold text-ink">{title}</h2>
       {description && <p className="max-w-xs text-sm text-muted">{description}</p>}
       {onRetry && (
         <Button variant="secondary" onClick={onRetry}>
