@@ -1,0 +1,146 @@
+Attendee:
+{
+  "attendee_id": "DS23F3001726", // Extracted from email
+
+  "email": "23f3001726@ds.study.iitm.ac.in",
+  "password_hash": "...",
+
+  "profile": {
+    "full_name": "John Doe",
+    "dob": ISODate("2002-04-21"), // ISO date (with reasonable limits)
+
+    "gender": "male", // male | female | other
+    "phone": "+919999999999",
+    "mess_preference": "Jain" // South Indian | North Indian | Jain
+
+    "country": "India",
+    "state": "Karnataka",
+    "city": "Bangalore",
+    "address": "53/7, Koramangala - 560034",
+
+    "emergency_contact": {
+      "name": "Hari Narayana",
+      "relation": "father", // father | mother | elder_sibling | guardian
+      "phone": "+919488888888"
+    },
+
+    "program": "DS", // DS | ES | AE | MS
+    "course_stage": "degree" // foundational | diploma | degree
+  },
+
+  "access": {
+    "registered": true,
+    "hostel_paid": true,
+    "mess_paid": true
+  },
+
+  "hostel_accommodation": {
+    "hostel_id": ObjectId(), // Hostel document reference | null
+    "mess_id": ObjectId(), // Mess document reference | null
+    "room": "203" // Room number | null
+  },
+
+  "photo": "...", // Base64-encoded image
+
+  "qr_secrets": {
+    "private_key": "...",
+    "public_key": "..."
+  },
+
+  "last_login_at": ISODate(),
+
+  "created_at": ISODate(),
+  "updated_at": ISODate()
+}
+
+
+Hostel:
+{
+  "hostel_id": "HS01",
+  "hostel_name": "Alakhnanda",
+
+  "gender": "male", // male | female | mixed
+
+
+  "coordinator": "Rahul",
+
+  "location": {
+    "latitude": 12.991234,
+    "longitude": 80.233456
+  },
+
+  "instructions": "...",
+
+  "created_at": ISODate(),
+  "updated_at": ISODate()
+}
+
+Mess
+{
+  "mess_id": "MS01",
+  "mess_name": "Himalaya",
+
+  "caterer": "Firstman",
+
+  "type": "South Indian", // South Indian | North Indian | Jain
+
+
+  "location": {
+    "latitude": 12.991234,
+    "longitude": 80.233456
+  },
+
+  "instructions": "...",
+
+  "created_at": ISODate(),
+  "updated_at": ISODate()
+}
+
+Workshops:
+{
+  "slot_id": "12A",
+  "event_date": ISODate(),
+
+  "start_time": "10:00",
+  "end_time": "12:00",
+
+  "created_by": ObjectId(), // Super user ID
+
+  "created_at": ISODate(),
+  "updated_at": ISODate(),
+
+  "workshops": [
+    {
+      "workshop_id": ObjectId(),
+
+      "name": "Applications of AI",
+      "venue": "CRC 203",
+
+      "capacity": 300,
+      "registration_count": 145,
+      "attendee_count": 0,
+
+      "instructions": "...",
+
+      "registrations": [
+        {
+          "attendee_id": ObjectId(), // User ID
+          "status": "registered", // registered | attended
+          "created_at": ISODate(),
+          "updated_at": ISODate()
+        }
+      ],
+
+      "on_spot_registrations": [
+        {
+          "attendee_id": ObjectId(), // User ID
+          "created_at": ISODate(),
+          "updated_at": ISODate()
+        }
+      ],
+
+      "created_at": ISODate(),
+      "updated_at": ISODate()
+    }
+  ]
+}

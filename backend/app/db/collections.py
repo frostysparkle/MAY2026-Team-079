@@ -1,9 +1,0 @@
-USERS = "users"
-EVENT_REGISTRATIONS = "event_registrations"
-STAFF_ASSIGNMENTS = "staff_assignments"
-
-INITIAL_COLLECTIONS = (
-    USERS,
-    EVENT_REGISTRATIONS,
-    STAFF_ASSIGNMENTS,
-)
