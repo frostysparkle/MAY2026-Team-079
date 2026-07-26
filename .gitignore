@@ -1,3 +1,7 @@
 # Local editor configuration
 .zed/
-.graphify-out/
+.vscode/
+graphify-out/
+
+# macOS
+.DS_Store
