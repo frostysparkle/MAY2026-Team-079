@@ -7,7 +7,8 @@ Attendee:
 
   "profile": {
     "full_name": "John Doe",
-    "dob": ISODate("2002-04-21"), // ISO date (with reasonable limits)
+    "dob": ISODate("2002-04-21"), // ISO date (with reasonable limits),
+    "house" : Wayanad House // 12 houses of IITMadras BS Degree Programme
 
     "gender": "male", // male | female | other
     "phone": "+919999999999",
@@ -60,6 +61,7 @@ Hostel:
   "hostel_name": "Alakhnanda",
 
   "gender": "male", // male | female | mixed
+  "hostel_team" : [{role : "hostel_volunteers", user_id: ObjectId() //attendee_id}, ...]
 
 
   "coordinator": "Rahul",
@@ -81,7 +83,7 @@ Mess
   "mess_name": "Himalaya",
 
   "caterer": "Firstman",
-
+  "mess_team" : [{role : "mess_volunteers", user_id: ObjectId() //attendee_id}, ...]
   "type": "South Indian", // South Indian | North Indian | Jain
 
 
@@ -96,22 +98,25 @@ Mess
   "updated_at": ISODate()
 }
 
-Workshops:
+Slot
 {
   "slot_id": "12A",
   "event_date": ISODate(),
 
   "start_time": "10:00",
   "end_time": "12:00",
+}
+
+Workshops:
+{
+  "slot_id": "12A",
 
   "created_by": ObjectId(), // Super user ID
 
   "created_at": ISODate(),
   "updated_at": ISODate(),
 
-  "workshops": [
-    {
-      "workshop_id": ObjectId(),
+      "workshop_id": WKS23432,
 
       "name": "Applications of AI",
       "venue": "CRC 203",
@@ -142,5 +147,20 @@ Workshops:
       "created_at": ISODate(),
       "updated_at": ISODate()
     }
+      "workshop_team" : [{role : "workshop_volunteers", user_id: ObjectId() //attendee_id}, ...]
   ]
+}
+
+
+{
+  "admin_id": ObjectId(), // Reference to attendee document
+
+  "role": "super_admin", // super_admin | admin
+
+  "department": "technicals", // technicals | sports | culturals | uhc
+
+  "designation": "Faculty Coordinator",
+
+  "created_at": ISODate(),
+  "updated_at": ISODate()
 }

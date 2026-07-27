@@ -23,6 +23,7 @@ class ChangePasswordRequest(BaseModel):
 class ProfileCompleteRequest(BaseModel):
     full_name: str
     dob: str  
+    house: str
     gender: str
     phone: str
     country: str

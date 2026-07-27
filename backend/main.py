@@ -114,6 +114,7 @@ def login(request: LoginRequest):
         "access_token": access_token,
         "full_name": profile.get("full_name"),
         "dob": profile.get("dob"),
+        "house": profile.get("house"),
         "gender": profile.get("gender"),
         "phone": profile.get("phone"),
         "country": profile.get("country"),
@@ -167,6 +168,7 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
     profile_data = {
         "full_name": request.full_name,
         "dob": request.dob,
+        "house": request.house,
         "gender": request.gender,
         "phone": request.phone,
         "country": request.country,
