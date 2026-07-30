@@ -33,3 +33,20 @@ class ProfileCompleteRequest(BaseModel):
     course_stage: str
     address: str
     photo: str # Base64 encoded string
+
+class ScanQRRequest(BaseModel):
+    attendee_id: str
+    data: str
+    timestamp: str
+
+class EventCreateRequest(BaseModel):
+    event_id: str
+    name: str
+    department: str
+    venue: str
+    rounds: int
+    poc_id: str
+
+class EventUpdateRequest(BaseModel):
+    venue: Optional[str] = None
+    rounds: Optional[int] = None

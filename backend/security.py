@@ -2,8 +2,10 @@ import os
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+import base64
+import json
 
 # In a production app, SECRET_KEY should be securely stored in the env
 SECRET_KEY = os.getenv("SECRET_KEY", "paradox-super-secret-jwt-key")
@@ -48,3 +50,19 @@ def generate_rsa_key_pair():
     )
     
     return pem_private.decode('utf-8'), pem_public.decode('utf-8')
+
+def decrypt_qr_data(private_key_pem: str, encrypted_data_b64: str) -> dict:
+    private_key = serialization.load_pem_private_key(
+        private_key_pem.encode('utf-8'),
+        password=None
+    )
+    encrypted_data = base64.b64decode(encrypted_data_b64)
+    decrypted_data = private_key.decrypt(
+        encrypted_data,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return json.loads(decrypted_data.decode('utf-8'))
