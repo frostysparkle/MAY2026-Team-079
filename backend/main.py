@@ -1,18 +1,25 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+import asyncio
 import re
 
 from models import (
     RegisterRequest, LoginRequest, ForgotPasswordRequest,
-    ResetPasswordRequest, ChangePasswordRequest, ProfileCompleteRequest
+    ResetPasswordRequest, ChangePasswordRequest, ProfileCompleteRequest,
+    ScanQRRequest, EventCreateRequest, EventUpdateRequest
 )
-from database import attendees_collection
+from database import (
+    attendees_collection, workshops_collection, slots_collection,
+    hostels_collection, messes_collection, admins_collection, events_collection
+)
 from security import (
     get_password_hash, verify_password, create_access_token,
-    generate_rsa_key_pair, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+    generate_rsa_key_pair, decrypt_qr_data, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
 app = FastAPI(title="Paradox Connect API")
@@ -192,6 +199,247 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
         **profile_data,
         "photo_data_url": request.photo
     }
+
+# ==========================================
+# WORKSHOP REGISTRATION & SSE (SPRINT A)
+# ==========================================
+
+@app.post("/workshops/{workshop_id}/register")
+def register_for_workshop(workshop_id: str, current_user: dict = Depends(get_current_user)):
+    attendee_id = current_user["attendee_id"]
+    
+    # 1. Check if workshop exists
+    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+        
+    # 2. Check capacity
+    if workshop.get("registration_count", 0) >= workshop.get("capacity", 0):
+        raise HTTPException(status_code=400, detail="Workshop is full")
+        
+    # 3. Check if user is already registered for THIS workshop
+    if any(reg.get("attendee_id") == attendee_id for reg in workshop.get("registrations", [])):
+        raise HTTPException(status_code=400, detail="Already registered for this workshop")
+        
+    # 4. Check if user is registered for ANOTHER workshop in the SAME SLOT
+    slot_id = workshop.get("slot_id")
+    other_workshops_in_slot = workshops_collection.find({"slot_id": slot_id, "workshop_id": {"$ne": workshop_id}})
+    for other_ws in other_workshops_in_slot:
+        if any(reg.get("attendee_id") == attendee_id for reg in other_ws.get("registrations", [])):
+            raise HTTPException(status_code=400, detail="Already registered for another workshop in this time slot")
+
+    # 5. Register the user
+    new_registration = {
+        "attendee_id": attendee_id,
+        "status": "registered",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+    
+    result = workshops_collection.update_one(
+        {"workshop_id": workshop_id, "registration_count": {"$lt": workshop.get("capacity", 0)}}, # Double check capacity atomically
+        {
+            "$push": {"registrations": new_registration},
+            "$inc": {"registration_count": 1}
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Failed to register. Workshop might have just filled up.")
+        
+    return {"message": "Successfully registered for workshop"}
+
+
+@app.get("/workshops/{workshop_id}/seats/stream")
+async def stream_workshop_seats(workshop_id: str):
+    """SSE Endpoint to push real-time remaining seat counts."""
+    async def event_generator():
+        previous_count = -1
+        while True:
+            workshop = await run_in_threadpool(workshops_collection.find_one, {"workshop_id": workshop_id})
+            if not workshop:
+                yield f"data: {{\"error\": \"Workshop not found\"}}\n\n"
+                break
+                
+            current_count = workshop.get("registration_count", 0)
+            capacity = workshop.get("capacity", 0)
+            remaining = capacity - current_count
+            
+            if current_count != previous_count:
+                # Send SSE data payload
+                yield f"data: {{\"remaining_seats\": {remaining}, \"capacity\": {capacity}}}\n\n"
+                previous_count = current_count
+                
+            # Wait 2 seconds before polling again
+            await asyncio.sleep(2)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# ==========================================
+# SCANNER & DECRYPTION ENGINE (SPRINT B)
+# ==========================================
+
+def verify_qr(request: ScanQRRequest):
+    """Decrypts QR, verifies timestamp, and returns attendee dict"""
+    target_user = attendees_collection.find_one({"attendee_id": request.attendee_id})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Scanned user not found")
+        
+    private_key = target_user.get("qr_secrets", {}).get("private_key")
+    if not private_key:
+        raise HTTPException(status_code=400, detail="User missing private key")
+        
+    try:
+        qr_timestamp = datetime.fromisoformat(request.timestamp.replace("Z", "+00:00")).replace(tzinfo=None)
+        if datetime.utcnow() - qr_timestamp > timedelta(seconds=60):
+            raise HTTPException(status_code=400, detail="QR Code expired")
+            
+        decrypted_payload = decrypt_qr_data(private_key, request.data)
+        return target_user, decrypted_payload
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid or corrupted QR code")
+
+@app.post("/workshops/{workshop_id}/attendance")
+def workshop_attendance(workshop_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
+    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+        
+    # RBAC: Check if current_user is a workshop volunteer or admin
+    is_volunteer = any(v.get("user_id") == current_user["attendee_id"] for v in workshop.get("workshop_team", []))
+    is_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"]})
+    if not (is_volunteer or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to scan for this workshop")
+        
+    target_user, payload = verify_qr(request)
+    
+    registrations = workshop.get("registrations", [])
+    registered = next((r for r in registrations if r["attendee_id"] == target_user["attendee_id"]), None)
+    
+    if registered:
+        # Pre-registered attendee
+        if registered.get("status") == "attended":
+            return {"message": "Attendee already marked present"}
+            
+        workshops_collection.update_one(
+            {"workshop_id": workshop_id, "registrations.attendee_id": target_user["attendee_id"]},
+            {"$set": {"registrations.$.status": "attended"}, "$inc": {"attendee_count": 1}}
+        )
+        return {"message": "Pre-registered attendee marked present"}
+    else:
+        # On-spot registration
+        if workshop.get("registration_count", 0) >= workshop.get("capacity", 0):
+            raise HTTPException(status_code=400, detail="Workshop is full, cannot on-spot register")
+            
+        workshops_collection.update_one(
+            {"workshop_id": workshop_id},
+            {
+                "$push": {"on_spot_registrations": {"attendee_id": target_user["attendee_id"], "created_at": datetime.utcnow()}},
+                "$inc": {"registration_count": 1, "attendee_count": 1}
+            }
+        )
+        return {"message": "On-spot registration successful and marked present"}
+
+@app.post("/hostels/{hostel_id}/entry")
+def hostel_entry(hostel_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
+    hostel = hostels_collection.find_one({"hostel_id": hostel_id})
+    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
+    
+    # RBAC
+    is_volunteer = any(v.get("user_id") == current_user["attendee_id"] for v in hostel.get("hostel_team", []))
+    is_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"]})
+    if not (is_volunteer or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
+        
+    target_user, payload = verify_qr(request)
+    # Log entry (in a real app, this would append to an entry_logs collection)
+    return {"message": f"Hostel entry marked for {target_user['attendee_id']}"}
+
+@app.post("/messes/{mess_id}/entry")
+def mess_entry(mess_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
+    mess = messes_collection.find_one({"mess_id": mess_id})
+    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
+    
+    is_volunteer = any(v.get("user_id") == current_user["attendee_id"] for v in mess.get("mess_team", []))
+    is_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"]})
+    if not (is_volunteer or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
+        
+    target_user, payload = verify_qr(request)
+    return {"message": f"Mess entry marked for {target_user['attendee_id']}"}
+
+# ==========================================
+# EVENT MANAGEMENT & ADMIN RBAC (SPRINT C)
+# ==========================================
+
+@app.post("/events")
+def create_event(request: EventCreateRequest, current_user: dict = Depends(get_current_user)):
+    # Only super_admin can create events
+    admin = admins_collection.find_one({"admin_id": current_user["attendee_id"], "role": "super_admin"})
+    if not admin:
+        raise HTTPException(status_code=403, detail="Only Super Admins can create events")
+        
+    events_collection.insert_one({
+        "event_id": request.event_id,
+        "name": request.name,
+        "department": request.department,
+        "venue": request.venue,
+        "rounds": request.rounds,
+        "poc_id": request.poc_id,
+        "registrations": [],
+        "created_at": datetime.utcnow()
+    })
+    return {"message": "Event created"}
+
+@app.put("/events/{event_id}")
+def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_user)):
+    event = events_collection.find_one({"event_id": event_id})
+    if not event: raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Only super_admin or the assigned POC (Team Lead) can edit
+    is_super_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"], "role": "super_admin"})
+    is_poc = (event.get("poc_id") == current_user["attendee_id"])
+    
+    if not (is_super_admin or is_poc):
+        raise HTTPException(status_code=403, detail="Only Super Admin or Team Lead (POC) can edit this event")
+        
+    update_data = {k: v for k, v in request.dict().items() if v is not None}
+    if update_data:
+        events_collection.update_one({"event_id": event_id}, {"$set": update_data})
+        
+    return {"message": "Event updated successfully"}
+
+@app.post("/events/{event_id}/register")
+def register_for_event(event_id: str, current_user: dict = Depends(get_current_user)):
+    event = events_collection.find_one({"event_id": event_id})
+    if not event: raise HTTPException(status_code=404, detail="Event not found")
+    
+    if current_user["attendee_id"] in event.get("registrations", []):
+        raise HTTPException(status_code=400, detail="Already registered for this event")
+        
+    events_collection.update_one(
+        {"event_id": event_id},
+        {"$push": {"registrations": current_user["attendee_id"]}}
+    )
+    return {"message": "Registered for event"}
+
+@app.get("/events")
+def list_events(current_user: dict = Depends(get_current_user)):
+    admin = admins_collection.find_one({"admin_id": current_user["attendee_id"]})
+    
+    if admin:
+        if admin["role"] == "super_admin":
+            return list(events_collection.find({}, {"_id": 0}))
+        elif admin["department"] == "uhc":
+            # UHC sees all events, but typically would filter registrants by house.
+            # Returning all events for now.
+            return list(events_collection.find({}, {"_id": 0}))
+        else:
+            # Department admins (technicals, sports, culturals)
+            return list(events_collection.find({"department": admin["department"]}, {"_id": 0}))
+            
+    # Regular users see all events but maybe without admin sensitive data
+    return list(events_collection.find({}, {"_id": 0, "registrations": 0}))
 
 if __name__ == "__main__":
     import uvicorn
