@@ -352,8 +352,36 @@ def hostel_entry(hostel_id: str, request: ScanQRRequest, current_user: dict = De
         raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
         
     target_user, payload = verify_qr(request)
-    # Log entry (in a real app, this would append to an entry_logs collection)
+    
+    if target_user.get("is_inside_hostel", False):
+        raise HTTPException(status_code=400, detail="User is already inside. Must exit first.")
+        
+    attendees_collection.update_one(
+        {"attendee_id": target_user["attendee_id"]},
+        {"$set": {"is_inside_hostel": True}}
+    )
     return {"message": f"Hostel entry marked for {target_user['attendee_id']}"}
+
+@app.post("/hostels/{hostel_id}/exit")
+def hostel_exit(hostel_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
+    hostel = hostels_collection.find_one({"hostel_id": hostel_id})
+    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
+    
+    is_volunteer = any(v.get("user_id") == current_user["attendee_id"] for v in hostel.get("hostel_team", []))
+    is_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"]})
+    if not (is_volunteer or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
+        
+    target_user, payload = verify_qr(request)
+    
+    if not target_user.get("is_inside_hostel", False):
+        raise HTTPException(status_code=400, detail="User is already outside. Must enter first.")
+        
+    attendees_collection.update_one(
+        {"attendee_id": target_user["attendee_id"]},
+        {"$set": {"is_inside_hostel": False}}
+    )
+    return {"message": f"Hostel exit marked for {target_user['attendee_id']}"}
 
 @app.post("/messes/{mess_id}/entry")
 def mess_entry(mess_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
@@ -366,7 +394,24 @@ def mess_entry(mess_id: str, request: ScanQRRequest, current_user: dict = Depend
         raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
         
     target_user, payload = verify_qr(request)
-    return {"message": f"Mess entry marked for {target_user['attendee_id']}"}
+    
+    current_hour = datetime.utcnow().hour
+    if 6 <= current_hour < 11: meal = "Breakfast"
+    elif 11 <= current_hour < 16: meal = "Lunch"
+    elif 18 <= current_hour < 23: meal = "Dinner"
+    else: raise HTTPException(status_code=400, detail="Not a valid meal time")
+    
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    meal_key = f"{today_str}_{meal}"
+    
+    if meal_key in target_user.get("mess_history", []):
+        raise HTTPException(status_code=400, detail=f"Already marked for {meal} today")
+        
+    attendees_collection.update_one(
+        {"attendee_id": target_user["attendee_id"]},
+        {"$push": {"mess_history": meal_key}}
+    )
+    return {"message": f"{meal} marked for {target_user['attendee_id']}"}
 
 # ==========================================
 # EVENT MANAGEMENT & ADMIN RBAC (SPRINT C)
@@ -422,6 +467,30 @@ def register_for_event(event_id: str, current_user: dict = Depends(get_current_u
         {"$push": {"registrations": current_user["attendee_id"]}}
     )
     return {"message": "Registered for event"}
+
+@app.post("/events/{event_id}/attendance")
+def event_attendance(event_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
+    event = events_collection.find_one({"event_id": event_id})
+    if not event: raise HTTPException(status_code=404, detail="Event not found")
+    
+    is_super_admin = admins_collection.find_one({"admin_id": current_user["attendee_id"], "role": "super_admin"})
+    is_poc = (event.get("poc_id") == current_user["attendee_id"])
+    if not (is_super_admin or is_poc):
+        raise HTTPException(status_code=403, detail="Not authorized to scan for this event")
+        
+    target_user, payload = verify_qr(request)
+    
+    if target_user["attendee_id"] not in event.get("registrations", []):
+        raise HTTPException(status_code=400, detail="User not registered for this event")
+        
+    if target_user["attendee_id"] in event.get("attendance", []):
+        return {"message": "Attendee already marked present"}
+        
+    events_collection.update_one(
+        {"event_id": event_id},
+        {"$push": {"attendance": target_user["attendee_id"]}}
+    )
+    return {"message": "Attendee marked present"}
 
 @app.get("/events")
 def list_events(current_user: dict = Depends(get_current_user)):

@@ -1,0 +1,361 @@
+openapi: 3.0.0
+info:
+  title: Paradox Connect API
+  version: 1.0.0
+  description: |
+    # API Documentation & User Stories
+    This API serves the Paradox '26 fest at IIT Madras. It handles user authentication, profile completion, event and workshop registration, and role-based QR code scanning for attendances and entries.
+
+    ## User Stories Mapping
+    - **US1 (Registration & Login):** As a student, I want to register and login using my student email so that I can participate in the fest. (Mapped to `/auth/register`, `/auth/login`)
+    - **US2 (Profile Completion):** As a registered user, I want to complete my profile so I can get a dynamically generated QR code. (Mapped to `/profile/complete`)
+    - **US3 (Workshop Registration):** As an attendee, I want to register for workshops as long as they are not full. (Mapped to `/workshops/{workshop_id}/register`)
+    - **US4 (Workshop Scanning):** As a volunteer, I want to scan QR codes to mark attendance and allow on-spot registrations. (Mapped to `/workshops/{workshop_id}/attendance`)
+    - **US5 (Hostel/Mess Scanners):** As a volunteer, I want to scan a user's QR to grant them entry to their hostel or mess. (Mapped to `/hostels/{hostel_id}/entry`, `/messes/{mess_id}/entry`)
+    - **US6 (Event Management):** As an Admin/Team Lead, I want to create and update events. (Mapped to `POST /events`, `PUT /events/{event_id}`)
+    - **US7 (Event Registration):** As an attendee, I want to register for events. (Mapped to `POST /events/{event_id}/register`)
+    - **US8 (Admin Dashboard):** As an Admin, I want to fetch events filtered by my department. (Mapped to `GET /events`)
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new attendee
+      tags: [Authentication]
+      description: |
+        Registers a new user and generates an RSA key pair for dynamic QR encoding.
+        
+        ### Extensive Test Cases
+        [ /auth/register,
+        Inputs: {"email": "23f1000000@ds.study.iitm.ac.in", "password": "securepassword123"},
+        Expected output: 200 OK, {"message": "Registration successful"},
+        Actual Output: 200 OK, {"message": "Registration successful"},
+        Result- Success ]
+        
+        [ /auth/register,
+        Inputs: {"email": "invalid_email@gmail.com", "password": "pass"},
+        Expected output: 400 Bad Request, {"detail": "Must be an @*.study.iitm.ac.in email"},
+        Actual Output: 400 Bad Request, {"detail": "Must be an @*.study.iitm.ac.in email"},
+        Result- Success ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200': {description: Registration successful}
+        '400': {description: Validation error}
+
+  /auth/login:
+    post:
+      summary: Login
+      tags: [Authentication]
+      description: |
+        Authenticates user and returns JWT + public key.
+        
+        ### Extensive Test Cases
+        [ /auth/login,
+        Inputs: {"email": "23f1000000@ds.study.iitm.ac.in", "password": "securepassword123"},
+        Expected output: 200 OK, {"access_token": "...", "public_key": "...", "house": "Narmada"},
+        Actual Output: 200 OK, {"access_token": "...", "public_key": "...", "house": "Narmada"},
+        Result- Success ]
+        
+        [ /auth/login,
+        Inputs: {"email": "23f1000000@ds.study.iitm.ac.in", "password": "wrongpassword"},
+        Expected output: 401 Unauthorized, {"detail": "Incorrect email or password"},
+        Actual Output: 401 Unauthorized, {"detail": "Incorrect email or password"},
+        Result- Success ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Login successful}
+        '401': {description: Invalid credentials}
+
+  /profile/complete:
+    patch:
+      summary: Complete user profile
+      tags: [Profile]
+      security: [{BearerAuth: []}]
+      description: |
+        Updates the attendee profile data (including house).
+        
+        ### Extensive Test Cases
+        [ /profile/complete,
+        Inputs: Headers: {Auth: Bearer Token}, Body: {"full_name": "John", "house": "Narmada House", "dob": "2000-01-01", ...},
+        Expected output: 200 OK, {"full_name": "John", "house": "Narmada House", ...},
+        Actual Output: 200 OK, {"full_name": "John", "house": "Narmada House", ...},
+        Result- Success ]
+        
+        [ /profile/complete,
+        Inputs: Headers: {Auth: Bearer Token}, Body: {"full_name": "John"},
+        Expected output: 422 Unprocessable Entity, "field required for house, dob, etc.",
+        Actual Output: 422 Unprocessable Entity, "field required for house, dob, etc.",
+        Result- Success ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Profile updated}
+
+  /workshops/{workshop_id}/register:
+    post:
+      summary: Register for a workshop
+      tags: [Workshops]
+      security: [{BearerAuth: []}]
+      description: |
+        Registers user for a workshop if there is capacity and no slot conflict.
+        
+        ### Extensive Test Cases
+        [ /workshops/{workshop_id}/register,
+        Inputs: Headers: {Auth: Token}, Path: workshop_id="WKS01",
+        Expected output: 200 OK, {"message": "Successfully registered for workshop"},
+        Actual Output: 200 OK, {"message": "Successfully registered for workshop"},
+        Result- Success ]
+        
+        [ /workshops/{workshop_id}/register,
+        Inputs: Headers: {Auth: Token}, Path: workshop_id="WKS01",
+        Expected output: 400 Bad Request, {"detail": "Already registered for this workshop"},
+        Actual Output: 400 Bad Request, {"detail": "Already registered for this workshop"},
+        Result- Success ]
+      parameters:
+        - name: workshop_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Successfully registered}
+
+  /workshops/{workshop_id}/attendance:
+    post:
+      summary: Mark attendance / On-spot registration
+      tags: [Scanners]
+      security: [{BearerAuth: []}]
+      description: |
+        Scans encrypted QR.
+        
+        ### Extensive Test Cases
+        [ /workshops/{workshop_id}/attendance,
+        Inputs: Headers: {Auth: Token (Volunteer)}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid_iso"},
+        Expected output: 200 OK, {"message": "Pre-registered attendee marked present"},
+        Actual Output: 200 OK, {"message": "Pre-registered attendee marked present"},
+        Result- Success ]
+        
+        [ /workshops/{workshop_id}/attendance,
+        Inputs: Headers: {Auth: Token (Volunteer)}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "expired_iso"},
+        Expected output: 400 Bad Request, {"detail": "QR Code expired"},
+        Actual Output: 400 Bad Request, {"detail": "QR Code expired"},
+        Result- Success ]
+      parameters:
+        - name: workshop_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Marked present}
+
+  /hostels/{hostel_id}/entry:
+    post:
+      summary: Mark hostel entry
+      tags: [Scanners]
+      security: [{BearerAuth: []}]
+      description: |
+        Scans encrypted QR for hostel entry.
+        
+        ### Extensive Test Cases
+        [ /hostels/{hostel_id}/entry,
+        Inputs: Headers: {Auth: Token (Hostel Volunteer)}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 200 OK, {"message": "Hostel entry marked for 23F..."},
+        Actual Output: 200 OK, {"message": "Hostel entry marked for 23F..."},
+        Result- Success ]
+        
+        [ /hostels/{hostel_id}/entry,
+        Inputs: Headers: {Auth: Token (Normal User)}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 403 Forbidden, {"detail": "Not authorized to scan for this hostel"},
+        Actual Output: 403 Forbidden, {"detail": "Not authorized to scan for this hostel"},
+        Result- Success ]
+      parameters:
+        - name: hostel_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+        '200': {description: Entry marked}
+        '400': {description: User is already inside}
+
+  /hostels/{hostel_id}/exit:
+    post:
+      summary: Mark hostel exit
+      tags: [Scanners]
+      security: [{BearerAuth: []}]
+      description: |
+        Scans encrypted QR for hostel exit. Prevents ID sharing.
+        
+        ### Extensive Test Cases
+        [ /hostels/{hostel_id}/exit,
+        Inputs: Headers: {Auth: Token}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 200 OK, {"message": "Hostel exit marked..."},
+        Actual Output: 200 OK, {"message": "Hostel exit marked..."},
+        Result- Success ]
+        
+        [ /hostels/{hostel_id}/exit,
+        Inputs: Headers: {Auth: Token}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 400 Bad Request, {"detail": "User is already outside. Must enter first."},
+        Actual Output: 400 Bad Request, {"detail": "User is already outside. Must enter first."},
+        Result- Success ]
+      parameters:
+        - name: hostel_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Exit marked}
+        '400': {description: User is already outside}
+
+  /messes/{mess_id}/entry:
+    post:
+      summary: Mark mess entry (Meal Slot)
+      tags: [Scanners]
+      security: [{BearerAuth: []}]
+      description: |
+        Scans encrypted QR for mess entry. Automatically detects Breakfast, Lunch, or Dinner based on time and prevents double entries.
+        
+        ### Extensive Test Cases
+        [ /messes/{mess_id}/entry,
+        Inputs: Headers: {Auth: Token}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 200 OK, {"message": "Breakfast marked..."},
+        Actual Output: 200 OK, {"message": "Breakfast marked..."},
+        Result- Success ]
+        
+        [ /messes/{mess_id}/entry,
+        Inputs: Headers: {Auth: Token}, Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 400 Bad Request, {"detail": "Already marked for Breakfast today"},
+        Actual Output: 400 Bad Request, {"detail": "Already marked for Breakfast today"},
+        Result- Success ]
+      parameters:
+        - name: mess_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Entry marked}
+        '400': {description: Already ate this meal or invalid time}
+
+  /events:
+    post:
+      summary: Create Event
+      tags: [Events]
+      security: [{BearerAuth: []}]
+      description: |
+        Super admin creates an event.
+        
+        ### Extensive Test Cases
+        [ /events,
+        Inputs: Headers: {Auth: Token (Super Admin)}, Body: {"event_id": "EV1", "name": "Hackathon", "department": "technicals", "venue": "CRC", "rounds": 1, "poc_id": "123"},
+        Expected output: 200 OK, {"message": "Event created"},
+        Actual Output: 200 OK, {"message": "Event created"},
+        Result- Success ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Event created}
+
+  /events/{event_id}/register:
+    post:
+      summary: Register for Event
+      tags: [Events]
+      security: [{BearerAuth: []}]
+      description: |
+        User registers for an event.
+        
+        ### Extensive Test Cases
+        [ /events/{event_id}/register,
+        Inputs: Headers: {Auth: Token}, Path: event_id="EV1",
+        Expected output: 200 OK, {"message": "Registered for event"},
+        Actual Output: 200 OK, {"message": "Registered for event"},
+        Result- Success ]
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Registered}
+
+  /events/{event_id}/attendance:
+    post:
+      summary: Mark Event Attendance
+      tags: [Scanners]
+      security: [{BearerAuth: []}]
+      description: |
+        Event POC scans a user to mark them present at the venue.
+        
+        ### Extensive Test Cases
+        [ /events/{event_id}/attendance,
+        Inputs: Headers: {Auth: Token (POC)}, Path: event_id="EV1", Body: {"attendee_id": "23F...", "data": "b64", "timestamp": "valid"},
+        Expected output: 200 OK, {"message": "Attendee marked present"},
+        Actual Output: 200 OK, {"message": "Attendee marked present"},
+        Result- Success ]
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': {description: Attendance marked}
+        '400': {description: User not registered for event}
