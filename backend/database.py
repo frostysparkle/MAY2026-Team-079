@@ -2,24 +2,20 @@ import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# Load the specific credentials file provided by the user
 load_dotenv("atlas-credentials.env")
 
-MONGODB_URI = os.getenv("MONGODB_URI")
-if not MONGODB_URI:
-    raise ValueError("MONGODB_URI is not set in atlas-credentials.env")
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/paradox")
 
-# Connect to MongoDB Atlas
 client = MongoClient(MONGODB_URI)
 
 # Use 'paradox' as the main database
 db = client["paradox"]
 
-# Export collections
-attendees_collection = db["attendees"]
-hostels_collection = db["hostels"]
-messes_collection = db["messes"]
+# Export collections strictly mapping to new database design (database.txt)
+mess_collection = db["mess"]
+hostel_collection = db["hostel"]
 workshops_collection = db["workshops"]
-slots_collection = db["slots"]
-admins_collection = db["admins"]
-events_collection = db["events"]
+event_collection = db["event"]
+backend_teams_collection = db["backend_teams"]
+participants_collection = db["participants"]
+workshop_logs_collection = db["workshop_logs"]
