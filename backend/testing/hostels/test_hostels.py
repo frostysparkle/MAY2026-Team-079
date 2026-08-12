@@ -14,6 +14,9 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_data():
+    hostel_collection.delete_many({})
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
     rand_id = random.randint(100000, 999999)
     p_email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"
@@ -32,6 +35,8 @@ def setup_data():
         "country": "India", "state": "TN", "city": "Chennai", "address": "IITM",
         "program": "BS", "course_stage": "Diploma"
     }, headers={"Authorization": f"Bearer {p_token}"})
+    participants_collection.update_one({"participant_id": p_id}, {"$set": {"accommodation.registered": True}})
+
 
     # Register super admin
     admin_rand = random.randint(100000, 999999)
@@ -72,7 +77,8 @@ def test_hostel_crud_and_allocation(setup_data):
         "hostel_id": setup_data["hostel_id"],
         "name": "Brahmaputra",
         "capacity": 10,
-        "gender": "Male"
+        "gender": "Male",
+        "coordinator": {"user_id": setup_data["sa_id"], "name": "Admin Coordinator"}
     }
     resp = client.post("/hostels", json=hostel_payload, headers=sa_headers)
     assert resp.status_code == 200

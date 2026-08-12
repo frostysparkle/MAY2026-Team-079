@@ -56,10 +56,9 @@ def generate_participant_id(email: str) -> str:
 
 @app.post("/auth/register")
 def register(request: RegisterRequest):
-    # Check IITM email domain format (for tests and validation)
+    # Enforce IITM email domain
     if not re.match(r'^[^@]+@[a-z]+\.study\.iitm\.ac\.in$', request.email.lower()):
-        # Allow fallback for non-strict if needed, but keeping standard test requirement
-        pass
+        raise HTTPException(status_code=400, detail="Must be an @*.study.iitm.ac.in email")
 
     if participants_collection.find_one({"email": request.email}) or backend_teams_collection.find_one({"email": request.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -110,7 +109,7 @@ def register(request: RegisterRequest):
     }
     
     participants_collection.insert_one(new_user)
-    return {"message": "User registered successfully", "participant_id": participant_id}
+    return {"message": "Registration successful", "participant_id": participant_id}
 
 @app.post("/auth/login")
 def login(request: LoginRequest):
@@ -248,99 +247,9 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
 
 
 
-@app.post("/hostels/{hostel_id}/entry")
-def hostel_entry(hostel_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
-    hostel = hostel_collection.find_one({"$or": [{"hostel_id": hostel_id}, {"hostel_name": hostel_id}]})
-    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
-    
-    user_id = current_user.get("participant_id") or current_user.get("paradox_id")
-    is_volunteer = any(str(v.get("user_id")) == str(current_user["_id"]) or str(v.get("user_id")) == user_id for v in hostel.get("hostel_team", []))
-    is_admin = backend_teams_collection.find_one({"paradox_id": user_id}) or "paradox_id" in current_user
-    if not (is_volunteer or is_admin):
-        raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
-        
-    target_user, payload = verify_qr(request)
-    
-    if target_user.get("accommodation", {}).get("logged_in", False):
-        raise HTTPException(status_code=400, detail="User is already inside hostel. Must exit first.")
-        
-    participants_collection.update_one(
-        {"_id": target_user["_id"]},
-        {"$set": {"accommodation.logged_in": True, "accommodation.hostel_id": hostel["_id"]}}
-    )
-    return {"message": "Hostel entry marked successfully."}
-
-@app.post("/hostels/{hostel_id}/exit")
-def hostel_exit(hostel_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
-    hostel = hostel_collection.find_one({"$or": [{"hostel_id": hostel_id}, {"hostel_name": hostel_id}]})
-    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
-    
-    user_id = current_user.get("participant_id") or current_user.get("paradox_id")
-    is_volunteer = any(str(v.get("user_id")) == str(current_user["_id"]) or str(v.get("user_id")) == user_id for v in hostel.get("hostel_team", []))
-    is_admin = backend_teams_collection.find_one({"paradox_id": user_id}) or "paradox_id" in current_user
-    if not (is_volunteer or is_admin):
-        raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
-        
-    target_user, payload = verify_qr(request)
-    
-    if not target_user.get("accommodation", {}).get("logged_in", False):
-        raise HTTPException(status_code=400, detail="User is already outside hostel. Must enter first.")
-        
-    participants_collection.update_one(
-        {"_id": target_user["_id"]},
-        {"$set": {"accommodation.logged_in": False}}
-    )
-    return {"message": "Hostel exit marked successfully."}
-
-@app.post("/messes/{mess_id}/entry")
-def mess_entry(mess_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
-    mess = mess_collection.find_one({"$or": [{"mess_id": mess_id}, {"mess_name": mess_id}]})
-    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
-    
-    user_id = current_user.get("participant_id") or current_user.get("paradox_id")
-    is_volunteer = any(str(v.get("user_id")) == str(current_user["_id"]) or str(v.get("user_id")) == user_id for v in mess.get("mess_team", []))
-    is_admin = backend_teams_collection.find_one({"paradox_id": user_id}) or "paradox_id" in current_user
-    if not (is_volunteer or is_admin):
-        raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
-        
-    target_user, payload = verify_qr(request)
-    
-    current_hour = datetime.utcnow().hour
-    if 6 <= current_hour < 11: meal_slot = "breakfast"
-    elif 11 <= current_hour < 16: meal_slot = "lunch"
-    elif 18 <= current_hour < 23: meal_slot = "dinner"
-    else: raise HTTPException(status_code=400, detail="Not a valid meal time slot")
-    
-    # Find day index (assume Day 1 for active fest day)
-    mess_data = target_user.get("mess", {})
-    entries = mess_data.get("entries", [])
-    
-    # Find active day entry (default Day 1)
-    day_1_entry = next((e for e in entries if e.get("day") == 1), None)
-    if day_1_entry:
-        slot_obj = next((s for s in day_1_entry.get("slots", []) if s.get("slot") == meal_slot), None)
-        if slot_obj and slot_obj.get("logged"):
-            raise HTTPException(status_code=400, detail=f"Meal {meal_slot} already consumed for today")
-
-    # Mark logged = True for Day 1 slot
-    participants_collection.update_one(
-        {
-            "_id": target_user["_id"],
-            "mess.entries.day": 1
-        },
-        {
-            "$set": {
-                "mess.registered": True,
-                "mess.mess_id": mess["_id"],
-                "mess.entries.$[dayElem].slots.$[slotElem].logged": True
-            }
-        },
-        array_filters=[
-            {"dayElem.day": 1},
-            {"slotElem.slot": meal_slot}
-        ]
-    )
-    return {"message": f"Mess entry marked successfully for {meal_slot}."}
+# NOTE: Hostel entry/exit and mess entry are handled by the cleaner
+# router-based endpoints: POST /hostels/{hostel_id}/scan?action=entry|exit
+# and POST /mess/{mess_id}/scan?slot=...&day=... defined in routers/hostels.py and routers/mess.py
 
 
 # ==========================================
@@ -408,117 +317,6 @@ def delete_backend_team(paradox_id: str, current_user: dict = Depends(get_curren
 
 
 # ==========================================
-# SUPER ADMIN WORKSHOP CRUD
-# ==========================================
-from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest
-
-@app.post("/workshops")
-def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can create workshops")
-        
-    new_workshop = {
-        "workshop_id": request.workshop_id,
-        "slot_id": request.slot_id,
-        "name": request.name,
-        "venue": request.venue,
-        "capacity": request.capacity,
-        "registration_count": 0,
-        "participant_count": 0,
-        "instructions": request.instructions,
-        "start_time": request.start_time,
-        "workshop_team": [],
-        "created_by": current_user["_id"],
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
-    }
-    workshops_collection.insert_one(new_workshop)
-    return {"message": "Workshop created"}
-
-@app.get("/workshops")
-def list_workshops(current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    
-    if admin:
-        return list(workshops_collection.find({}, {"_id": 0}))
-    return list(workshops_collection.find({}, {"_id": 0, "workshop_team": 0}))
-
-@app.put("/workshops/{workshop_id}")
-def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can edit workshops")
-        
-    update_data = {k: v for k, v in request.dict().items() if v is not None}
-    if update_data:
-        update_data["updated_at"] = datetime.utcnow()
-        workshops_collection.update_one({"workshop_id": workshop_id}, {"$set": update_data})
-    return {"message": "Workshop updated"}
-
-@app.delete("/workshops/{workshop_id}")
-def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can delete workshops")
-        
-    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
-    if workshop:
-        ws_doc_id = workshop["_id"]
-        # Cascade delete from participants
-        participants_collection.update_many(
-            {"workshops.workshop_id": ws_doc_id},
-            {"$pull": {"workshops": {"workshop_id": ws_doc_id}}}
-        )
-        workshops_collection.delete_one({"workshop_id": workshop_id})
-    return {"message": "Workshop deleted"}
-
-@app.post("/workshops/{workshop_id}/volunteers")
-def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteerRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can assign volunteers")
-        
-    workshops_collection.update_one(
-        {"workshop_id": workshop_id},
-        {"$push": {"workshop_team": {"role": request.role, "user_id": request.user_id, "scanning_enabled": request.scanning_enabled}}}
-    )
-    return {"message": "Volunteer assigned"}
-
-@app.put("/workshops/{workshop_id}/volunteers/{user_id}/toggle_scan")
-def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, scanning_enabled: bool, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can toggle scanning")
-        
-    workshops_collection.update_one(
-        {"workshop_id": workshop_id, "workshop_team.user_id": volunteer_user_id},
-        {"$set": {"workshop_team.$.scanning_enabled": scanning_enabled}}
-    )
-    return {"message": "Volunteer scanning toggled"}
-
-@app.get("/workshops/{workshop_id}/logs")
-def workshop_logs(workshop_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can view logs")
-    
-    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
-    if not workshop:
-        raise HTTPException(status_code=404, detail="Workshop not found")
-        
-    logs = list(workshop_logs_collection.find({"workshop_id": str(workshop["_id"])}, {"_id": 0}))
-    return {"logs": logs}
-
-
-
 app.include_router(workshops.router)
 app.include_router(events.router)
 app.include_router(mess.router)

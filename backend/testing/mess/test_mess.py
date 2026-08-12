@@ -14,6 +14,9 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_data():
+    mess_collection.delete_many({})
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
     rand_id = random.randint(100000, 999999)
     p_email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"
@@ -32,7 +35,8 @@ def setup_data():
         "country": "India", "state": "TN", "city": "Chennai", "address": "IITM",
         "program": "BS", "course_stage": "Diploma"
     }, headers={"Authorization": f"Bearer {p_token}"})
-
+    
+    participants_collection.update_one({"participant_id": p_id}, {"$set": {"mess.registered": True}})
     # Register super admin
     admin_rand = random.randint(100000, 999999)
     a_email = f"sa{admin_rand}@ds.study.iitm.ac.in"

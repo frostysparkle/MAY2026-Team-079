@@ -198,7 +198,11 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_use
 def my_registrations(current_user: dict = Depends(get_current_user)):
     if "participant_id" not in current_user:
         return []
-    return current_user.get("events", [])
+    events = current_user.get("events", [])
+    for ev in events:
+        if "event_id" in ev and not isinstance(ev["event_id"], str):
+            ev["event_id"] = str(ev["event_id"])
+    return events
 
 @router.get("/{event_id}/participation")
 def view_participation(event_id: str, current_user: dict = Depends(get_current_user)):

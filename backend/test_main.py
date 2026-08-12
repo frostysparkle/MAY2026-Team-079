@@ -1,15 +1,40 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
+from database import workshops_collection
+from datetime import datetime, timedelta
 import random
 
 client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def user_data():
+    workshops_collection.delete_many({})
+    from database import participants_collection, backend_teams_collection
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
     rand_id = random.randint(1000000, 9999999)
     email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"
+
+    # Seed WKS02 workshop so registration tests don't get 404
+    workshops_collection.update_one(
+        {"workshop_id": "WKS02"},
+        {"$setOnInsert": {
+            "workshop_id": "WKS02",
+            "slot_id": "SLOT_TEST",
+            "name": "Test Workshop",
+            "venue": "Hall A",
+            "capacity": 100,
+            "registration_count": 0,
+            "participant_count": 0,
+            "instructions": "None",
+            "workshop_team": [],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }},
+        upsert=True
+    )
     return {"email": email, "password": password}
 
 def test_api_auth_register_success(user_data):
@@ -18,7 +43,7 @@ def test_api_auth_register_success(user_data):
     assert response.json()["message"] == "Registration successful"
 
 def test_api_auth_register_invalid_email():
-    response = client.post("/auth/register", json={"email": "bad_email@gmail.com", "password": "pass"})
+    response = client.post("/auth/register", json={"email": "bad_email@gmail.com", "password": "secure_password"})
     assert response.status_code == 400
     assert "Must be an @*.study.iitm.ac.in email" in response.json()["detail"]
 

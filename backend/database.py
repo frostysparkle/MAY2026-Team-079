@@ -6,7 +6,11 @@ load_dotenv("atlas-credentials.env")
 
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/paradox")
 
-client = MongoClient(MONGODB_URI)
+if os.getenv("TESTING") == "1":
+    import mongomock
+    client = mongomock.MongoClient()
+else:
+    client = MongoClient(MONGODB_URI)
 
 # Use 'paradox' as the main database
 db = client["paradox"]

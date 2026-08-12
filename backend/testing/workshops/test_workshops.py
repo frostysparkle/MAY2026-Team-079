@@ -16,6 +16,9 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_data():
+    workshops_collection.delete_many({})
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
     # Setup test users and data
     rand_id = random.randint(100000, 999999)
     p_email = f"23f{rand_id}@ds.study.iitm.ac.in"
@@ -54,7 +57,6 @@ def setup_data():
     # 3. Create a Workshop
     ws_id = f"WKS_TEST_{random.randint(1000, 9999)}"
     now = datetime.utcnow()
-    start_time = (now + timedelta(minutes=10)).isoformat() + "Z" # Starts in 10 mins (On-spot scanning enabled!)
     
     ws_payload = {
         "workshop_id": ws_id,
@@ -62,8 +64,7 @@ def setup_data():
         "name": "Test Workshop",
         "venue": "Test Venue",
         "capacity": 100,
-        "instructions": "Bring laptop",
-        "start_time": start_time
+        "instructions": "Bring laptop"
     }
     
     client.post("/workshops", json=ws_payload, headers={"Authorization": f"Bearer {sa_token}"})
@@ -73,7 +74,7 @@ def setup_data():
     ws_doc_id = str(ws_doc["_id"])
 
     # 4. Assign Volunteer (Super Admin themselves)
-    client.post(f"/workshops/{ws_id}/volunteers", json={"user_id": sa_id, "role": "workshop_volunteer", "scanning_enabled": True}, headers={"Authorization": f"Bearer {sa_token}"})
+    resp = client.post(f"/workshops/{ws_id}/volunteers", json={"user_id": sa_id, "role": "workshop_volunteer", "attendance": True}, headers={"Authorization": f"Bearer {sa_token}"})
 
     return {
         "p_token": p_token,

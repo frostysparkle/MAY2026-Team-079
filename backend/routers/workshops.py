@@ -28,7 +28,6 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "registration_count": 0,
         "participant_count": 0,
         "instructions": request.instructions,
-        "start_time": request.start_time,
         "workshop_team": [],
         "created_by": current_user["_id"],
         "created_at": datetime.utcnow(),
@@ -87,12 +86,12 @@ def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteer
         
     workshops_collection.update_one(
         {"workshop_id": workshop_id},
-        {"$push": {"workshop_team": {"role": request.role, "user_id": request.user_id, "scanning_enabled": request.scanning_enabled}}}
+        {"$push": {"workshop_team": {"role": request.role, "user_id": request.user_id, "attendance": request.attendance}}}
     )
     return {"message": "Volunteer assigned"}
 
 @router.put("/{workshop_id}/volunteers/{user_id}/toggle_scan")
-def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, scanning_enabled: bool, current_user: dict = Depends(get_current_user)):
+def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, attendance: bool, current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -100,7 +99,7 @@ def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, scanning_ena
         
     workshops_collection.update_one(
         {"workshop_id": workshop_id, "workshop_team.user_id": volunteer_user_id},
-        {"$set": {"workshop_team.$.scanning_enabled": scanning_enabled}}
+        {"$set": {"workshop_team.$.attendance": attendance}}
     )
     return {"message": "Volunteer scanning toggled"}
 
@@ -223,22 +222,9 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
     if not (volunteer or is_admin):
         raise HTTPException(status_code=403, detail="Not authorized to scan for this workshop")
         
-    if volunteer and not volunteer.get("scanning_enabled", True) and not is_admin:
+    if volunteer and not volunteer.get("attendance", True) and not is_admin:
         raise HTTPException(status_code=403, detail="Scanning disabled for this volunteer")
         
-    start_time_str = workshop.get("start_time")
-    if start_time_str:
-        start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).replace(tzinfo=None)
-        now = datetime.utcnow()
-        if scan_type == "pre-registered":
-            if now < start_time - timedelta(minutes=30):
-                raise HTTPException(status_code=400, detail="Pre-registered scanning starts 30 mins before workshop")
-        elif scan_type == "on-spot":
-            if now < start_time - timedelta(minutes=15):
-                raise HTTPException(status_code=400, detail="On-spot scanning starts 15 mins before workshop")
-                
-        if now > start_time + timedelta(hours=1):
-            raise HTTPException(status_code=400, detail="Scanning active for only 1 hour from start")
 
     target_user, payload = verify_qr(request)
     ws_doc_id = workshop["_id"]

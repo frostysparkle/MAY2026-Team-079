@@ -10,11 +10,19 @@ load_dotenv("atlas-credentials.env")
 
 from main import app
 from database import participants_collection, backend_teams_collection, event_collection, mess_collection, hostel_collection, workshops_collection
+import security
 
 client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_test_users():
+    from database import participants_collection, backend_teams_collection, event_collection, mess_collection, hostel_collection, workshops_collection
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
+    event_collection.delete_many({})
+    mess_collection.delete_many({})
+    hostel_collection.delete_many({})
+    workshops_collection.delete_many({})
     rand_id = random.randint(100000, 999999)
     p_email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"
@@ -33,7 +41,7 @@ def setup_test_users():
     backend_teams_collection.insert_one({
         "paradox_id": sa_id,
         "email": a_email,
-        "password_hash": "$2b$12$eImiTXuWVxfM37uY4JANjO5E.5A/rZk2.gJ/1Z/x3l.9h.4i.2.", # mock hash for 'secure_password'
+        "password_hash": security.get_password_hash("secure_password"),
         "role": "super_admin",
         "department": "technicals",
         "created_at": datetime.utcnow()
@@ -41,8 +49,8 @@ def setup_test_users():
     sa_login = client.post("/auth/login", json={"email": a_email, "password": "secure_password"})
     
     # Setup test hostel & mess
-    hostel_collection.update_one({"hostel_id": "H01"}, {"$set": {"hostel_name": "Alakhnanda", "gender": "male", "hostel_team": [{"user_id": sa_id}]}}, upsert=True)
-    mess_collection.update_one({"mess_id": "M01"}, {"$set": {"mess_name": "Himalaya", "caterer": "Firstman", "mess_team": [{"user_id": sa_id}]}}, upsert=True)
+    hostel_collection.update_one({"hostel_id": "H01"}, {"$set": {"name": "Alakhnanda", "capacity": 100, "gender": "male", "hostel_team": [{"user_id": sa_id}]}}, upsert=True)
+    mess_collection.update_one({"mess_id": "M01"}, {"$set": {"name": "Himalaya", "capacity": 100, "preference": "veg", "caterer": "Firstman", "mess_team": [{"user_id": sa_id}]}}, upsert=True)
     workshops_collection.update_one({"slot_id": "12A"}, {"$set": {"name": "AI Workshop", "capacity": 100, "registration_count": 0, "workshop_team": [{"user_id": sa_id}]}}, upsert=True)
 
     return {

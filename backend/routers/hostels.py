@@ -16,6 +16,7 @@ class HostelCreateRequest(BaseModel):
     name: str
     capacity: int
     gender: str
+    coordinator: dict
 
 class HostelAssignTeamRequest(BaseModel):
     user_id: Optional[str] = None
@@ -34,6 +35,7 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
         "name": request.name,
         "capacity": request.capacity,
         "gender": request.gender,
+        "coordinator": request.coordinator,
         "hostel_team": [],
         "created_at": datetime.utcnow()
     }
@@ -51,13 +53,13 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
-    scanning_enabled = True if request.role == "other" else False
+    logging = True if request.role == "other" else False
     team_member = {
         "user_id": request.user_id,
         "role": request.role,
         "name": request.name,
         "phone": request.phone,
-        "scanning_enabled": scanning_enabled
+        "logging": logging
     }
     existing = hostel_collection.find_one({"hostel_id": hostel_id, "hostel_team.user_id": request.user_id})
     if existing and request.user_id:
@@ -67,14 +69,14 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
     return {"message": "Team member assigned"}
 
 @router.put("/{hostel_id}/team/{team_user_id}/toggle_scan")
-def toggle_hostel_scan(hostel_id: str, team_user_id: str, scanning_enabled: bool, current_user: dict = Depends(get_current_user)):
+def toggle_hostel_scan(hostel_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id") or current_user.get("participant_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
     hostel_collection.update_one(
         {"hostel_id": hostel_id, "hostel_team.user_id": team_user_id},
-        {"$set": {"hostel_team.$.scanning_enabled": scanning_enabled}}
+        {"$set": {"hostel_team.$.logging": logging}}
     )
     return {"message": "Scanning toggled"}
 
@@ -87,16 +89,21 @@ def allocate_hostels(current_user: dict = Depends(get_current_user)):
     hostels = list(hostel_collection.find())
     gender_groups = {}
     for h in hostels:
-        gender_groups.setdefault(h.get("gender"), []).append(h)
+        # Normalize gender key to lowercase for consistent matching
+        gender_groups.setdefault(h.get("gender", "").lower(), []).append(h)
         
-    participants = list(participants_collection.find({"accommodation.hostel_id": {"$exists": False}}))
+    participants = list(participants_collection.find({
+        "accommodation.registered": True,
+        "accommodation.hostel_id": None
+    }))
     allocated = 0
     
     # Track assigned capacities globally per hostel
     hostel_assignments = {h["hostel_id"]: 0 for h in hostels}
     
     for p in participants:
-        gender = p.get("profile", {}).get("gender", "Male")
+        # Normalize participant gender to lowercase to match hostel grouping
+        gender = p.get("profile", {}).get("gender", "male").lower()
         available_hostels = gender_groups.get(gender, [])
         for h in available_hostels:
             if hostel_assignments[h["hostel_id"]] < h["capacity"]:
@@ -108,7 +115,8 @@ def allocate_hostels(current_user: dict = Depends(get_current_user)):
                     {"$set": {
                         "accommodation.hostel_id": h["hostel_id"],
                         "accommodation.room": str(room_num),
-                        "accommodation.logged_in": False
+                        "accommodation.logged_in": False,
+                        "accommodation.registered": True
                     }}
                 )
                 allocated += 1
@@ -154,7 +162,7 @@ def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_use
     if not (is_super_admin or team_member):
         raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
         
-    if team_member and not team_member.get("scanning_enabled"):
+    if team_member and not team_member.get("logging"):
         raise HTTPException(status_code=403, detail="Scanning disabled for you")
         
     target_user, _ = verify_qr(request)

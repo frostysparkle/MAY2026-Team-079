@@ -56,13 +56,13 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
-    scanning_enabled = True if request.role == "other" else False
+    logging = True if request.role == "other" else False
     team_member = {
         "user_id": request.user_id,
         "role": request.role,
         "name": request.name,
         "phone": request.phone,
-        "scanning_enabled": scanning_enabled
+        "logging": logging
     }
     existing = mess_collection.find_one({"mess_id": mess_id, "mess_team.user_id": request.user_id})
     if existing and request.user_id:
@@ -72,14 +72,14 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
     return {"message": "Team member assigned"}
 
 @router.put("/{mess_id}/team/{team_user_id}/toggle_scan")
-def toggle_mess_scan(mess_id: str, team_user_id: str, scanning_enabled: bool, current_user: dict = Depends(get_current_user)):
+def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id") or current_user.get("participant_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
     mess_collection.update_one(
         {"mess_id": mess_id, "mess_team.user_id": team_user_id},
-        {"$set": {"mess_team.$.scanning_enabled": scanning_enabled}}
+        {"$set": {"mess_team.$.logging": logging}}
     )
     return {"message": "Scanning toggled"}
 
@@ -94,7 +94,8 @@ def allocate_messes(current_user: dict = Depends(get_current_user)):
     for m in messes:
         pref_groups.setdefault(m.get("preference"), []).append(m)
         
-    participants = list(participants_collection.find({"mess.allotted_mess": {"$exists": False}}))
+    # Only allocate those who have mess.mess_id as None or missing
+    participants = list(participants_collection.find({"$or": [{"mess.mess_id": None}, {"mess.mess_id": {"$exists": False}}]}))
     allocated = 0
     
     for p in participants:
@@ -102,11 +103,11 @@ def allocate_messes(current_user: dict = Depends(get_current_user)):
         available_messes = pref_groups.get(pref, [])
         assigned = False
         for chosen_mess in available_messes:
-            current_count = participants_collection.count_documents({"mess.allotted_mess": chosen_mess["mess_id"]})
+            current_count = participants_collection.count_documents({"mess.mess_id": chosen_mess["_id"]})
             if current_count < chosen_mess.get("capacity", 0):
                 participants_collection.update_one(
                     {"_id": p["_id"]},
-                    {"$set": {"mess.allotted_mess": chosen_mess["mess_id"]}}
+                    {"$set": {"mess.mess_id": chosen_mess["_id"]}}
                 )
                 allocated += 1
                 assigned = True
@@ -120,11 +121,11 @@ def my_mess(current_user: dict = Depends(get_current_user)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants have assigned messes")
     
-    mess_id = current_user.get("mess", {}).get("allotted_mess")
-    mess_details = mess_collection.find_one({"mess_id": mess_id}, {"_id": 0}) if mess_id else None
+    mess_oid = current_user.get("mess", {}).get("mess_id")
+    mess_details = mess_collection.find_one({"_id": mess_oid}, {"_id": 0}) if mess_oid else None
     
     return {
-        "allotted_mess": mess_id,
+        "allotted_mess": mess_details.get("mess_id") if mess_details else None,
         "mess_details": mess_details,
         "slots": current_user.get("mess", {}).get("entries", [])
     }
@@ -141,13 +142,13 @@ def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current
     if not (is_super_admin or team_member):
         raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
         
-    if team_member and not team_member.get("scanning_enabled"):
+    if team_member and not team_member.get("logging"):
         raise HTTPException(status_code=403, detail="Scanning disabled for you")
         
     target_user, _ = verify_qr(request)
     
     user_mess = target_user.get("mess", {})
-    if user_mess.get("allotted_mess") != mess_id:
+    if user_mess.get("mess_id") != mess["_id"]:
         raise HTTPException(status_code=400, detail="Participant not allotted to this mess")
         
     entries = user_mess.get("entries", [])
@@ -164,11 +165,12 @@ def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current
     if slot_entry.get("logged"):
         raise HTTPException(status_code=400, detail=f"Already logged in for {slot} on day {day}")
         
-    # Mark as logged
+    slot_entry["logged"] = True
+    
+    # Mark as logged (rewrite the entire entries array for mongomock compatibility)
     participants_collection.update_one(
-        {"_id": target_user["_id"], "mess.entries.day": day},
-        {"$set": {f"mess.entries.$.slots.$[s].logged": True}},
-        array_filters=[{"s.slot": slot}]
+        {"_id": target_user["_id"]},
+        {"$set": {"mess.entries": entries}}
     )
     log_audit(user_id, "MESS_SCAN", mess_id, {"participant_id": target_user.get("participant_id"), "slot": slot, "day": day})
     return {"message": "Scan successful, entry allowed"}
@@ -182,7 +184,7 @@ def mess_statistics(mess_id: str, current_user: dict = Depends(get_current_user)
     mess = mess_collection.find_one({"mess_id": mess_id})
     if not mess: raise HTTPException(status_code=404, detail="Mess not found")
     
-    participants = list(participants_collection.find({"mess.allotted_mess": mess_id}))
+    participants = list(participants_collection.find({"mess.mess_id": mess["_id"]}))
     
     allotted = []
     for p in participants:

@@ -121,16 +121,14 @@ class WorkshopCreateRequest(BaseModel):
     venue: str
     capacity: int
     instructions: str
-    start_time: str
 
 class WorkshopUpdateRequest(BaseModel):
     name: Optional[str] = None
     venue: Optional[str] = None
     capacity: Optional[int] = None
     instructions: Optional[str] = None
-    start_time: Optional[str] = None
 
 class WorkshopAssignVolunteerRequest(BaseModel):
     user_id: str
     role: str = "workshop_volunteer"
-    scanning_enabled: bool = True
+    attendance: bool = True

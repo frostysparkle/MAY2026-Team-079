@@ -15,6 +15,9 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def setup_data():
+    event_collection.delete_many({})
+    participants_collection.delete_many({})
+    backend_teams_collection.delete_many({})
     rand_id = random.randint(100000, 999999)
     p_email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"
