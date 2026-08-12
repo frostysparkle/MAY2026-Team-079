@@ -358,6 +358,10 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
     if backend_teams_collection.find_one({"email": request.email}):
         raise HTTPException(status_code=400, detail="Email already registered in backend teams")
         
+    # Look up the participant document that corresponds to this email (the admin_id link per schema)
+    participant_doc = participants_collection.find_one({"email": request.email}, {"_id": 1})
+    admin_id_ref = participant_doc["_id"] if participant_doc else None
+
     new_team = {
         "paradox_id": f"BT{int(datetime.utcnow().timestamp())}",
         "email": request.email,
@@ -365,6 +369,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
         "role": request.role,
         "department": request.department,
         "designation": request.designation,
+        "admin_id": admin_id_ref,  # ObjectId reference to participant document | None
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
