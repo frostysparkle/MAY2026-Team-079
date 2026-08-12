@@ -15,7 +15,7 @@ from models import (
     ScanQRRequest, EventCreateRequest, EventUpdateRequest, EventRegistrationInput
 )
 
-from routers import workshops, events
+from routers import workshops, events, mess, hostels
 from dependencies import get_current_user, verify_qr
 from database import (
     participants_collection, workshops_collection,
@@ -516,6 +516,8 @@ def workshop_logs(workshop_id: str, current_user: dict = Depends(get_current_use
 
 app.include_router(workshops.router)
 app.include_router(events.router)
+app.include_router(mess.router)
+app.include_router(hostels.router)
 
 if __name__ == "__main__":
     import uvicorn
