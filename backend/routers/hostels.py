@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from logger import log_audit
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
@@ -37,6 +38,7 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
         "created_at": datetime.utcnow()
     }
     hostel_collection.insert_one(hostel_doc)
+    log_audit(user_id, "CREATE_HOSTEL", request.hostel_id, {"capacity": request.capacity})
     return {"message": "Hostel created"}
 
 @router.get("")
@@ -58,6 +60,7 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
         "scanning_enabled": scanning_enabled
     }
     hostel_collection.update_one({"hostel_id": hostel_id}, {"$push": {"hostel_team": team_member}})
+    log_audit(user_id, "ASSIGN_HOSTEL_TEAM", hostel_id, {"team_user_id": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
 
 @router.put("/{hostel_id}/team/{team_user_id}/toggle_scan")
@@ -108,6 +111,7 @@ def allocate_hostels(current_user: dict = Depends(get_current_user)):
                 allocated += 1
                 break
             
+    log_audit(user_id, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to hostels"}
 
 @router.get("/my_hostel")

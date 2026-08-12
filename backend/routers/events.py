@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from logger import log_audit
 from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
@@ -46,6 +47,7 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
         "logs": []
     }
     event_collection.insert_one(new_event)
+    log_audit(user_id, "CREATE_EVENT", request.event_id)
     return {"message": "Event created"}
 
 @router.get("")
@@ -85,6 +87,7 @@ def delete_event(event_id: str, current_user: dict = Depends(get_current_user)):
             {"$pull": {"events": {"event_id": event["_id"]}}}
         )
         event_collection.delete_one({"event_id": event_id})
+    log_audit(user_id, "DELETE_EVENT", event_id)
     return {"message": "Event deleted"}
 
 
@@ -326,6 +329,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)
                     )
                 teams_created += 1
                 
+    log_audit(user_id, "ALLOCATE_EVENT_TEAMS", event_id, {"teams_created": teams_created})
     return {"message": f"Allocated {teams_created} teams"}
 
 @router.post("/{event_id}/scan")

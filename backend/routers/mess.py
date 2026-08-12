@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from logger import log_audit
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
@@ -42,6 +43,7 @@ def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_cur
         "created_at": datetime.utcnow()
     }
     mess_collection.insert_one(mess_doc)
+    log_audit(user_id, "CREATE_MESS", request.mess_id, {"capacity": request.capacity})
     return {"message": "Mess created"}
 
 @router.get("")
@@ -63,6 +65,7 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
         "scanning_enabled": scanning_enabled
     }
     mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
+    log_audit(user_id, "ASSIGN_MESS_TEAM", mess_id, {"team_user_id": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
 
 @router.put("/{mess_id}/team/{team_user_id}/toggle_scan")
@@ -103,6 +106,7 @@ def allocate_messes(current_user: dict = Depends(get_current_user)):
             )
             allocated += 1
             
+    log_audit(user_id, "ALLOCATE_MESSES", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to messes"}
 
 @router.get("/my_mess")

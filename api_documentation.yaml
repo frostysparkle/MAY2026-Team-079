@@ -1424,6 +1424,35 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       description: 'User Story: Super Admins can see hostel statistics and allotted
         people.'
+  /audit-logs:
+    get:
+      tags:
+      - Audit
+      summary: View Audit Logs
+      operationId: view_audit_logs_audit_logs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: 'User Story: System audit logs accessible to Super Admins.'
 components:
   schemas:
     BackendTeamCreateRequest:
