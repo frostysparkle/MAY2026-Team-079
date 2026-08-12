@@ -129,19 +129,23 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
     if any(str(ev.get("event_id")) == str(event["_id"]) for ev in user_events):
         raise HTTPException(status_code=409, detail="User is already registered for this event.")
 
-    # Block event team members from registering as participants for their own event
-    participant_id = current_user.get("participant_id")
-    is_event_team_member = any(
-        str(member.get("user_id")) == participant_id
-        for member in event.get("event_team", [])
-    )
-    if is_event_team_member:
-        raise HTTPException(
-            status_code=403,
-            detail="Event team members cannot register as participants for their own event."
+    # Block event team members from registering as participants for their own event.
+    # Backend team members are linked to participants only by email.
+    participant_email = current_user.get("email")
+    backend_member = backend_teams_collection.find_one({"email": participant_email})
+    if backend_member:
+        paradox_id = backend_member.get("paradox_id")
+        is_event_team_member = any(
+            str(member.get("user_id")) == paradox_id
+            for member in event.get("event_team", [])
         )
+        if is_event_team_member:
+            raise HTTPException(
+                status_code=403,
+                detail="Event team members cannot register as participants for their own event."
+            )
 
-        
+
     registration_entry = {
         "team_id": reg_input.team_name if reg_input and reg_input.team_name else None,
         "event_id": event["_id"],
