@@ -1,2 +1,4 @@
 # Local editor configuration
 .zed/
+*.pdf
+*.md
