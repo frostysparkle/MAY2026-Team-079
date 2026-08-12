@@ -220,8 +220,8 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_u
             "email": p.get("email"),
             "phone": prof.get("phone"),
             "house": prof.get("house"),
-            "team_id": ev_reg.get("team_id"),
-            "team_role": ev_reg.get("team_role")
+            "team_id": ev_reg.get("team_id") if ev_reg else None,
+            "team_role": ev_reg.get("team_role") if ev_reg else None
         })
 
 
@@ -296,7 +296,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)
     
     for p in participants:
         ev_reg = next((ev for ev in p.get("events", []) if str(ev["event_id"]) == str(event["_id"])), None)
-        if not ev_reg.get("team_id"):
+        if ev_reg and not ev_reg.get("team_id"):
             solo_players.append(p)
             
     random.shuffle(solo_players)
@@ -313,7 +313,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)
             for i in range(0, len(players), max_size):
                 team_chunk = players[i:i+max_size]
                 if len(team_chunk) >= min_size:
-                    team_id = f"TE_HO_{datetime.utcnow().strftime('%M%S')}_{teams_created}"
+                    team_id = f"TE_HO_{datetime.utcnow().strftime('%M%S%f')}_{teams_created}"
                     for p in team_chunk:
                         participants_collection.update_one(
                             {"_id": p["_id"], "events.event_id": event["_id"]},
@@ -325,7 +325,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)
         for i in range(0, len(solo_players), max_size):
             team_chunk = solo_players[i:i+max_size]
             if len(team_chunk) >= min_size:
-                team_id = f"TE_MX_{datetime.utcnow().strftime('%M%S')}_{teams_created}"
+                team_id = f"TE_MX_{datetime.utcnow().strftime('%M%S%f')}_{teams_created}"
                 for p in team_chunk:
                     participants_collection.update_one(
                         {"_id": p["_id"], "events.event_id": event["_id"]},

@@ -64,6 +64,9 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
         "phone": request.phone,
         "scanning_enabled": scanning_enabled
     }
+    existing = mess_collection.find_one({"mess_id": mess_id, "mess_team.user_id": request.user_id})
+    if existing and request.user_id:
+        raise HTTPException(status_code=409, detail="Team member already assigned to this mess")
     mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
     log_audit(user_id, "ASSIGN_MESS_TEAM", mess_id, {"team_user_id": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
@@ -97,14 +100,17 @@ def allocate_messes(current_user: dict = Depends(get_current_user)):
     for p in participants:
         pref = p.get("profile", {}).get("mess_preference", "veg")
         available_messes = pref_groups.get(pref, [])
-        if available_messes:
-            # Pick a random mess of that preference
-            chosen_mess = random.choice(available_messes)
-            participants_collection.update_one(
-                {"_id": p["_id"]},
-                {"$set": {"mess.allotted_mess": chosen_mess["mess_id"]}}
-            )
-            allocated += 1
+        assigned = False
+        for chosen_mess in available_messes:
+            current_count = participants_collection.count_documents({"mess.allotted_mess": chosen_mess["mess_id"]})
+            if current_count < chosen_mess.get("capacity", 0):
+                participants_collection.update_one(
+                    {"_id": p["_id"]},
+                    {"$set": {"mess.allotted_mess": chosen_mess["mess_id"]}}
+                )
+                allocated += 1
+                assigned = True
+                break
             
     log_audit(user_id, "ALLOCATE_MESSES", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to messes"}

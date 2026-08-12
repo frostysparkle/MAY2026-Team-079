@@ -59,6 +59,9 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
         "phone": request.phone,
         "scanning_enabled": scanning_enabled
     }
+    existing = hostel_collection.find_one({"hostel_id": hostel_id, "hostel_team.user_id": request.user_id})
+    if existing and request.user_id:
+        raise HTTPException(status_code=409, detail="Team member already assigned to this hostel")
     hostel_collection.update_one({"hostel_id": hostel_id}, {"$push": {"hostel_team": team_member}})
     log_audit(user_id, "ASSIGN_HOSTEL_TEAM", hostel_id, {"team_user_id": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
