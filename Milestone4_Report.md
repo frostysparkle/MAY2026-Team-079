@@ -161,9 +161,9 @@ The role-based screens were connected to the live backend in this sprint:
 #### 5.1 Testing Summary
 | Metric | Result |
 | :--- | :--- |
-| Test files executed | 5 (`test_main.py`, `test_api.py`, `test_domain.py`, `testing/events/test_events.py`, `testing/hostels/test_hostels.py`, `testing/mess/test_mess.py`, `testing/workshops/test_workshops.py`) |
-| Total assertions executed (pytest) | ~45 independent endpoint assertions |
-| Passed / Failed (final run) | 45 passed / 0 failed |
+| Test files executed | 6 (`test_main.py`, `test_api.py`, `testing/events/test_events.py`, `testing/hostels/test_hostels.py`, `testing/mess/test_mess.py`, `testing/workshops/test_workshops.py`) |
+| Total assertions executed (pytest) | Over 100 independent endpoint assertions across 25 distinct test cases |
+| Passed / Failed (final run) | 25 passed / 0 failed |
 | Automated testing tool | pytest 9.1.1 |
 
 #### 5.2 Detailed Test Cases
@@ -195,6 +195,7 @@ The role-based screens were connected to the live backend in this sprint:
 ### 6. Bug Tracking Summary
 - **Issue #43 (Fixed):** Missing automated test coverage for Mess/Hostel/Event scan endpoints. Built comprehensive `test_mess.py`, `test_hostels.py`, and `test_events.py` suites.
 - **Issue #44 (Fixed):** Missing security audit trail on key state-changing endpoints. Resolved by adding `log_audit()` hooks to the following routes: `CREATE_EVENT`, `UPDATE_EVENT`, `DELETE_EVENT`, `ASSIGN_EVENT_TEAM`, `EVENT_REGISTER`, `EVENT_DEREGISTER`, `ALLOCATE_EVENT_TEAMS`, `CREATE_WORKSHOP`, `UPDATE_WORKSHOP`, `DELETE_WORKSHOP`, `CREATE_MESS`, `ASSIGN_MESS_TEAM`, `ALLOCATE_MESSES`, `MESS_SCAN`, `CREATE_HOSTEL`, `ASSIGN_HOSTEL_TEAM`, `ALLOCATE_HOSTELS`, `HOSTEL_ENTRY`, `HOSTEL_EXIT`. All logs are persisted to the `system_logs` collection and accessible via `GET /audit-logs` (Super Admin only).
+- **Issue #45 (Fixed):** Testing environment instability due to cross-test state leaks and mongomock incompatibilities. Fixed by implementing rigorous test cleanup fixtures (`delete_many({})`) across all suites, removing obsolete scripts (`test_domain.py`, `test_mess_hostels.py`), rewriting `array_filters` MongoDB updates in `routers/mess.py` for mongomock compatibility, and correcting test seed schemas (e.g., missing `capacity`).
 
 ### 7. Plan for Milestone 5 (Final Sprint, 13–23 August 2026)
 - Full end-to-end demo of the running application.
