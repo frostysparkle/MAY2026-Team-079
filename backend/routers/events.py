@@ -130,9 +130,8 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
         raise HTTPException(status_code=409, detail="User is already registered for this event.")
 
     # Block event team members from registering as participants for their own event.
-    # Backend team members are linked to participants only by email.
-    participant_email = current_user.get("email")
-    backend_member = backend_teams_collection.find_one({"email": participant_email})
+    # backend_teams.admin_id is an ObjectId reference to the participant's _id document.
+    backend_member = backend_teams_collection.find_one({"admin_id": current_user["_id"]})
     if backend_member:
         paradox_id = backend_member.get("paradox_id")
         is_event_team_member = any(
