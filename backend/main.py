@@ -210,7 +210,7 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
         "state": request.state,
         "city": request.city,
         "address": request.address,
-        "emergency_contact": request.emergency_contact.dict() if request.emergency_contact else None,
+        "emergency_contact": request.emergency_contact.model_dump() if request.emergency_contact else None,
         "program": request.program,
         "course_stage": request.course_stage,
     }
@@ -300,7 +300,7 @@ def update_backend_team(paradox_id: str, request: BackendTeamUpdateRequest, curr
     if not admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can manage backend teams")
         
-    update_data = {k: v for k, v in request.dict().items() if v is not None}
+    update_data = {k: v for k, v in request.model_dump().items() if v is not None}
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         backend_teams_collection.update_one({"paradox_id": paradox_id}, {"$set": update_data})

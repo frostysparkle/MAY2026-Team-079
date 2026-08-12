@@ -1,9 +1,7 @@
 openapi: 3.1.0
 info:
   title: Paradox Connect API
-  version: 1.0.0
-  description: Swagger-compatible API documentation mapping directly to the Problem
-    Statement User Stories.
+  version: 0.1.0
 paths:
   /auth/register:
     post:
@@ -27,8 +25,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Users (Participant/Admin) securely authenticate and
-        register.'
   /auth/login:
     post:
       summary: Login
@@ -51,7 +47,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Secure token-based authentication session initialization.'
   /auth/password/forgot:
     post:
       summary: Forgot Password
@@ -144,99 +139,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
-  /hostels/{hostel_id}/entry:
-    post:
-      summary: Hostel Entry
-      operationId: hostel_entry_hostels__hostel_id__entry_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: hostel_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Hostel Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScanQRRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /hostels/{hostel_id}/exit:
-    post:
-      summary: Hostel Exit
-      operationId: hostel_exit_hostels__hostel_id__exit_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: hostel_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Hostel Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScanQRRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /messes/{mess_id}/entry:
-    post:
-      summary: Mess Entry
-      operationId: mess_entry_messes__mess_id__entry_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: mess_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Mess Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScanQRRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /backend_teams:
     get:
       summary: Get Backend Teams
@@ -341,7 +243,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins CRUD on workshops.'
     post:
       tags:
       - Workshops
@@ -367,7 +268,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins CRUD on workshops.'
   /workshops/{workshop_id}:
     put:
       tags:
@@ -481,12 +381,12 @@ paths:
         schema:
           type: string
           title: Volunteer User Id
-      - name: scanning_enabled
+      - name: attendance
         in: query
         required: true
         schema:
           type: boolean
-          title: Scanning Enabled
+          title: Attendance
       responses:
         '200':
           description: Successful Response
@@ -526,8 +426,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Super Admin views logged registrations, attendances,
-        and on-spots.'
   /workshops/{workshop_id}/register:
     post:
       tags:
@@ -555,7 +453,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: User registers for one workshop per slot (till full).'
   /workshops/{workshop_id}/seats/stream:
     get:
       tags:
@@ -635,7 +532,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins CRUD on events.'
     post:
       tags:
       - Events
@@ -661,7 +557,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins CRUD on events.'
   /events/{event_id}:
     put:
       tags:
@@ -789,8 +684,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: User can register for events (solo/team) and edit
-        details.'
     put:
       tags:
       - Events
@@ -823,8 +716,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: User can register for events (solo/team) and edit
-        details.'
     delete:
       tags:
       - Events
@@ -851,8 +742,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: User can register for events (solo/team) and edit
-        details.'
   /events/my_registrations:
     get:
       tags:
@@ -867,7 +756,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: User can view their registrations.'
   /events/{event_id}/participation:
     get:
       tags:
@@ -895,8 +783,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Super Admins and Event Heads view participation details,
-        registrations, and teams.'
   /events/{event_id}/allocate_teams:
     post:
       tags:
@@ -924,8 +810,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Event Head can trigger auto-allocation of teams (House
-        vs House or Mixed).'
   /events/{event_id}/scan:
     post:
       tags:
@@ -959,8 +843,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Event team members scan profile QR to verify active
-        participation.'
   /events/{event_id}/my_daily_scans:
     get:
       tags:
@@ -988,8 +870,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Event team sees count of successful unique scans resetting
-        each day.'
   /mess:
     get:
       tags:
@@ -1004,7 +884,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins can CRUD mess.'
     post:
       tags:
       - Mess
@@ -1030,7 +909,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins can CRUD mess.'
   /mess/{mess_id}/team:
     post:
       tags:
@@ -1085,12 +963,12 @@ paths:
         schema:
           type: string
           title: Team User Id
-      - name: scanning_enabled
+      - name: logging
         in: query
         required: true
         schema:
           type: boolean
-          title: Scanning Enabled
+          title: Logging
       responses:
         '200':
           description: Successful Response
@@ -1117,8 +995,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: System auto-assigns mess based on preference. Super
-        Admin can trigger mess allocation.'
   /mess/my_mess:
     get:
       tags:
@@ -1133,7 +1009,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Participant can see their assigned mess and slots.'
   /mess/{mess_id}/scan:
     post:
       tags:
@@ -1179,8 +1054,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Volunteers scan QR to allow entry if allotted and
-        not logged in yet.'
   /mess/{mess_id}/statistics:
     get:
       tags:
@@ -1208,8 +1081,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Super Admins can see mess statistics, allocation statistics,
-        and all people allotted to each mess.'
   /hostels:
     get:
       tags:
@@ -1224,7 +1095,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins can CRUD hostel.'
     post:
       tags:
       - Hostels
@@ -1250,7 +1120,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
-      description: 'User Story: Super Admins can CRUD hostel.'
   /hostels/{hostel_id}/team:
     post:
       tags:
@@ -1305,12 +1174,12 @@ paths:
         schema:
           type: string
           title: Team User Id
-      - name: scanning_enabled
+      - name: logging
         in: query
         required: true
         schema:
           type: boolean
-          title: Scanning Enabled
+          title: Logging
       responses:
         '200':
           description: Successful Response
@@ -1337,8 +1206,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Hostel auto-assigned by gender and capacity. Room
-        number generated.'
   /hostels/my_hostel:
     get:
       tags:
@@ -1353,8 +1220,6 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
-      description: 'User Story: Participant can see assigned hostel, logged_in status,
-        and volunteer details.'
   /hostels/{hostel_id}/scan:
     post:
       tags:
@@ -1394,7 +1259,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Scan QR to flip accommodation logged_in for entry/exit.'
   /hostels/{hostel_id}/statistics:
     get:
       tags:
@@ -1422,8 +1286,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: Super Admins can see hostel statistics and allotted
-        people.'
   /audit-logs:
     get:
       tags:
@@ -1452,7 +1314,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: 'User Story: System audit logs accessible to Super Admins.'
 components:
   schemas:
     BackendTeamCreateRequest:
@@ -1726,12 +1587,17 @@ components:
         gender:
           type: string
           title: Gender
+        coordinator:
+          additionalProperties: true
+          type: object
+          title: Coordinator
       type: object
       required:
       - hostel_id
       - name
       - capacity
       - gender
+      - coordinator
       title: HostelCreateRequest
     LoginRequest:
       properties:
@@ -2019,9 +1885,9 @@ components:
           type: string
           title: Role
           default: workshop_volunteer
-        scanning_enabled:
+        attendance:
           type: boolean
-          title: Scanning Enabled
+          title: Attendance
           default: true
       type: object
       required:
@@ -2047,9 +1913,6 @@ components:
         instructions:
           type: string
           title: Instructions
-        start_time:
-          type: string
-          title: Start Time
       type: object
       required:
       - workshop_id
@@ -2058,7 +1921,6 @@ components:
       - venue
       - capacity
       - instructions
-      - start_time
       title: WorkshopCreateRequest
     WorkshopUpdateRequest:
       properties:
@@ -2082,11 +1944,6 @@ components:
           - type: string
           - type: 'null'
           title: Instructions
-        start_time:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Start Time
       type: object
       title: WorkshopUpdateRequest
   securitySchemes:

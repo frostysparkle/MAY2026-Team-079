@@ -8,3 +8,9 @@ passlib[bcrypt]
 python-jose[cryptography]
 cryptography
 email-validator
+bcrypt
+
+# Testing dependencies
+mongomock
+pytest
+httpx
