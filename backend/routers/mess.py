@@ -164,7 +164,7 @@ def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current
         {"$set": {f"mess.entries.$.slots.$[s].logged": True}},
         array_filters=[{"s.slot": slot}]
     )
-    
+    log_audit(user_id, "MESS_SCAN", mess_id, {"participant_id": target_user.get("participant_id"), "slot": slot, "day": day})
     return {"message": "Scan successful, entry allowed"}
 
 @router.get("/{mess_id}/statistics")

@@ -177,7 +177,7 @@ def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_use
         {"_id": target_user["_id"]},
         {"$set": {"accommodation.logged_in": new_status}}
     )
-    
+    log_audit(user_id, f"HOSTEL_{action.upper()}", hostel_id, {"participant_id": target_user.get("participant_id")})
     return {"message": f"Scan successful, {action} allowed"}
 
 @router.get("/{hostel_id}/statistics")

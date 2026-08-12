@@ -71,6 +71,7 @@ def update_event(event_id: str, request: EventUpdateRequest, current_user: dict 
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         event_collection.update_one({"event_id": event_id}, {"$set": update_data})
+    log_audit(user_id, "UPDATE_EVENT", event_id, {"fields_updated": list(update_data.keys())})
     return {"message": "Event updated successfully"}
 
 @router.delete("/{event_id}")
@@ -110,6 +111,7 @@ def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_us
         {"event_id": event_id},
         {"$push": {"event_team": {"role": request.role, "user_id": request.user_id}}}
     )
+    log_audit(user_id, "ASSIGN_EVENT_TEAM", event_id, {"assigned_user": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
 
 @router.post("/{event_id}/register")
@@ -142,6 +144,7 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
         {"_id": event["_id"]},
         {"$push": {"logs": {"action": "registration", "participant_id": current_user["participant_id"], "time": datetime.utcnow()}}}
     )
+    log_audit(current_user["participant_id"], "EVENT_REGISTER", event_id)
     return {"message": "Registered for event successfully."}
 
 @router.put("/{event_id}/register")
@@ -172,6 +175,7 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_use
         {"_id": current_user["_id"]},
         {"$pull": {"events": {"event_id": event["_id"]}}}
     )
+    log_audit(current_user["participant_id"], "EVENT_DEREGISTER", event_id)
     return {"message": "Deregistered successfully"}
 
 @router.get("/my_registrations")
