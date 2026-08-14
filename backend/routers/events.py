@@ -25,7 +25,8 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
             "name": rnd.name,
             "description": rnd.description,
             "start_time": rnd.start_time,
-            "end_time": rnd.end_time
+            "end_time": rnd.end_time,
+            "venue": rnd.venue
         })
 
     new_event = {
@@ -54,8 +55,46 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
 def list_events(current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id})
-    events = list(event_collection.find({}, {"_id": 0}))
+    # `created_by` holds the creating admin's raw ObjectId, which is not JSON
+    # serialisable — leaving it in makes this endpoint 500 as soon as any event
+    # has been created through POST /events. It is an internal reference with no
+    # use to a client, so it is projected out rather than converted.
+    events = list(event_collection.find({}, {"_id": 0, "created_by": 0}))
     return events
+
+
+# Allow-list of the fields that make up the published festival brochure.
+# Written as an inclusion projection on purpose: any field added to the events
+# collection later stays private until it is named here explicitly.
+PUBLIC_EVENT_FIELDS = {
+    "_id": 0,
+    "event_id": 1,
+    "event_type": 1,
+    "name": 1,
+    "description": 1,
+    "poster": 1,
+    "team": 1,
+    "open": 1,
+    "prize_money": 1,
+    "registration": 1,
+    "schedule": 1,
+}
+
+
+@router.get("/public")
+def list_public_events():
+    """
+    The festival brochure — every event, readable without signing in.
+
+    Deliberately unauthenticated: this is the pre-login events catalogue the
+    landing page renders, and it must work for a visitor with no account. Only
+    the published fields above are returned — never `event_team` (which carries
+    staff identities), `registration_fields`, or internal bookkeeping and logs.
+
+    Declared before any `/{event_id}` route so the literal path is not captured
+    as an event id.
+    """
+    return list(event_collection.find({}, PUBLIC_EVENT_FIELDS))
 
 @router.put("/{event_id}")
 def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_staff)):
@@ -407,6 +446,38 @@ def my_daily_scans(event_id: str, current_user: dict = Depends(get_current_staff
     })
     
     return {"daily_unique_scans": count}
+
+@router.get("/{event_id}/logs")
+def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
+    """
+    Every attendance scan recorded for this event.
+
+    These rows have always been written by ``POST /events/{event_id}/scan`` but
+    nothing read them back: participation only reported *today's* count, and
+    ``my_daily_scans`` only the caller's own. That left the per-event attendance
+    history unreachable, which is what the dashboard's event log view needs.
+
+    Mirrors ``GET /workshops/{workshop_id}/logs`` — same super-admin gate, same
+    ``{"logs": [...]}`` envelope — so the two read identically on the client.
+
+    Rows key on the event's ObjectId, not its readable ``event_id``, so the lookup
+    happens here rather than being a detail every caller has to know.
+    """
+    user_id = current_user.get("paradox_id")
+    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
+    if not admin:
+        raise HTTPException(status_code=403, detail="Only Super Admins can view logs")
+
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    logs = list(
+        event_logs_collection
+        .find({"event_id": str(event["_id"])}, {"_id": 0})
+        .sort("timestamp", -1)
+    )
+    return {"logs": logs}
 
 class TeamUpdateInput(BaseModel):
     team_id: Optional[str] = None

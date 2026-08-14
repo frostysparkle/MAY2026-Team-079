@@ -60,6 +60,7 @@ class ScheduleRound(BaseModel):
     description: Optional[str] = ""
     start_time: str
     end_time: str
+    venue: Optional[str] = None  # e.g. "OAT", "Seminar Hall A", "Online - Meet Link"
 
 class RegistrationField(BaseModel):
     field_id: str
