@@ -41,9 +41,92 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
 def list_workshops(current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) if user_id else None
+    # `created_by` holds the creating admin's raw ObjectId, which is not JSON
+    # serialisable — leaving it in makes this endpoint 500 as soon as any
+    # workshop has been created through POST /workshops. It is an internal
+    # reference with no use to a client, so it is projected out rather than
+    # converted. Same fix as list_events.
     if admin:
-        return list(workshops_collection.find({}, {"_id": 0}))
-    return list(workshops_collection.find({}, {"_id": 0, "workshop_team": 0}))
+        return list(workshops_collection.find({}, {"_id": 0, "created_by": 0}))
+    return list(workshops_collection.find({}, {"_id": 0, "created_by": 0, "workshop_team": 0}))
+
+
+# Allow-list of the fields that make up the published workshop programme.
+# Written as an inclusion projection on purpose: any field added to the
+# workshops collection later stays private until it is named here explicitly.
+PUBLIC_WORKSHOP_FIELDS = {
+    "_id": 0,
+    "workshop_id": 1,
+    "slot_id": 1,
+    "name": 1,
+    "venue": 1,
+    "capacity": 1,
+    "registration_count": 1,
+    "instructions": 1,
+}
+
+
+@router.get("/public")
+def list_public_workshops():
+    """
+    The workshop programme, readable without signing in.
+
+    Deliberately unauthenticated: this is the pre-login workshops catalogue the
+    landing page and /workshops render, and it must work for a visitor with no
+    account. Only the published fields above are returned — never
+    `workshop_team` (which carries staff identities) or internal bookkeeping.
+
+    Mirrors GET /events/public. Declared before any `/{workshop_id}` route so
+    the literal path is not captured as a workshop id.
+    """
+    return list(workshops_collection.find({}, PUBLIC_WORKSHOP_FIELDS))
+
+
+@router.get("/my_registrations")
+def my_workshop_registrations(current_user: dict = Depends(get_current_participant)):
+    """
+    This participant's own workshop bookings.
+
+    Mirrors GET /events/my_registrations, and exists for the same reason: the
+    booking is stored on the participant document, so without this there is no
+    way to read back what you booked — the register response says only that it
+    worked. Declared before any `/{workshop_id}` route so the literal path is
+    not captured as a workshop id.
+
+    `workshops[].workshop_id` holds the workshop's raw ObjectId, so each entry
+    is resolved to the public workshop id and name the UI actually shows.
+    """
+    if "participant_id" not in current_user:
+        return []
+
+    registrations = []
+    for entry in current_user.get("workshops", []):
+        workshop = workshops_collection.find_one(
+            {"_id": entry.get("workshop_id")},
+            {"_id": 0, "workshop_id": 1, "name": 1, "venue": 1, "capacity": 1, "instructions": 1},
+        )
+        if not workshop:
+            # A workshop deleted after booking leaves an entry with nothing to
+            # show; the slot is still reported so the clash rule stays visible.
+            registrations.append({
+                "workshop_id": None,
+                "slot_id": entry.get("slot_id"),
+                "name": None,
+                "venue": None,
+                "booking_type": entry.get("booking_type"),
+                "attended": entry.get("attended", False),
+            })
+            continue
+        registrations.append({
+            "workshop_id": workshop.get("workshop_id"),
+            "slot_id": entry.get("slot_id"),
+            "name": workshop.get("name"),
+            "venue": workshop.get("venue"),
+            "booking_type": entry.get("booking_type"),
+            "attended": entry.get("attended", False),
+        })
+    return registrations
+
 
 @router.put("/{workshop_id}")
 def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_user: dict = Depends(get_current_staff)):
@@ -142,9 +225,13 @@ def register_for_workshop(workshop_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=400, detail="Workshop is full")
         
     user_workshops = current_user.get("workshops", [])
-    if any(str(w.get("workshop_id")) == str(ws_doc_id) or w.get("slot_id") == real_ws_id or w.get("slot_id") == slot_id for w in user_workshops):
+    # Only an exact match on this workshop counts as "already registered for
+    # this workshop". Comparing slot_id here as well would swallow the slot
+    # clash below — every same-slot booking took this branch and reported the
+    # wrong reason, leaving the next check unreachable.
+    if any(str(w.get("workshop_id")) == str(ws_doc_id) or w.get("slot_id") == real_ws_id for w in user_workshops):
         raise HTTPException(status_code=400, detail="Already registered for this workshop")
-        
+
     if any(w.get("slot_id") == slot_id for w in user_workshops):
         raise HTTPException(status_code=400, detail="Already registered for another workshop in this time slot")
 
@@ -189,15 +276,15 @@ async def stream_workshop_seats(workshop_id: str):
                 {"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]}
             )
             if not workshop:
-                yield f"data: {{\"error\": \"Workshop not found\"}}\\n\\n"
+                yield f"data: {{\"error\": \"Workshop not found\"}}\n\n"
                 break
-                
+
             current_count = workshop.get("registration_count", 0)
             capacity = workshop.get("capacity", 0)
             remaining = capacity - current_count
-            
+
             if current_count != previous_count:
-                yield f"data: {{\"remaining_seats\": {remaining}, \"capacity\": {capacity}}}\\n\\n"
+                yield f"data: {{\"remaining_seats\": {remaining}, \"capacity\": {capacity}}}\n\n"
                 previous_count = current_count
                 
             await asyncio.sleep(2)
