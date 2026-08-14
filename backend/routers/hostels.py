@@ -125,6 +125,55 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
     log_audit(user_id, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to hostels"}
 
+@router.post("/register")
+def register_for_accommodation(current_user: dict = Depends(get_current_participant)):
+    """
+    Ask for a hostel place during the fest.
+
+    `POST /hostels/allocate` only considers participants whose
+    `accommodation.registered` is True, and registration sets that flag False.
+    This is what lets a participant opt in, so allocation has anyone to place.
+    Declared before `/{hostel_id}/...` routes so the literal path is not
+    captured as a hostel id.
+
+    Idempotent: asking twice is not an error, it just stays requested.
+    """
+    if "participant_id" not in current_user:
+        raise HTTPException(status_code=400, detail="Only participants can request accommodation")
+
+    if current_user.get("accommodation", {}).get("hostel_id"):
+        raise HTTPException(status_code=400, detail="Accommodation already allotted")
+
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"accommodation.registered": True}}
+    )
+    log_audit(current_user["participant_id"], "ACCOMMODATION_REGISTER", None)
+    return {"message": "Accommodation requested"}
+
+
+@router.delete("/register")
+def cancel_accommodation_request(current_user: dict = Depends(get_current_participant)):
+    """
+    Withdraw a pending accommodation request.
+
+    Refused once a hostel has been allotted: releasing an allocated bed is an
+    organiser decision, not a self-service one.
+    """
+    if "participant_id" not in current_user:
+        raise HTTPException(status_code=400, detail="Only participants can cancel accommodation")
+
+    if current_user.get("accommodation", {}).get("hostel_id"):
+        raise HTTPException(status_code=400, detail="Accommodation already allotted")
+
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"accommodation.registered": False}}
+    )
+    log_audit(current_user["participant_id"], "ACCOMMODATION_CANCEL", None)
+    return {"message": "Accommodation request withdrawn"}
+
+
 @router.get("/my_hostel")
 def my_hostel(current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
@@ -146,6 +195,10 @@ def my_hostel(current_user: dict = Depends(get_current_participant)):
         "assigned_hostel": hostel_id,
         "room": current_user.get("accommodation", {}).get("room"),
         "logged_in": current_user.get("accommodation", {}).get("logged_in", False),
+        # Whether this participant has asked for accommodation at all. Without
+        # it the UI cannot tell "never requested" from "requested, not yet
+        # allocated" — two states that need very different things said to them.
+        "registered": current_user.get("accommodation", {}).get("registered", False),
         "volunteers": volunteers
     }
 
