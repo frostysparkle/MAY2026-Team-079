@@ -16,6 +16,11 @@ class MessCreateRequest(BaseModel):
     name: str
     capacity: int
     preference: str  # veg, non_veg, jain, etc.
+    # Regional menus the hall serves: north_indian | south_indian. A separate
+    # axis from `preference`, and a list because a hall can serve both. Optional
+    # so callers written against the earlier shape keep working; allocation does
+    # not read it, so it never affects who is placed where.
+    cuisines: List[str] = []
 
 class MessAssignTeamRequest(BaseModel):
     user_id: Optional[str] = None
@@ -39,6 +44,7 @@ def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_cur
         "name": request.name,
         "capacity": request.capacity,
         "preference": request.preference,
+        "cuisines": request.cuisines,
         "mess_team": [],
         "created_at": datetime.utcnow()
     }
