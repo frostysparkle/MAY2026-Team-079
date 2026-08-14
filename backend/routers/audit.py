@@ -2,13 +2,13 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
 from database import system_logs_collection, backend_teams_collection
-from dependencies import get_current_user
+from dependencies import get_current_staff
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit"])
 
 @router.get("")
-def view_audit_logs(limit: int = 100, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def view_audit_logs(limit: int = 100, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     
     if not admin:

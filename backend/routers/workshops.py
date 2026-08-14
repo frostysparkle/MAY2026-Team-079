@@ -8,12 +8,12 @@ import asyncio
 
 from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest, ScanQRRequest
 from database import workshops_collection, participants_collection, backend_teams_collection, workshop_logs_collection
-from dependencies import get_current_user, verify_qr
+from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 
 router = APIRouter(prefix="/workshops", tags=["Workshops"])
 
 @router.post("")
-def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends(get_current_user)):
+def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -40,13 +40,13 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
 @router.get("")
 def list_workshops(current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
+    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) if user_id else None
     if admin:
         return list(workshops_collection.find({}, {"_id": 0}))
     return list(workshops_collection.find({}, {"_id": 0, "workshop_team": 0}))
 
 @router.put("/{workshop_id}")
-def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_user: dict = Depends(get_current_user)):
+def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -60,7 +60,7 @@ def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_us
     return {"message": "Workshop updated"}
 
 @router.delete("/{workshop_id}")
-def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_user)):
+def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -78,7 +78,7 @@ def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_u
     return {"message": "Workshop deleted"}
 
 @router.post("/{workshop_id}/volunteers")
-def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteerRequest, current_user: dict = Depends(get_current_user)):
+def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteerRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -91,7 +91,7 @@ def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteer
     return {"message": "Volunteer assigned"}
 
 @router.put("/{workshop_id}/volunteers/{user_id}/toggle_scan")
-def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, attendance: bool, current_user: dict = Depends(get_current_user)):
+def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, attendance: bool, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -104,7 +104,7 @@ def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, attendance: 
     return {"message": "Volunteer scanning toggled"}
 
 @router.get("/{workshop_id}/logs")
-def workshop_logs(workshop_id: str, current_user: dict = Depends(get_current_user)):
+def workshop_logs(workshop_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -118,7 +118,7 @@ def workshop_logs(workshop_id: str, current_user: dict = Depends(get_current_use
     return {"logs": logs}
 
 @router.post("/{workshop_id}/register")
-def register_for_workshop(workshop_id: str, current_user: dict = Depends(get_current_user)):
+def register_for_workshop(workshop_id: str, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can register for workshops")
         
@@ -205,7 +205,7 @@ async def stream_workshop_seats(workshop_id: str):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/{workshop_id}/attendance")
-def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str = "pre-registered", current_user: dict = Depends(get_current_user)):
+def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str = "pre-registered", current_user: dict = Depends(get_current_staff)):
     workshop = workshops_collection.find_one({"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]})
     if not workshop:
         try:
@@ -216,13 +216,12 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
         raise HTTPException(status_code=404, detail="Workshop not found")
         
     user_id = current_user.get("participant_id") or current_user.get("paradox_id")
-    volunteer = next((v for v in workshop.get("workshop_team", []) if str(v.get("user_id")) == str(current_user["_id"]) or str(v.get("user_id")) == user_id), None)
-    is_admin = backend_teams_collection.find_one({"paradox_id": user_id}) or "paradox_id" in current_user
+    volunteer = next((v for v in workshop.get("workshop_team", []) if str(v.get("user_id")) == user_id), None)
     
-    if not (volunteer or is_admin):
+    if not volunteer:
         raise HTTPException(status_code=403, detail="Not authorized to scan for this workshop")
         
-    if volunteer and not volunteer.get("attendance", True) and not is_admin:
+    if not volunteer.get("attendance", True):
         raise HTTPException(status_code=403, detail="Scanning disabled for this volunteer")
         
 

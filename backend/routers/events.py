@@ -7,13 +7,13 @@ import random
 
 from models import EventCreateRequest, EventUpdateRequest, EventRegistrationInput, ScanQRRequest
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
-from dependencies import get_current_user, verify_qr
+from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
 @router.post("")
-def create_event(request: EventCreateRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def create_event(request: EventCreateRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin and current_user.get("role") != "super_admin":
         raise HTTPException(status_code=403, detail="Only Super Admins can create events")
@@ -52,17 +52,17 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
 
 @router.get("")
 def list_events(current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+    user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id})
     events = list(event_collection.find({}, {"_id": 0}))
     return events
 
 @router.put("/{event_id}")
-def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_user)):
+def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_staff)):
     event = event_collection.find_one({"event_id": event_id})
     if not event: raise HTTPException(status_code=404, detail="Event not found")
     
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+    user_id = current_user.get("paradox_id")
     is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
     if not is_super_admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can edit this event")
@@ -75,8 +75,8 @@ def update_event(event_id: str, request: EventUpdateRequest, current_user: dict 
     return {"message": "Event updated successfully"}
 
 @router.delete("/{event_id}")
-def delete_event(event_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def delete_event(event_id: str, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
     if not is_super_admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can delete events")
@@ -98,8 +98,8 @@ class EventTeamAssignRequest(BaseModel):
     role: str # event_head | event_member | volunteer
 
 @router.post("/{event_id}/team")
-def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
     if not is_super_admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can assign event teams")
@@ -115,7 +115,7 @@ def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_us
     return {"message": "Team member assigned"}
 
 @router.post("/{event_id}/register")
-def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput] = None, current_user: dict = Depends(get_current_user)):
+def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput] = None, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can register for events")
         
@@ -164,7 +164,7 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
     return {"message": "Registered for event successfully."}
 
 @router.put("/{event_id}/register")
-def edit_event_registration(event_id: str, reg_input: EventRegistrationInput, current_user: dict = Depends(get_current_user)):
+def edit_event_registration(event_id: str, reg_input: EventRegistrationInput, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can edit event registrations")
     event = event_collection.find_one({"event_id": event_id})
@@ -179,7 +179,7 @@ def edit_event_registration(event_id: str, reg_input: EventRegistrationInput, cu
     return {"message": "Registration updated"}
 
 @router.delete("/{event_id}/register")
-def deregister_event(event_id: str, current_user: dict = Depends(get_current_user)):
+def deregister_event(event_id: str, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can deregister")
     event = event_collection.find_one({"event_id": event_id})
@@ -195,7 +195,7 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_use
     return {"message": "Deregistered successfully"}
 
 @router.get("/my_registrations")
-def my_registrations(current_user: dict = Depends(get_current_user)):
+def my_registrations(current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         return []
     events = current_user.get("events", [])
@@ -205,14 +205,14 @@ def my_registrations(current_user: dict = Depends(get_current_user)):
     return events
 
 @router.get("/{event_id}/participation")
-def view_participation(event_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def view_participation(event_id: str, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event: raise HTTPException(status_code=404, detail="Event not found")
     
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    is_event_team = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
     admin_doc = backend_teams_collection.find_one({"paradox_id": user_id})
+    is_super_admin = admin_doc and admin_doc.get("role") == "super_admin"
+    is_event_team = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
     
     is_uhc = admin_doc and admin_doc.get("department") == "uhc"
     is_dept_admin = admin_doc and admin_doc.get("department") == event.get("event_type")
@@ -230,8 +230,8 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_u
         # UHC filtering logic
         if is_uhc and not is_super_admin and not is_event_team:
             email = admin_doc.get("email", "")
-            admin_house = email.split("-")[0].capitalize() + " House" if "-" in email else None
-            if prof.get("house") != admin_house:
+            admin_house = email.split("-")[0].lower() if "-" in email else None
+            if prof.get("house", "").lower() != admin_house:
                 continue
 
         result.append({
@@ -255,13 +255,10 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_u
         member_name = "Unknown"
         member_phone = "Unknown"
         if admin:
-            # Usually admin has designation or links to participant
             member_name = admin.get("designation", "Admin")
         
         # Try to find participant if they have a student profile
         p_doc = participants_collection.find_one({"participant_id": admin_id})
-        if not p_doc:
-            p_doc = participants_collection.find_one({"_id": admin_id})
             
         if p_doc:
             prof = p_doc.get("profile", {})
@@ -293,16 +290,15 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_u
     return response_data
 
 @router.post("/{event_id}/allocate_teams")
-def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event: raise HTTPException(status_code=404, detail="Event not found")
     
     is_event_head = any(str(member.get("user_id")) == user_id and member.get("role") == "event_head" for member in event.get("event_team", []))
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     
-    if not (is_super_admin or is_event_head):
-        raise HTTPException(status_code=403, detail="Not authorized to allocate teams")
+    if not is_event_head:
+        raise HTTPException(status_code=403, detail="Only Event Heads are authorized to allocate teams")
         
     team_rules = event.get("team", {})
     min_size = team_rules.get("min", 1)
@@ -357,15 +353,14 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_user)
     return {"message": f"Allocated {teams_created} teams"}
 
 @router.post("/{event_id}/scan")
-def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event: raise HTTPException(status_code=404, detail="Event not found")
     
     is_team_member = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     
-    if not (is_super_admin or is_team_member):
+    if not is_team_member:
         raise HTTPException(status_code=403, detail="Not authorized to scan for this event")
         
     target_user, _ = verify_qr(request)
@@ -394,15 +389,14 @@ def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: 
     }
 
 @router.get("/{event_id}/my_daily_scans")
-def my_daily_scans(event_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def my_daily_scans(event_id: str, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event: raise HTTPException(status_code=404, detail="Event not found")
     
     is_team_member = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     
-    if not (is_super_admin or is_team_member):
+    if not is_team_member:
         raise HTTPException(status_code=403, detail="Not authorized")
         
     day_str = datetime.utcnow().strftime("%Y-%m-%d")
@@ -413,3 +407,28 @@ def my_daily_scans(event_id: str, current_user: dict = Depends(get_current_user)
     })
     
     return {"daily_unique_scans": count}
+
+class TeamUpdateInput(BaseModel):
+    team_id: Optional[str] = None
+    team_role: Optional[str] = None
+
+@router.put("/{event_id}/participant_teams/{participant_id}")
+def update_participant_team(event_id: str, participant_id: str, payload: TeamUpdateInput, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
+    event = event_collection.find_one({"event_id": event_id})
+    if not event: raise HTTPException(status_code=404, detail="Event not found")
+    
+    is_event_head = any(str(member.get("user_id")) == user_id and member.get("role") == "event_head" for member in event.get("event_team", []))
+    
+    if not is_event_head:
+        raise HTTPException(status_code=403, detail="Only Event Heads are authorized to modify participant teams")
+        
+    participant = participants_collection.find_one({"participant_id": participant_id, "events.event_id": event["_id"]})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not registered for this event")
+        
+    participants_collection.update_one(
+        {"participant_id": participant_id, "events.event_id": event["_id"]},
+        {"$set": {"events.$.team_id": payload.team_id, "events.$.team_role": payload.team_role}}
+    )
+    return {"message": "Participant team updated"}

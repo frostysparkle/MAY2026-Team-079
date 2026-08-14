@@ -8,21 +8,64 @@ from security import SECRET_KEY, ALGORITHM, decrypt_qr_data
 security = HTTPBearer()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Accepts both participant and staff tokens. Use for endpoints accessible by both."""
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        participant_id: str = payload.get("sub")
-        if participant_id is None:
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type", "participant")  # "participant" | "staff"
+        if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    
-    user = participants_collection.find_one({"participant_id": participant_id})
-    if user is None:
-        user = backend_teams_collection.find_one({"paradox_id": participant_id})
-    
+
+    if token_type == "staff":
+        user = backend_teams_collection.find_one({"paradox_id": user_id})
+    else:
+        user = participants_collection.find_one({"participant_id": user_id})
+
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+def get_current_staff(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Requires a staff token (type='staff'). Rejects participant tokens at auth layer."""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type", "participant")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+    if token_type != "staff":
+        raise HTTPException(status_code=403, detail="Staff credentials required. Use /auth/admin/login.")
+
+    user = backend_teams_collection.find_one({"paradox_id": user_id})
+    if user is None:
+        raise HTTPException(status_code=401, detail="Staff member not found")
+    return user
+
+def get_current_participant(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Requires a participant token (type='participant'). Rejects staff tokens at auth layer."""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type", "participant")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+    if token_type != "participant":
+        raise HTTPException(status_code=403, detail="Participant credentials required. Use /auth/login.")
+
+    user = participants_collection.find_one({"participant_id": user_id})
+    if user is None:
+        raise HTTPException(status_code=401, detail="Participant not found")
     return user
 
 def verify_qr(request):

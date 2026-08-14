@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import random
 
 from database import mess_collection, participants_collection, backend_teams_collection
-from dependencies import get_current_user, verify_qr
+from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from models import ScanQRRequest
 
 router = APIRouter(prefix="/mess", tags=["Mess"])
@@ -29,8 +29,8 @@ class MessSlotRequest(BaseModel):
     end_time: str
 
 @router.post("")
-def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -51,8 +51,8 @@ def list_messes(current_user: dict = Depends(get_current_user)):
     return list(mess_collection.find({}, {"_id": 0}))
 
 @router.post("/{mess_id}/team")
-def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -72,8 +72,8 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
     return {"message": "Team member assigned"}
 
 @router.put("/{mess_id}/team/{team_user_id}/toggle_scan")
-def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -84,8 +84,8 @@ def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_use
     return {"message": "Scanning toggled"}
 
 @router.post("/allocate")
-def allocate_messes(current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def allocate_messes(current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -117,7 +117,7 @@ def allocate_messes(current_user: dict = Depends(get_current_user)):
     return {"message": f"Allocated {allocated} participants to messes"}
 
 @router.get("/my_mess")
-def my_mess(current_user: dict = Depends(get_current_user)):
+def my_mess(current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants have assigned messes")
     
@@ -131,18 +131,17 @@ def my_mess(current_user: dict = Depends(get_current_user)):
     }
 
 @router.post("/{mess_id}/scan")
-def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     mess = mess_collection.find_one({"mess_id": mess_id})
     if not mess: raise HTTPException(status_code=404, detail="Mess not found")
     
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     team_member = next((m for m in mess.get("mess_team", []) if m.get("user_id") == user_id), None)
     
-    if not (is_super_admin or team_member):
+    if not team_member:
         raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
         
-    if team_member and not team_member.get("logging"):
+    if not team_member.get("logging"):
         raise HTTPException(status_code=403, detail="Scanning disabled for you")
         
     target_user, _ = verify_qr(request)
@@ -176,8 +175,8 @@ def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current
     return {"message": "Scan successful, entry allowed"}
 
 @router.get("/{mess_id}/statistics")
-def mess_statistics(mess_id: str, current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id") or current_user.get("participant_id")
+def mess_statistics(mess_id: str, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         

@@ -16,7 +16,7 @@ from models import (
 )
 
 from routers import workshops, events, mess, hostels, audit
-from dependencies import get_current_user, verify_qr
+from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from database import (
     participants_collection, workshops_collection,
     hostel_collection, mess_collection, backend_teams_collection, event_collection, workshop_logs_collection
@@ -113,28 +113,22 @@ def register(request: RegisterRequest):
 
 @app.post("/auth/login")
 def login(request: LoginRequest):
+    # Participant-only login
     user = participants_collection.find_one({"email": request.email})
-    is_backend_team = False
-    if not user:
-        user = backend_teams_collection.find_one({"email": request.email})
-        is_backend_team = True
 
     if not user or not verify_password(request.password, user.get("password_hash")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    user_id = user.get("participant_id") if not is_backend_team else user.get("paradox_id")
+    user_id = user.get("participant_id")
     
-    # Update updated_at time
-    collection = backend_teams_collection if is_backend_team else participants_collection
-    collection.update_one(
+    participants_collection.update_one(
         {"_id": user["_id"]}, 
         {"$set": {"updated_at": datetime.utcnow()}}
     )
     
-    # Create JWT Access Token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_id}, expires_delta=access_token_expires
+        data={"sub": user_id, "type": "participant"}, expires_delta=access_token_expires
     )
     
     profile = user.get("profile", {})
@@ -142,6 +136,7 @@ def login(request: LoginRequest):
         "id": user_id,
         "email": user["email"],
         "access_token": access_token,
+        "token_type": "participant",
         "full_name": profile.get("full_name"),
         "dob": profile.get("dob"),
         "house": profile.get("house"),
@@ -155,6 +150,36 @@ def login(request: LoginRequest):
         "course_stage": profile.get("course_stage"),
         "photo": user.get("photo"),
         "public_key": user.get("qr_secrets", {}).get("public_key")
+    }
+
+@app.post("/auth/admin/login")
+def admin_login(request: LoginRequest):
+    # Backend staff-only login (Super Admins, Domain Admins, UHC, Event Heads, Volunteers, Guards, Employees)
+    user = backend_teams_collection.find_one({"email": request.email})
+
+    if not user or not verify_password(request.password, user.get("password_hash")):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    user_id = user.get("paradox_id")
+
+    backend_teams_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"updated_at": datetime.utcnow()}}
+    )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user_id, "type": "staff"}, expires_delta=access_token_expires
+    )
+
+    return {
+        "id": user_id,
+        "email": user["email"],
+        "access_token": access_token,
+        "token_type": "staff",
+        "role": user.get("role"),
+        "department": user.get("department"),
+        "designation": user.get("designation"),
     }
 
 @app.post("/auth/password/forgot")
@@ -175,8 +200,9 @@ def change_password(request: ChangePasswordRequest, current_user: dict = Depends
     
     hashed_password = get_password_hash(request.new_password)
     
-    user_id_field = "paradox_id" if "paradox_id" in current_user else "participant_id"
-    collection = backend_teams_collection if "paradox_id" in current_user else participants_collection
+    is_staff = "paradox_id" in current_user
+    user_id_field = "paradox_id" if is_staff else "participant_id"
+    collection = backend_teams_collection if is_staff else participants_collection
     
     collection.update_one(
         {"_id": current_user["_id"]},
@@ -184,9 +210,10 @@ def change_password(request: ChangePasswordRequest, current_user: dict = Depends
     )
     
     user_id = current_user[user_id_field]
+    token_type = "staff" if is_staff else "participant"
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_id}, expires_delta=access_token_expires
+        data={"sub": user_id, "type": token_type}, expires_delta=access_token_expires
     )
     
     return {
@@ -195,7 +222,7 @@ def change_password(request: ChangePasswordRequest, current_user: dict = Depends
     }
 
 @app.patch("/profile/complete")
-def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depends(get_current_user)):
+def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants have student profiles")
 
@@ -258,7 +285,7 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
 from models import BackendTeamCreateRequest, BackendTeamUpdateRequest
 
 @app.post("/backend_teams")
-def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = Depends(get_current_user)):
+def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -286,7 +313,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
     return {"message": "Backend team member created", "paradox_id": new_team["paradox_id"]}
 
 @app.get("/backend_teams")
-def get_backend_teams(current_user: dict = Depends(get_current_user)):
+def get_backend_teams(current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -294,7 +321,7 @@ def get_backend_teams(current_user: dict = Depends(get_current_user)):
     return list(backend_teams_collection.find({}, {"_id": 0, "password_hash": 0}))
 
 @app.put("/backend_teams/{paradox_id}")
-def update_backend_team(paradox_id: str, request: BackendTeamUpdateRequest, current_user: dict = Depends(get_current_user)):
+def update_backend_team(paradox_id: str, request: BackendTeamUpdateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
@@ -307,7 +334,7 @@ def update_backend_team(paradox_id: str, request: BackendTeamUpdateRequest, curr
     return {"message": "Backend team updated successfully"}
 
 @app.delete("/backend_teams/{paradox_id}")
-def delete_backend_team(paradox_id: str, current_user: dict = Depends(get_current_user)):
+def delete_backend_team(paradox_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
