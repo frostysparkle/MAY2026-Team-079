@@ -15,7 +15,7 @@ from models import (
     ScanQRRequest, EventCreateRequest, EventUpdateRequest, EventRegistrationInput
 )
 
-from routers import workshops, events, mess, hostels, audit
+from routers import workshops, events, mess, hostels, audit, participants
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from database import (
     participants_collection, workshops_collection,
@@ -349,6 +349,7 @@ app.include_router(events.router)
 app.include_router(mess.router)
 app.include_router(hostels.router)
 app.include_router(audit.router)
+app.include_router(participants.router)
 
 if __name__ == "__main__":
     import uvicorn
