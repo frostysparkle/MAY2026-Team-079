@@ -47,6 +47,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /auth/admin/login:
+    post:
+      summary: Admin Login
+      operationId: admin_login_auth_admin_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/password/forgot:
     post:
       summary: Forgot Password
@@ -426,6 +448,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /workshops/my_registrations:
+    get:
+      tags:
+      - Workshops
+      summary: My Workshop Registrations
+      description: This participant's own workshop bookings, one entry per booked
+        slot. Mirrors /events/my_registrations.
+      operationId: my_workshop_registrations_workshops_my_registrations_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
   /workshops/{workshop_id}/register:
     post:
       tags:
@@ -557,6 +595,34 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /events/public:
+    get:
+      tags:
+      - Events
+      summary: List Public Events
+      description: 'The festival brochure — every event, readable without signing
+        in.
+
+
+        Deliberately unauthenticated: this is the pre-login events catalogue the
+
+        landing page renders, and it must work for a visitor with no account. Only
+
+        the published fields above are returned — never `event_team` (which carries
+
+        staff identities), `registration_fields`, or internal bookkeeping and logs.
+
+
+        Declared before any `/{event_id}` route so the literal path is not captured
+
+        as an event id.'
+      operationId: list_public_events_events_public_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /events/{event_id}:
     put:
       tags:
@@ -858,6 +924,77 @@ paths:
         schema:
           type: string
           title: Event Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /events/{event_id}/logs:
+    get:
+      tags:
+      - Events
+      summary: Event Logs
+      description: >-
+        Every attendance scan recorded for this event, newest first. Super Admins
+        only. Mirrors GET /workshops/{workshop_id}/logs, including the
+        {"logs": [...]} envelope. Each row carries participant_id, scanned_by,
+        day, and timestamp.
+      operationId: event_logs_events__event_id__logs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /events/{event_id}/participant_teams/{participant_id}:
+    put:
+      tags:
+      - Events
+      summary: Update Participant Team
+      operationId: update_participant_team_events__event_id__participant_teams__participant_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      - name: participant_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Participant Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamUpdateInput'
       responses:
         '200':
           description: Successful Response
@@ -1206,6 +1343,37 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
+  /hostels/register:
+    post:
+      tags:
+      - Hostels
+      summary: Register For Accommodation
+      description: Opt in to a hostel place. POST /hostels/allocate only considers
+        participants who have done this. Idempotent; 400 once a hostel is allotted.
+      operationId: register_for_accommodation_hostels_register_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - Hostels
+      summary: Cancel Accommodation Request
+      description: Withdraw a pending accommodation request. 400 once a hostel is
+        allotted.
+      operationId: cancel_accommodation_request_hostels_register_delete
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
   /hostels/my_hostel:
     get:
       tags:
@@ -1291,6 +1459,13 @@ paths:
       tags:
       - Audit
       summary: View Audit Logs
+      description: >-
+        The audit trail, newest first. Super Admins only. target_id narrows the
+        trail to a single entity (an event_id, workshop_id, mess_id, or
+        hostel_id) — the per-entity log view relies on this being applied
+        server-side, because limit would otherwise cut off an entity's older
+        entries before any client-side filter could run. action narrows to one
+        kind of action, e.g. HOSTEL_ENTRY. Both are optional.
       operationId: view_audit_logs_audit_logs_get
       security:
       - HTTPBearer: []
@@ -1302,6 +1477,22 @@ paths:
           type: integer
           default: 100
           title: Limit
+      - name: target_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Id
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action
       responses:
         '200':
           description: Successful Response
@@ -1314,6 +1505,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /participants/statistics:
+    get:
+      tags:
+      - Participants
+      summary: Participant Statistics
+      description: >-
+        Fest-wide participant counts, for the admin overview board. Super Admins
+        only, matching /mess/{mess_id}/statistics and
+        /hostels/{hostel_id}/statistics. Counts only — no name, email, phone,
+        address, photo, or participant id leaves this endpoint, so a dashboard
+        can read fest-wide totals without exposing a roster. total_registered is
+        every account in the participants collection, which is what
+        POST /auth/register creates, so it is a real registration total rather
+        than a count of people who have turned up somewhere. Also returns
+        profile_complete / profile_incomplete, the mess and hostel funnel
+        (mess_registered, mess_allotted, hostel_registered, hostel_allotted,
+        hostel_pending, currently_on_campus), with_event_registrations,
+        with_workshop_registrations, the by_house / by_program /
+        by_course_stage / by_gender splits, and signups_by_day keyed
+        chronologically by YYYY-MM-DD.
+      operationId: participant_statistics_participants_statistics_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
 components:
   schemas:
     BackendTeamCreateRequest:
@@ -1651,6 +1871,20 @@ components:
         preference:
           type: string
           title: Preference
+          description: >-
+            Dietary designation: veg | non_veg | jain. POST /mess/allocate groups
+            halls by this value and matches it against a participant's
+            profile.mess_preference.
+        cuisines:
+          type: array
+          items:
+            type: string
+          title: Cuisines
+          default: []
+          description: >-
+            Regional menus the hall serves: north_indian | south_indian. A list,
+            because a hall can serve both. Independent of preference, and not read
+            by allocation.
       type: object
       required:
       - mess_id
@@ -1824,6 +2058,11 @@ components:
         end_time:
           type: string
           title: End Time
+        venue:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Venue
       type: object
       required:
       - name
@@ -1850,6 +2089,20 @@ components:
           default: true
       type: object
       title: TeamRule
+    TeamUpdateInput:
+      properties:
+        team_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Team Id
+        team_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Team Role
+      type: object
+      title: TeamUpdateInput
     ValidationError:
       properties:
         loc:

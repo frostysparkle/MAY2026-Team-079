@@ -485,6 +485,51 @@
         ]
       }
     },
+    "/workshops/public": {
+      "get": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "List Public Workshops",
+        "description": "The workshop programme, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login workshops catalogue the\nlanding page and /workshops render, and it must work for a visitor with no\naccount. Only the published fields above are returned \u2014 never\n`workshop_team` (which carries staff identities) or internal bookkeeping.\n\nMirrors GET /events/public. Declared before any `/{workshop_id}` route so\nthe literal path is not captured as a workshop id.",
+        "operationId": "list_public_workshops_workshops_public_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workshops/my_registrations": {
+      "get": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "My Workshop Registrations",
+        "description": "This participant's own workshop bookings.\n\nMirrors GET /events/my_registrations, and exists for the same reason: the\nbooking is stored on the participant document, so without this there is no\nway to read back what you booked \u2014 the register response says only that it\nworked. Declared before any `/{workshop_id}` route so the literal path is\nnot captured as a workshop id.\n\n`workshops[].workshop_id` holds the workshop's raw ObjectId, so each entry\nis resolved to the public workshop id and name the UI actually shows.",
+        "operationId": "my_workshop_registrations_workshops_my_registrations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/workshops/{workshop_id}": {
       "put": {
         "tags": [
@@ -960,6 +1005,26 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/events/public": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "List Public Events",
+        "description": "The festival brochure \u2014 every event, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login events catalogue the\nlanding page renders, and it must work for a visitor with no account. Only\nthe published fields above are returned \u2014 never `event_team` (which carries\nstaff identities), `registration_fields`, or internal bookkeeping and logs.\n\nDeclared before any `/{event_id}` route so the literal path is not captured\nas an event id.",
+        "operationId": "list_public_events_events_public_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/events/{event_id}": {
@@ -1449,6 +1514,52 @@
         ],
         "summary": "My Daily Scans",
         "operationId": "my_daily_scans_events__event_id__my_daily_scans_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/logs": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Event Logs",
+        "description": "Every attendance scan recorded for this event.\n\nThese rows have always been written by ``POST /events/{event_id}/scan`` but\nnothing read them back: participation only reported *today's* count, and\n``my_daily_scans`` only the caller's own. That left the per-event attendance\nhistory unreachable, which is what the dashboard's event log view needs.\n\nMirrors ``GET /workshops/{workshop_id}/logs`` \u2014 same super-admin gate, same\n``{\"logs\": [...]}`` envelope \u2014 so the two read identically on the client.\n\nRows key on the event's ObjectId, not its readable ``event_id``, so the lookup\nhappens here rather than being a detail every caller has to know.",
+        "operationId": "event_logs_events__event_id__logs_get",
         "security": [
           {
             "HTTPBearer": []
@@ -2109,6 +2220,54 @@
         ]
       }
     },
+    "/hostels/register": {
+      "post": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Register For Accommodation",
+        "description": "Ask for a hostel place during the fest.\n\n`POST /hostels/allocate` only considers participants whose\n`accommodation.registered` is True, and registration sets that flag False.\nThis is what lets a participant opt in, so allocation has anyone to place.\nDeclared before `/{hostel_id}/...` routes so the literal path is not\ncaptured as a hostel id.\n\nIdempotent: asking twice is not an error, it just stays requested.",
+        "operationId": "register_for_accommodation_hostels_register_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Cancel Accommodation Request",
+        "description": "Withdraw a pending accommodation request.\n\nRefused once a hostel has been allotted: releasing an allocated bed is an\norganiser decision, not a self-service one.",
+        "operationId": "cancel_accommodation_request_hostels_register_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/hostels/my_hostel": {
       "get": {
         "tags": [
@@ -2248,6 +2407,7 @@
           "Audit"
         ],
         "summary": "View Audit Logs",
+        "description": "The audit trail, newest first.\n\n``target_id`` narrows the trail to one entity \u2014 an event, workshop, mess hall,\nor hostel block \u2014 which is what the dashboard's per-entity log view reads.\nFiltering server-side rather than pulling the whole trail and sifting it in the\nclient matters here: ``limit`` would otherwise silently cut off an entity's\nolder entries, because it applies before any client-side filter can run.\n\n``action`` narrows to one kind of action, e.g. ``HOSTEL_ENTRY``. Both are\noptional, so the unfiltered call is unchanged.",
         "operationId": "view_audit_logs_audit_logs_get",
         "security": [
           {
@@ -2263,6 +2423,38 @@
               "type": "integer",
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
             }
           }
         ],
@@ -2286,6 +2478,31 @@
             }
           }
         }
+      }
+    },
+    "/participants/statistics": {
+      "get": {
+        "tags": [
+          "Participants"
+        ],
+        "summary": "Participant Statistics",
+        "description": "Fest-wide participant counts, for the admin overview board.\n\nCounts only. No name, email, phone, address, photo, or participant id leaves\nthis endpoint, so the dashboard can read fest-wide totals without exposing a\nroster \u2014 the per-entity ``/statistics`` endpoints remain the only way to see\nwho is actually allotted where.\n\nSuper Admins only, matching ``/mess/{id}/statistics`` and\n``/hostels/{id}/statistics``.\n\n``total_registered`` is every account in the ``participants`` collection,\nwhich is what ``POST /auth/register`` creates \u2014 a real registration total\nrather than a count of people who happen to have turned up somewhere.",
+        "operationId": "participant_statistics_participants_statistics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     }
   },
@@ -2829,6 +3046,14 @@
           "preference": {
             "type": "string",
             "title": "Preference"
+          },
+          "cuisines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cuisines",
+            "default": []
           }
         },
         "type": "object",
@@ -3080,6 +3305,17 @@
           "end_time": {
             "type": "string",
             "title": "End Time"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
           }
         },
         "type": "object",
