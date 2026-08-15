@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export type BannerVariant = 'success' | 'error' | 'warning';
@@ -9,10 +10,10 @@ const styles: Record<BannerVariant, string> = {
   warning: 'bg-warning-bg text-warning',
 };
 
-const icons: Record<BannerVariant, string> = {
-  success: '✓',
-  error: '✕',
-  warning: '!',
+const icons: Record<BannerVariant, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: XCircle,
+  warning: AlertTriangle,
 };
 
 /**
@@ -30,16 +31,18 @@ export function ResultBanner({
   children?: ReactNode;
   className?: string;
 }) {
+  const Icon = icons[variant];
   return (
     <div
       role={variant === 'success' ? 'status' : 'alert'}
-      className={cn('flex items-start gap-3 rounded-lg p-4', styles[variant], className)}
+      className={cn(
+        'animate-pop flex items-start gap-3 rounded-2xl p-4 ring-1 ring-inset ring-black/[0.03]',
+        styles[variant],
+        className,
+      )}
     >
-      <span
-        aria-hidden
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/60 text-sm font-bold"
-      >
-        {icons[variant]}
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/60">
+        <Icon size={15} strokeWidth={2.25} />
       </span>
       <div>
         <p className="font-semibold">{title}</p>
