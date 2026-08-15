@@ -46,7 +46,7 @@ def setup_test_users():
         "department": "technicals",
         "created_at": datetime.utcnow()
     })
-    sa_login = client.post("/auth/login", json={"email": a_email, "password": "secure_password"})
+    sa_login = client.post("/auth/admin/login", json={"email": a_email, "password": "secure_password"})
     
     # Setup test hostel & mess
     hostel_collection.update_one({"hostel_id": "H01"}, {"$set": {"name": "Alakhnanda", "capacity": 100, "gender": "male", "hostel_team": [{"user_id": sa_id}]}}, upsert=True)

@@ -152,7 +152,7 @@ def ctx():
             "updated_at": datetime.utcnow(),
         }
     )
-    sa_login = client.post("/auth/login", json={"email": sa_email, "password": password})
+    sa_login = client.post("/auth/admin/login", json={"email": sa_email, "password": password})
     sa_token = sa_login.json()["access_token"]
 
     # ── Hostel ───────────────────────────────────────────────────────────────
@@ -297,7 +297,11 @@ def test_TC105_event_create_forbidden_for_participant(ctx):
         headers=p_hdr,
     )
     assert resp.status_code == 403
-    assert "Only Super Admins can create events" in resp.json()["detail"]
+    # A participant token never reaches the "Only Super Admins" check: under the
+    # dual-login model get_current_staff rejects it at the auth layer first.
+    # Still 403, and still the thing this case is about — a participant cannot
+    # create an event.
+    assert "Staff credentials required" in resp.json()["detail"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -415,7 +419,7 @@ def test_TC103_uhc_stats_exclusion(ctx):
         }
     )
     uhc_login = client.post(
-        "/auth/login", json={"email": uhc_email, "password": "Secure@1234"}
+        "/auth/admin/login", json={"email": uhc_email, "password": "Secure@1234"}
     )
     uhc_token = uhc_login.json()["access_token"]
 

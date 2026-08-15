@@ -53,7 +53,10 @@ def setup_data():
         "updated_at": datetime.utcnow()
     })
     
-    sa_login = client.post("/auth/login", json={"email": a_email, "password": "secure_password"})
+    # Staff sign in through /auth/admin/login. /auth/login is participant-only
+    # (it reads participants_collection), so it 401s for a backend team member
+    # and the response carries no access_token at all.
+    sa_login = client.post("/auth/admin/login", json={"email": a_email, "password": "secure_password"})
     sa_token = sa_login.json()["access_token"]
     
     mess_id = f"MESS_TEST_{random.randint(1000, 9999)}"
@@ -134,3 +137,41 @@ def test_mess_statistics(setup_data):
     data = resp.json()
     assert data["total_allocated"] > 0
     assert data["capacity"] == 10
+
+
+def test_create_mess_stores_the_cuisines_it_was_given(setup_data):
+    """A hall can serve both regional menus, so `cuisines` is a list."""
+    sa_headers = {"Authorization": f"Bearer {setup_data['sa_token']}"}
+    mess_id = f"MESS_CUISINE_{random.randint(1000, 9999)}"
+
+    resp = client.post("/mess", json={
+        "mess_id": mess_id,
+        "name": "Nilgiri",
+        "capacity": 300,
+        "preference": "jain",
+        "cuisines": ["north_indian", "south_indian"],
+    }, headers=sa_headers)
+    assert resp.status_code == 200
+
+    stored = mess_collection.find_one({"mess_id": mess_id})
+    assert stored["cuisines"] == ["north_indian", "south_indian"]
+    # Cuisine is a separate axis from the dietary preference, not a replacement.
+    assert stored["preference"] == "jain"
+
+
+def test_create_mess_defaults_cuisines_to_empty(setup_data):
+    """Callers written against the earlier request shape still work."""
+    sa_headers = {"Authorization": f"Bearer {setup_data['sa_token']}"}
+    mess_id = f"MESS_NOCUISINE_{random.randint(1000, 9999)}"
+
+    resp = client.post("/mess", json={
+        "mess_id": mess_id,
+        "name": "Unnamed Hall",
+        "capacity": 50,
+        "preference": "veg",
+    }, headers=sa_headers)
+    assert resp.status_code == 200
+
+    # Stored as an empty list rather than left absent, so readers never have to
+    # handle both "missing" and "empty".
+    assert mess_collection.find_one({"mess_id": mess_id})["cuisines"] == []

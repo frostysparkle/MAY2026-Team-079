@@ -51,7 +51,7 @@ def setup_data():
         "updated_at": datetime.utcnow()
     })
     
-    sa_login = client.post("/auth/login", json={"email": a_email, "password": "secure_password"})
+    sa_login = client.post("/auth/admin/login", json={"email": a_email, "password": "secure_password"})
     sa_token = sa_login.json()["access_token"]
 
     # 3. Create a Workshop

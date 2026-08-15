@@ -42,7 +42,7 @@ def setup_data():
         "updated_at": datetime.utcnow()
     })
     
-    sa_login = client.post("/auth/login", json={"email": a_email, "password": "secure_password"})
+    sa_login = client.post("/auth/admin/login", json={"email": a_email, "password": "secure_password"})
     sa_token = sa_login.json()["access_token"]
 
     ev_id = f"EVT_TEST_{random.randint(1000, 9999)}"
@@ -57,7 +57,17 @@ def setup_data():
     }
     
     client.post("/events", json=ev_payload, headers={"Authorization": f"Bearer {sa_token}"})
-    
+
+    # Being a Super Admin is not by itself authority over an event: allocating
+    # teams needs an event_head, and scanning needs any event_team member. The
+    # admin is put on this event's team so those tests exercise the endpoints
+    # rather than stopping at the permission check.
+    client.post(
+        f"/events/{ev_id}/team",
+        json={"user_id": sa_id, "role": "event_head"},
+        headers={"Authorization": f"Bearer {sa_token}"},
+    )
+
     return {
         "p_token": p_token,
         "p_id": p_id,
@@ -115,7 +125,7 @@ def test_uhc_stats_exclusion(setup_data):
         "updated_at": datetime.utcnow()
     })
     
-    uhc_login = client.post("/auth/login", json={"email": uhc_email, "password": "secure_password"})
+    uhc_login = client.post("/auth/admin/login", json={"email": uhc_email, "password": "secure_password"})
     uhc_token = uhc_login.json()["access_token"]
     
     uhc_headers = {"Authorization": f"Bearer {uhc_token}"}
