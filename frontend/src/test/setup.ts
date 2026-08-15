@@ -2,7 +2,19 @@
 // and clears the DOM/mocks between tests so cases stay isolated.
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
+
+/**
+ * `findBy*` waits longer than the 1s default.
+ *
+ * The mock API delays every call by ~120ms on purpose, so a screen that loads,
+ * writes, and re-reads spends ~360ms on latency alone before rendering. With the
+ * whole suite running in parallel that intermittently overran the default budget
+ * and failed tests that were only ever slow, never wrong. This buys headroom
+ * without slowing the happy path: a passing assertion still resolves as soon as
+ * the element appears.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 // jsdom in this setup doesn't expose Web Storage as a global; provide a minimal
 // in-memory localStorage so code that persists state works under test.
