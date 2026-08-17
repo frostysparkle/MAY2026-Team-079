@@ -1,11 +1,25 @@
-import type { CheckpointType } from '@/config/constants';
+import type { MealSlot, ScanQRRequest } from '@/api/types';
 
-/**
- * Data the scanner hands to the Scan Result screen via router state. Verification
- * (the network call) happens on the result screen so its loading state is shown.
- */
-export interface PendingScan {
-  participantId: string;
-  currentCode: string;
-  checkpoint: CheckpointType;
+export interface PendingMessScan {
+  qr: ScanQRRequest;
+  messId: string;
+  slot: MealSlot;
+  day: number;
+}
+
+export interface PendingHostelScan {
+  qr: ScanQRRequest;
+  hostelId: string;
+  action: 'entry' | 'exit';
+}
+
+export interface PendingEventScan {
+  qr: ScanQRRequest;
+  eventId: string;
+}
+
+export interface PendingWorkshopScan {
+  qr: ScanQRRequest;
+  workshopId: string;
+  scanType: 'pre-registered' | 'on-spot';
 }
