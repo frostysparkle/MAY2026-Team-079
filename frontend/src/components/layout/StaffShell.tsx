@@ -1,68 +1,77 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
-import { useAuthStore, currentParticipant } from '@/stores/authStore';
+import { useAuthStore, currentStaff, isSuperAdmin } from '@/stores/authStore';
 import { AuroraBackdrop } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 /**
- * Participant navigation. Rendered as a persistent left rail from `lg` up, and as
- * a horizontal scroller under the header below that — same links, same order, one
+ * Staff navigation. Rendered as a persistent left rail from `lg` up, and as a
+ * horizontal scroller under the header below that — same links, same order, one
  * source of truth.
  *
- * Deliberately the same list shape as `StaffShell`'s: Dashboard first, then one
- * entry per section. There is no separate phone list, because a link that only
- * exists on one viewport is a link the other one can never be told about.
+ * `staffHome` is marked `hideForSuperAdmin` rather than removed. It is a
+ * *personal* duty list — the halls, blocks, and events whose teams name you — so
+ * for a volunteer or an event head it is the only page that matters, and four
+ * scanner screens link back to it. A Super Admin is on none of those teams, which
+ * left them a nav entry to a page whose only populated section was a list of
+ * every event linking to its participation report. That is already reachable
+ * three other ways: the Events panel on this board, the row menu on Admin Events,
+ * and each event's own detail screen. So the route stays and the entry goes, and
+ * Overview — the fest-wide board — becomes their first link instead.
  */
-const NAV: { to: string; label: string }[] = [
-  { to: ROUTES.home, label: 'Dashboard' },
-  { to: ROUTES.events, label: 'Events' },
-  { to: ROUTES.workshops, label: 'Workshops' },
-  { to: ROUTES.schedule, label: 'Schedule' },
-  { to: ROUTES.myQr, label: 'My QR' },
-  { to: ROUTES.profile, label: 'Profile' },
+const NAV: {
+  to: string;
+  label: string;
+  superAdmin?: boolean;
+  /** Present for other staff, redundant for a Super Admin. */
+  hideForSuperAdmin?: boolean;
+}[] = [
+  { to: ROUTES.staffHome, label: 'Dashboard', hideForSuperAdmin: true },
+  { to: ROUTES.adminOverview, label: 'Overview', superAdmin: true },
+  { to: ROUTES.adminEvents, label: 'Events', superAdmin: true },
+  { to: ROUTES.adminWorkshops, label: 'Workshops', superAdmin: true },
+  { to: ROUTES.adminMess, label: 'Mess', superAdmin: true },
+  { to: ROUTES.adminHostels, label: 'Hostels', superAdmin: true },
+  { to: ROUTES.adminBackendTeams, label: 'Staff', superAdmin: true },
+  { to: ROUTES.adminAuditLogs, label: 'Audit Logs', superAdmin: true },
 ];
 
 /**
- * The public brochure's perimeter-nav vocabulary, reused verbatim so the
- * participant rail, the staff rail, and the `/events` rail all read as one site:
- * uppercase, wide tracking, no panel behind it, and a brand-light pill on the
- * current section.
+ * The public brochure's perimeter-nav vocabulary, reused verbatim so the staff
+ * rail and the `/events` rail read as one site: uppercase, wide tracking, no
+ * panel behind it, and a brand-light pill on the current section.
  *
- * Kept identical to `StaffShell` and to `NavLink` in
- * `features/landing/PublicPageChrome.tsx` — `text-brand-700` on `bg-brand-light`
- * is 6.83:1, where plain `text-brand` would only be 4.26:1.
+ * Kept identical to `NavLink` in `features/landing/PublicPageChrome.tsx` —
+ * `text-brand-700` on `bg-brand-light` is 6.83:1, where plain `text-brand`
+ * would only be 4.26:1.
  */
 const NAV_BASE = 'tap text-sm font-semibold uppercase tracking-[0.2em] transition-colors';
 const NAV_ACTIVE = 'rounded-full bg-brand-light px-4 py-2 text-brand-700';
 const NAV_IDLE = 'px-4 py-2 text-muted hover:text-ink';
 
 /**
- * Layout route for every participant screen — the mirror of `StaffShell`.
- *
- * It used to be a different kind of layout altogether: a bordered rail panel with
- * icon rows, a fixed bottom tab bar, and a `max-w-md` phone column that every
- * page then padded itself inside. That made the participant area read as a
- * separate product from the dashboard that administers it. The two now share the
- * same backdrop, the same nav vocabulary, and the same content column, so a
- * screen moved between them would not need restyling.
+ * Layout route for every staff/admin screen.
  *
  * The header is deliberately thin and transparent: every page renders its own
  * title through `FestivalScreen`, so the shell contributes navigation and the
  * backdrop, never a competing title bar. Clearing the session is enough to sign
  * out — `ProtectedRoute` owns the redirect.
  */
-export function AppShell() {
+export function StaffShell() {
   const clear = useAuthStore((s) => s.clear);
-  const participant = currentParticipant();
-  const who = participant?.full_name || participant?.email;
+  const staff = currentStaff();
+  const superAdmin = isSuperAdmin();
+  const links = NAV.filter(
+    (item) => (!item.superAdmin || superAdmin) && !(item.hideForSuperAdmin && superAdmin),
+  );
 
   return (
     <div className="relative flex min-h-full bg-canvas">
-      {/* One backdrop behind the whole shell, as `StaffShell` and
-          `PublicPageChrome` do. The rail has no panel of its own, so it needs
-          this ground to sit on. It clips itself, so no `overflow-hidden` here
-          that would break the sticky rail. */}
+      {/* One backdrop behind the whole shell, as `PublicPageChrome` does. The
+          rail has no panel of its own now, so it needs this ground to sit on —
+          and it is what makes the staff area read as the same site. It clips
+          itself, so no `overflow-hidden` here that would break the sticky rail. */}
       <AuroraBackdrop />
 
       {/* Desktop rail — panel-less and floating over the backdrop, exactly like
@@ -79,14 +88,12 @@ export function AppShell() {
           </span>
         </Link>
 
-        <nav aria-label="Participant sections" className="flex flex-col items-start gap-5">
-          {NAV.map((item) => (
+        <nav aria-label="Staff sections" className="flex flex-col items-start gap-5">
+          {links.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              // Only the dashboard needs it: it is the parent path of every other
-              // link, so without `end` it would stay lit on all of them.
-              end={item.to === ROUTES.home}
+              end={item.to === ROUTES.staffHome}
               className={({ isActive }) => cn(NAV_BASE, isActive ? NAV_ACTIVE : NAV_IDLE)}
             >
               {item.label}
@@ -96,9 +103,9 @@ export function AppShell() {
 
         {/* Where the public rail pins its social row, this pins the session. */}
         <div className="mt-auto flex flex-col items-start gap-1">
-          {who && (
-            <p className="max-w-full truncate px-4 text-xs text-muted" title={who}>
-              {who}
+          {staff && (
+            <p className="max-w-full truncate px-4 text-xs text-muted" title={staff.email}>
+              {staff.email}
             </p>
           )}
           <button
@@ -118,7 +125,7 @@ export function AppShell() {
           <div className="flex items-center justify-between px-4 py-3 lg:hidden">
             <div className="min-w-0">
               <p className="text-sm font-bold tracking-tight text-brand">Paradox Connect</p>
-              {who && <p className="truncate text-xs text-muted">{who}</p>}
+              {staff && <p className="truncate text-xs text-muted">{staff.email}</p>}
             </div>
             <button
               type="button"
@@ -130,18 +137,18 @@ export function AppShell() {
             </button>
           </div>
 
-          {/* Mobile section nav. Same pill vocabulary as the rail, but kept on one
-              scrolling line: six wide-tracked labels wrap to three rows on a
-              phone, which would push the page content off-screen. */}
+          {/* Mobile section nav. Same pill vocabulary as the rail, but kept on
+              one scrolling line: seven wide-tracked labels wrap to three rows on
+              a phone, which would push the page content off-screen. */}
           <nav
-            aria-label="Participant sections"
+            aria-label="Staff sections"
             className="no-scrollbar flex gap-1 overflow-x-auto border-t border-line/60 px-3 py-2 lg:hidden"
           >
-            {NAV.map((item) => (
+            {links.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === ROUTES.home}
+                end={item.to === ROUTES.staffHome}
                 className={({ isActive }) =>
                   cn(
                     'tap shrink-0 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.16em] transition-colors',
