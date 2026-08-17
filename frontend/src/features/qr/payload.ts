@@ -1,23 +1,20 @@
-/**
- * QR payload format. The QR encodes only { participant_id, current_code } — never
- * the secret, and never the checkpoint context (the organizer app supplies that
- * at scan time). Kept compact and versioned for forward compatibility.
- */
-export interface QrPayload {
-  pid: string; // participant id
-  code: string; // current 6-digit TOTP code
-}
+import type { ScanQRRequest } from '@/api/types';
 
-export function encodeQrPayload(payload: QrPayload): string {
-  return JSON.stringify({ v: 1, ...payload });
+/** Encode the full ScanQRRequest as the QR's raw text payload. */
+export function encodeQrPayload(req: ScanQRRequest): string {
+  return JSON.stringify(req);
 }
 
 /** Parse a scanned string. Returns null for anything that isn't our payload. */
-export function decodeQrPayload(raw: string): QrPayload | null {
+export function decodeQrPayload(raw: string): ScanQRRequest | null {
   try {
     const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof obj.pid === 'string' && typeof obj.code === 'string') {
-      return { pid: obj.pid, code: obj.code };
+    if (
+      typeof obj.participant_id === 'string' &&
+      typeof obj.data === 'string' &&
+      typeof obj.timestamp === 'string'
+    ) {
+      return { participant_id: obj.participant_id, data: obj.data, timestamp: obj.timestamp };
     }
     return null;
   } catch {

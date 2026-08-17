@@ -1,14 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { encodeQrPayload, decodeQrPayload } from './payload';
 
-describe('QR payload', () => {
-  it('encodes and decodes a payload round-trip', () => {
-    const encoded = encodeQrPayload({ pid: 'p_1', code: '123456' });
-    expect(decodeQrPayload(encoded)).toEqual({ pid: 'p_1', code: '123456' });
+describe('qr payload', () => {
+  it('round-trips a valid ScanQRRequest', () => {
+    const req = {
+      participant_id: 'DS23F1000001',
+      data: 'Y2lwaGVy',
+      timestamp: '2026-08-16T10:00:00Z',
+    };
+    expect(decodeQrPayload(encodeQrPayload(req))).toEqual(req);
   });
 
-  it('returns null for non-JSON or unrelated QR content', () => {
-    expect(decodeQrPayload('https://example.com')).toBeNull();
-    expect(decodeQrPayload('{"foo":"bar"}')).toBeNull();
+  it('returns null for malformed JSON', () => {
+    expect(decodeQrPayload('not json')).toBeNull();
+  });
+
+  it('returns null when required fields are missing', () => {
+    expect(decodeQrPayload(JSON.stringify({ participant_id: 'x' }))).toBeNull();
   });
 });

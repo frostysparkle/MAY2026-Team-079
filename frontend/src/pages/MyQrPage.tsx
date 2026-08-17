@@ -1,107 +1,85 @@
-import { useEffect, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { CHECKPOINT_TYPES, type CheckpointType } from '@/config/constants';
-import { useAuthStore } from '@/stores/authStore';
-import { useDeviceSecret } from '@/features/qr/useDeviceSecret';
+import { currentParticipant } from '@/stores/authStore';
+import { useLiveQr } from '@/features/qr/useLiveQr';
 import { encodeQrPayload } from '@/features/qr/payload';
-import { generateCode, secondsRemaining } from '@/lib/totp';
-import { Spinner, ErrorState } from '@/components/ui';
-import { cn } from '@/lib/cn';
-
-const CHECKPOINT_LABELS: Record<CheckpointType, string> = {
-  event: 'Event',
-  mess: 'Mess',
-  hostel: 'Hostel',
-  workshop: 'Workshop',
-};
+import { Avatar, ErrorState, SectionHeading, Spinner, StatusBadge } from '@/components/ui';
+import { FestivalScreen } from '@/components/layout/FestivalScreen';
 
 /**
- * My QR ID. The digital identity is generated entirely on-device from the cached
- * per-checkpoint secret — no server call on refresh — and works offline once the
- * secret has been provisioned. A checkpoint selector picks which context's code
- * to show, since secrets are scoped per checkpoint.
+ * My QR ID. One RSA-OAEP-encrypted QR works at every checkpoint — no
+ * per-checkpoint selector needed anymore. Generated entirely on-device from
+ * the public key cached at login; no network call on refresh, so this still
+ * works offline exactly like the old TOTP scheme did.
+ *
+ * Framed by `FestivalScreen` like every other screen, with the gradient tile kept
+ * as the panel's contents: the brand-coloured card is what makes the pass
+ * recognisable at a checkpoint from arm's length, so it stays.
+ *
+ * Deliberately free of router imports — nothing here links anywhere, and keeping
+ * it that way means the page can be rendered and tested on its own.
  */
 export default function MyQrPage() {
-  const participant = useAuthStore((s) => s.participant);
-  const [checkpoint, setCheckpoint] = useState<CheckpointType>('event');
-  const { secret, status, error, retry } = useDeviceSecret(checkpoint);
-
-  // Tick every second so the code and countdown stay current. Generation is
-  // local and cheap; this never touches the network.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const code = secret ? generateCode(secret, now) : null;
-  const remaining = secondsRemaining(now);
+  const participant = currentParticipant();
+  const { payload, status, error, secondsRemaining, retry } = useLiveQr();
 
   return (
-    <div className="flex flex-col gap-5 p-4">
-      <div>
-        <h1 className="text-lg font-bold text-gray-900">My Digital ID</h1>
-        <p className="text-sm text-muted">Show this QR at the checkpoint to be scanned.</p>
-      </div>
+    <FestivalScreen
+      title="My QR"
+      eyebrow={participant?.house ?? 'Participant'}
+      subtitle="Show this at any checkpoint to be scanned. It works offline."
+      width="md"
+    >
+      <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionHeading title="Digital ID" />
+          {status === 'ready' && (
+            <StatusBadge tone="success">Refreshes in {secondsRemaining}s</StatusBadge>
+          )}
+        </div>
 
-      {/* Checkpoint selector — each checkpoint uses its own secret. */}
-      <div role="tablist" aria-label="Checkpoint" className="flex gap-2 overflow-x-auto">
-        {CHECKPOINT_TYPES.map((c) => (
-          <button
-            key={c}
-            role="tab"
-            aria-selected={checkpoint === c}
-            onClick={() => setCheckpoint(c)}
-            className={cn(
-              'rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap',
-              checkpoint === c ? 'bg-brand text-white' : 'bg-gray-100 text-muted',
-            )}
-          >
-            {CHECKPOINT_LABELS[c]}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-line bg-surface p-6">
-        {status === 'loading' && (
-          <div className="flex h-64 flex-col items-center justify-center gap-3">
-            <Spinner size={32} label="Preparing your digital ID" />
-            <p className="text-sm text-muted">Preparing your ID…</p>
-          </div>
-        )}
-
-        {status === 'error' && (
-          <ErrorState title="ID not ready" description={error ?? undefined} onRetry={retry} />
-        )}
-
-        {status === 'ready' && code && participant && (
-          <>
-            <div className="rounded-xl bg-white p-4">
-              <QRCodeCanvas
-                value={encodeQrPayload({ pid: participant.id, code })}
-                size={220}
-                level="M"
-                aria-label="Your digital ID QR code"
-              />
+        <div className="flex flex-col items-center gap-4 rounded-2xl bg-gradient-to-br from-brand to-accent p-6 shadow-lift">
+          {status === 'loading' && (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 text-white">
+              <Spinner size={32} label="Preparing your digital ID" />
+              <p className="text-sm opacity-90">Preparing your ID…</p>
             </div>
-            {/* Basic numeric countdown; an animated ring is a later refinement. */}
-            <div className="text-center">
-              <p className="font-mono text-2xl tracking-widest text-gray-900">{code}</p>
-              <p className="text-xs text-muted">Refreshes in {remaining}s</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-gray-900">
-                {participant.fullName || participant.email}
-              </p>
-              <p className="text-xs text-muted">ID: {participant.id}</p>
-            </div>
-          </>
-        )}
-      </div>
+          )}
 
-      <p className="text-center text-xs text-muted">
-        Works offline. Your code changes every 30 seconds for security.
-      </p>
-    </div>
+          {status === 'error' && (
+            <div className="w-full rounded-2xl bg-surface p-2">
+              <ErrorState title="ID not ready" description={error ?? undefined} onRetry={retry} />
+            </div>
+          )}
+
+          {status === 'ready' && payload && participant && (
+            <>
+              <div className="rounded-2xl bg-white p-4 shadow-card">
+                <QRCodeCanvas
+                  value={encodeQrPayload(payload)}
+                  size={220}
+                  level="M"
+                  aria-label="Your digital ID QR code"
+                />
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-sm">
+                <Avatar
+                  src={participant.photo}
+                  name={participant.full_name || participant.email}
+                  size={36}
+                />
+                <div className="text-left text-white">
+                  <p className="font-semibold">{participant.full_name || participant.email}</p>
+                  <p className="text-xs opacity-80">ID: {participant.id}</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <p className="text-center text-xs text-muted">
+          Your QR refreshes automatically for security. A screenshot will stop working.
+        </p>
+      </section>
+    </FestivalScreen>
   );
 }
