@@ -1,112 +1,127 @@
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { FileEdit, Lock } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
-import { useAuthStore } from '@/stores/authStore';
-import { ROLE_LABELS } from '@/config/constants';
-import { Card, EmptyState, Button } from '@/components/ui';
+import { currentParticipant } from '@/stores/authStore';
+import { Avatar, Button, EmptyState, SectionHeading, StatusBadge } from '@/components/ui';
+import { FestivalScreen } from '@/components/layout/FestivalScreen';
 
-const GENDER_LABELS: Record<string, string> = {
-  male: 'Male',
-  female: 'Female',
-  other: 'Other',
-  prefer_not_to_say: 'Prefer not to say',
-};
-const PROGRAM_LABELS: Record<string, string> = {
-  standalone_degree: 'Standalone Degree',
-  dual_degree: 'Dual Degree',
-  working_professional: 'Working Professional',
-};
-const STAGE_LABELS: Record<string, string> = {
-  foundational: 'Foundational',
-  diploma: 'Diploma',
-  degree: 'Degree',
-  other: 'Other',
-};
-
-function Row({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-line py-2 last:border-b-0">
-      <dt className="text-sm text-muted">{label}</dt>
-      <dd className="text-right text-sm font-medium text-gray-800">{value || '—'}</dd>
-    </div>
-  );
-}
-
-/** Read-only view of the participant's single profile. */
+/**
+ * The participant's own record, read-only.
+ *
+ * Laid out as the admin detail screens are: `FestivalScreen` with the actions in
+ * its centred bar, then a panel per group of facts. The three groups were already
+ * here; what changed is that they now use the shared `SectionHeading` and the same
+ * panel surface as every other screen, instead of a local heading style and a bare
+ * `Card` per section.
+ */
 export default function ProfilePage() {
-  const participant = useAuthStore((s) => s.participant);
+  const navigate = useNavigate();
+  const participant = currentParticipant();
 
   if (!participant) {
-    return <EmptyState title="Not signed in" description="Please sign in to view your profile." />;
-  }
-
-  if (!participant.profileComplete) {
     return (
-      <EmptyState
-        title="Profile incomplete"
-        description="Complete your profile to use every module."
-        icon="📝"
-        action={
-          <Link to={ROUTES.completeProfile}>
-            <Button>Complete Your Profile</Button>
-          </Link>
-        }
-      />
+      <FestivalScreen title="Profile" eyebrow="Participant" width="md">
+        <EmptyState title="Not signed in" description="Please sign in to view your profile." />
+      </FestivalScreen>
     );
   }
 
-  const stage =
-    participant.courseStage === 'other'
-      ? participant.courseStageOther || 'Other'
-      : participant.courseStage
-        ? STAGE_LABELS[participant.courseStage]
-        : null;
+  // An incomplete profile has almost nothing to lay out, and every module gates
+  // on it, so the one thing worth showing is the way to finish it.
+  if (participant.full_name === null) {
+    return (
+      <FestivalScreen title="Profile" eyebrow="Participant" width="md">
+        <EmptyState
+          title="Profile incomplete"
+          description="Complete your profile to use every module."
+          icon={FileEdit}
+          action={
+            <Button onClick={() => navigate(ROUTES.completeProfile)}>Complete your profile</Button>
+          }
+        />
+      </FestivalScreen>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center gap-4">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-line bg-gray-50">
-          {participant.photoUrl ? (
-            <img
-              src={participant.photoUrl}
-              alt={`${participant.fullName}'s profile`}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-muted">
-              No photo
-            </div>
-          )}
-        </div>
+    <FestivalScreen
+      title="Profile"
+      eyebrow={participant.house ?? 'Participant'}
+      subtitle={participant.email}
+      width="lg"
+      actions={
+        <>
+          <Button onClick={() => navigate(ROUTES.completeProfile)} className="gap-1.5">
+            <FileEdit size={15} strokeWidth={2.5} /> Edit profile
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => navigate(ROUTES.changePassword)}
+            className="gap-1.5"
+          >
+            <Lock size={14} /> Change password
+          </Button>
+        </>
+      }
+    >
+      {/* Identity, on the same panel surface as the fact groups below it. */}
+      <div className="flex items-center gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+        <Avatar src={participant.photo} name={participant.full_name} size={72} />
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold text-gray-900">{participant.fullName}</h1>
+          <p className="truncate text-lg font-black tracking-tight text-ink">
+            {participant.full_name}
+          </p>
           <p className="truncate text-sm text-muted">{participant.email}</p>
-          <span className="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
-            {ROLE_LABELS[participant.role]}
-          </span>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {participant.house && <StatusBadge tone="info">{participant.house}</StatusBadge>}
+            <StatusBadge tone="neutral">{participant.id}</StatusBadge>
+          </div>
         </div>
       </div>
 
-      <Card>
-        <dl>
-          <Row label="Age" value={participant.age ? String(participant.age) : null} />
-          <Row
-            label="Gender"
-            value={participant.gender ? GENDER_LABELS[participant.gender] : null}
-          />
-          <Row label="Phone" value={participant.phone} />
-          <Row
-            label="Location"
-            value={[participant.city, participant.state, participant.country]
-              .filter(Boolean)
-              .join(', ')}
-          />
-          <Row
-            label="Program"
-            value={participant.program ? PROGRAM_LABELS[participant.program] : null}
-          />
-          <Row label="Course Stage" value={stage} />
-        </dl>
-      </Card>
+      <Group title="Personal">
+        <Row label="Date of Birth" value={participant.dob} />
+        <Row label="Gender" value={participant.gender} />
+        <Row label="Phone" value={participant.phone} />
+      </Group>
+
+      <Group title="Location">
+        <Row
+          label="City"
+          value={[participant.city, participant.state].filter(Boolean).join(', ')}
+        />
+        <Row label="Country" value={participant.country} />
+        <Row label="Address" value={participant.address} />
+      </Group>
+
+      <Group title="Academic">
+        <Row label="Program" value={participant.program} />
+        <Row label="Course Stage" value={participant.course_stage} />
+      </Group>
+    </FestivalScreen>
+  );
+}
+
+/**
+ * One titled panel of profile rows.
+ *
+ * `SectionHeading` alone, with no leading icon: that is how every admin panel
+ * titles itself, and the heading already carries an accent bar of its own.
+ */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+      <SectionHeading title={title} />
+      <dl>{children}</dl>
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-line py-2 last:border-b-0 last:pb-0">
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="text-right text-sm font-medium text-ink">{value || '—'}</dd>
     </div>
   );
 }

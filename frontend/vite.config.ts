@@ -16,9 +16,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       workbox: {
-        // The country/state/city dataset chunk is huge and only needed online
-        // during profile completion — keep it out of the offline precache.
-        globIgnores: ['**/CompleteProfilePage-*.js'],
+        // The 8 MB city dataset is fetched on demand, only once a participant
+        // picks a state during profile completion — keep it out of the offline
+        // precache. It splits into its own `city-*` chunk (see LocationSelect);
+        // the Complete Profile page itself is small enough to precache now.
+        globIgnores: ['**/city-*.js'],
       },
       manifest: {
         name: 'Paradox Connect',

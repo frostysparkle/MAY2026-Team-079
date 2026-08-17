@@ -4,29 +4,46 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import CompleteProfilePage from './CompleteProfilePage';
 import { useAuthStore } from '@/stores/authStore';
-import type { Participant } from '@/api/types';
+import type { ParticipantLoginResponse } from '@/api/types';
 
-const newUser: Participant = {
-  id: 'p_new',
+const newUser: ParticipantLoginResponse = {
+  id: 'DS23F1000099',
   email: 'new@ds.study.iitm.ac.in',
-  fullName: '',
-  role: 'participant',
-  age: null,
+  access_token: 'tok',
+  token_type: 'participant',
+  full_name: null,
+  dob: null,
+  house: null,
   gender: null,
   phone: null,
   country: null,
   state: null,
   city: null,
+  address: null,
   program: null,
-  courseStage: null,
-  courseStageOther: null,
-  photoUrl: null,
-  profileComplete: false,
-  createdAt: '2026-07-08T00:00:00Z',
+  course_stage: null,
+  photo: null,
+  public_key: null,
+};
+
+/** The same participant with a profile already on file, as Edit reaches it. */
+const returningUser: ParticipantLoginResponse = {
+  ...newUser,
+  full_name: 'Ananya Raghavan',
+  dob: '2003-04-11',
+  house: 'House 3',
+  gender: 'female',
+  phone: '9876543210',
+  country: 'India',
+  state: 'Kerala',
+  city: 'Kochi',
+  address: '12 Marine Drive',
+  program: 'DS',
+  course_stage: 'foundational',
 };
 
 describe('CompleteProfilePage', () => {
-  beforeEach(() => useAuthStore.getState().setSession('tok', newUser));
+  beforeEach(() => useAuthStore.getState().setParticipantSession(newUser));
 
   it('blocks submission and shows validation errors when empty', async () => {
     render(
@@ -37,8 +54,44 @@ describe('CompleteProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: /Save and continue/i }));
 
     expect(await screen.findByText('Full name is required.')).toBeInTheDocument();
-    expect(screen.getByText('A profile photo is required.')).toBeInTheDocument();
     // Profile is not marked complete because the submit was blocked.
-    expect(useAuthStore.getState().participant?.profileComplete).toBe(false);
+    expect(
+      useAuthStore.getState().session?.token_type === 'participant' &&
+        (useAuthStore.getState().session as ParticipantLoginResponse).full_name,
+    ).toBeNull();
+  });
+
+  // PATCH /profile/complete replaces the whole profile document, so an edit that
+  // opened blank would save a blank record over a complete one.
+  it('opens already filled in when a profile exists', () => {
+    useAuthStore.getState().setParticipantSession(returningUser);
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/Full Name/i)).toHaveValue('Ananya Raghavan');
+    expect(screen.getByLabelText(/Phone Number/i)).toHaveValue('9876543210');
+    expect(screen.getByLabelText(/Address/i)).toHaveValue('12 Marine Drive');
+    expect(screen.getByLabelText(/Country/i)).toHaveDisplayValue('India');
+    expect(screen.getByLabelText(/State/i)).toHaveDisplayValue('Kerala');
+    expect(screen.getByLabelText(/City/i)).toHaveDisplayValue('Kochi');
+    expect(screen.getByLabelText(/House/i)).toHaveDisplayValue('House 3');
+    expect(screen.getByLabelText(/Program/i)).toHaveDisplayValue('DS');
+    expect(screen.getByLabelText(/Course Stage/i)).toHaveDisplayValue('Foundational');
+  });
+
+  it('frames itself as an edit, not a first-time setup, when a profile exists', () => {
+    useAuthStore.getState().setParticipantSession(returningUser);
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: /Edit Your Profile/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save changes/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Cancel$/i })).toBeInTheDocument();
   });
 });
