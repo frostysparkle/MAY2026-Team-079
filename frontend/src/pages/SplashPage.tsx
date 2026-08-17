@@ -1,47 +1,56 @@
 import { useNavigate } from 'react-router-dom';
+import { GraduationCap, ShieldCheck } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
-import { Button } from '@/components/ui';
-import { PORTAL_LABELS, type Portal } from '@/features/auth/portal';
+import { AuroraBackdrop, Button } from '@/components/ui';
 
 /**
- * Splash / role landing. Three entry buttons choose which login screen to show
- * next. Per the plan, the Admin button is the shared entry for both Admin and
- * Super Admin — the actual role is resolved server-side after sign-in. These
- * buttons carry no permission of their own.
+ * Splash / entry landing. The backend has exactly two logins with different
+ * response shapes (participant vs staff) — this picker routes straight to
+ * the matching page. No portal state is carried; the real role is always
+ * resolved server-side after sign-in.
  */
 export default function SplashPage() {
   const navigate = useNavigate();
 
-  const choose = (portal: Portal) => {
-    navigate(ROUTES.login, { state: { portal } });
-  };
-
   return (
-    <main className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-8 p-6">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand text-2xl font-bold text-white">
+    <main className="relative mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-8 overflow-hidden p-6">
+      <AuroraBackdrop />
+
+      <div className="relative flex flex-col items-center gap-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent text-2xl font-bold text-white shadow-fab">
           P
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Paradox Connect</h1>
-          <p className="mt-1 text-sm text-muted">One platform for the Paradox fest</p>
+          <h1 className="text-gradient text-3xl font-black tracking-tight">Paradox Connect</h1>
+          <p className="mt-1.5 text-sm text-muted">One platform for the Paradox fest</p>
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3">
-        <Button fullWidth onClick={() => choose('student')}>
-          {PORTAL_LABELS.student}
+      <div className="relative flex w-full flex-col gap-3">
+        <Button
+          size="lg"
+          fullWidth
+          className="justify-start gap-3 pl-4"
+          onClick={() => navigate(ROUTES.login)}
+        >
+          <GraduationCap size={20} strokeWidth={2} />
+          I&apos;m a Participant
         </Button>
-        <Button fullWidth variant="secondary" onClick={() => choose('organizer')}>
-          {PORTAL_LABELS.organizer}
-        </Button>
-        <Button fullWidth variant="secondary" onClick={() => choose('admin')}>
-          {PORTAL_LABELS.admin}
+        <Button
+          size="lg"
+          fullWidth
+          variant="secondary"
+          className="justify-start gap-3 pl-4"
+          onClick={() => navigate(ROUTES.adminLogin)}
+        >
+          <ShieldCheck size={20} strokeWidth={2} />
+          I&apos;m Staff / Volunteer
         </Button>
       </div>
 
-      <p className="max-w-xs text-center text-xs text-muted">
-        Access is verified after you sign in with your IITM Google account.
+      <p className="relative max-w-xs text-center text-xs text-muted">
+        Participants sign in with their IITM email. Staff and volunteers use the credentials issued
+        by a Super Admin.
       </p>
     </main>
   );
