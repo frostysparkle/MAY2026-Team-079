@@ -62,6 +62,7 @@ def setup_data():
         "workshop_id": ws_id,
         "slot_id": f"SLOT_{random.randint(1000, 9999)}",
         "name": "Test Workshop",
+        "description": "A test workshop.",
         "venue": "Test Venue",
         "capacity": 100,
         "instructions": "Bring laptop"

@@ -24,6 +24,7 @@ def user_data():
             "workshop_id": "WKS02",
             "slot_id": "SLOT_TEST",
             "name": "Test Workshop",
+            "description": "A test workshop.",
             "venue": "Hall A",
             "capacity": 100,
             "registration_count": 0,

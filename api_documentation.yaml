@@ -2157,6 +2157,9 @@ components:
         name:
           type: string
           title: Name
+        description:
+          type: string
+          title: Description
         venue:
           type: string
           title: Venue
@@ -2171,6 +2174,7 @@ components:
       - workshop_id
       - slot_id
       - name
+      - description
       - venue
       - capacity
       - instructions
@@ -2182,6 +2186,11 @@ components:
           - type: string
           - type: 'null'
           title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
         venue:
           anyOf:
           - type: string

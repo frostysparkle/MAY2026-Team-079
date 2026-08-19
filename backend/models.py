@@ -119,12 +119,14 @@ class WorkshopCreateRequest(BaseModel):
     workshop_id: str
     slot_id: str
     name: str
+    description: str
     venue: str
     capacity: int
     instructions: str
 
 class WorkshopUpdateRequest(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     venue: Optional[str] = None
     capacity: Optional[int] = None
     instructions: Optional[str] = None

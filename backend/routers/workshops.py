@@ -23,6 +23,7 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "workshop_id": request.workshop_id,
         "slot_id": request.slot_id,
         "name": request.name,
+        "description": request.description,
         "venue": request.venue,
         "capacity": request.capacity,
         "registration_count": 0,
@@ -59,6 +60,7 @@ PUBLIC_WORKSHOP_FIELDS = {
     "workshop_id": 1,
     "slot_id": 1,
     "name": 1,
+    "description": 1,
     "venue": 1,
     "capacity": 1,
     "registration_count": 1,
@@ -103,7 +105,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
     for entry in current_user.get("workshops", []):
         workshop = workshops_collection.find_one(
             {"_id": entry.get("workshop_id")},
-            {"_id": 0, "workshop_id": 1, "name": 1, "venue": 1, "capacity": 1, "instructions": 1},
+            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "venue": 1, "capacity": 1, "instructions": 1},
         )
         if not workshop:
             # A workshop deleted after booking leaves an entry with nothing to
@@ -112,6 +114,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
                 "workshop_id": None,
                 "slot_id": entry.get("slot_id"),
                 "name": None,
+                "description": None,
                 "venue": None,
                 "booking_type": entry.get("booking_type"),
                 "attended": entry.get("attended", False),
@@ -121,6 +124,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
             "workshop_id": workshop.get("workshop_id"),
             "slot_id": entry.get("slot_id"),
             "name": workshop.get("name"),
+            "description": workshop.get("description"),
             "venue": workshop.get("venue"),
             "booking_type": entry.get("booking_type"),
             "attended": entry.get("attended", False),

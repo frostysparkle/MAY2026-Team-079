@@ -192,6 +192,7 @@ def ctx():
             "workshop_id": ws_id,
             "slot_id": slot_id,
             "name": "Domain Test Workshop",
+            "description": "A domain test workshop.",
             "venue": "CRC 101",
             "capacity": 50,
             "instructions": "Bring laptop",
