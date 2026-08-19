@@ -9,6 +9,7 @@ python-jose[cryptography]
 cryptography
 email-validator
 bcrypt
+openai
 
 # Testing dependencies
 mongomock

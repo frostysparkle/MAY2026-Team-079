@@ -1534,6 +1534,44 @@ paths:
           content:
             application/json:
               schema: {}
+  /embeddings:
+    post:
+      tags:
+      - Embeddings
+      summary: Create Embedding
+      description: >-
+        Text to embedding vector(s), proxied to whatever OpenAI-compatible
+        provider this deployment is configured for. Configuration follows
+        the openai Python client's own parameters — api key, base url,
+        organization, project, timeout, max retries — read from the
+        EMBEDDINGS_* (falling back to OPENAI_*) environment variables, so
+        the same endpoint can point at OpenAI's API or a locally hosted
+        OpenAI-compatible server (Ollama, LM Studio, vLLM,
+        text-embeddings-inference, ...) purely by changing configuration.
+        Request and response shapes match the openai library's
+        client.embeddings.create(...) exactly, so any OpenAI SDK client can
+        call this endpoint as a drop-in.
+      operationId: create_embedding_embeddings_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbeddingRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     BackendTeamCreateRequest:
@@ -1596,6 +1634,39 @@ components:
       - current_password
       - new_password
       title: ChangePasswordRequest
+    EmbeddingRequest:
+      properties:
+        input:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+          title: Input
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        encoding_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encoding Format
+        dimensions:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Dimensions
+        user:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User
+      type: object
+      required:
+      - input
+      title: EmbeddingRequest
     EmergencyContact:
       properties:
         name:

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 # Auth models
 class RegisterRequest(BaseModel):
@@ -135,3 +135,12 @@ class WorkshopAssignVolunteerRequest(BaseModel):
     user_id: str
     role: str = "workshop_volunteer"
     attendance: bool = True
+
+# Embeddings models — mirror the OpenAI embeddings API request shape, so any
+# openai-library client can call POST /embeddings as a drop-in.
+class EmbeddingRequest(BaseModel):
+    input: Union[str, List[str]]
+    model: Optional[str] = None
+    encoding_format: Optional[str] = None  # "float" | "base64"
+    dimensions: Optional[int] = None
+    user: Optional[str] = None
