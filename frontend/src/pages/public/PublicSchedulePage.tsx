@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { PublicPageChrome } from '@/features/landing/PublicPageChrome';
-import { PUBLIC_SCHEDULE } from '@/features/events/publicSchedule';
+import { buildScheduleDays, PUBLIC_SCHEDULE } from '@/features/events/publicSchedule';
+import { usePublicEvents } from '@/features/events/usePublicEvents';
 import { announce } from '@/components/a11y/Announcer';
 import { cn } from '@/lib/cn';
 
@@ -10,18 +11,28 @@ import { cn } from '@/lib/cn';
  * sessions as time · title · venue cards, each with a shortcut to the venue on
  * Google Maps.
  *
- * Driven entirely by the static `PUBLIC_SCHEDULE` dataset, so it works with no
- * backend and no authentication.
+ * The timetable is built from the published programme (`GET /events/public`), so
+ * what a visitor sees is whatever the Super Admin has scheduled — editing a round's
+ * start time in the dashboard changes this page.
+ *
+ * `PUBLIC_SCHEDULE` remains as the fallback for the case where the programme has
+ * no dated rounds at all (an empty database, or a request that failed). Without it
+ * the page would go blank; with it, a visitor still gets the published timetable.
  */
 export default function PublicSchedulePage() {
   const [dayIndex, setDayIndex] = useState(0);
-  const day = PUBLIC_SCHEDULE[dayIndex];
+  const { events, loading } = usePublicEvents();
+
+  const fromApi = useMemo(() => buildScheduleDays(events), [events]);
+  const schedule = fromApi.length > 0 ? fromApi : PUBLIC_SCHEDULE;
+
+  // A day index from a longer schedule must not survive a switch to a shorter one.
+  const safeIndex = Math.min(dayIndex, Math.max(schedule.length - 1, 0));
+  const day = schedule[safeIndex];
 
   function selectDay(index: number) {
     setDayIndex(index);
-    announce(
-      `Showing ${PUBLIC_SCHEDULE[index].date}, ${PUBLIC_SCHEDULE[index].items.length} sessions`,
-    );
+    announce(`Showing ${schedule[index].date}, ${schedule[index].items.length} sessions`);
   }
 
   return (
@@ -29,20 +40,23 @@ export default function PublicSchedulePage() {
       <div className="mt-8 flex flex-col gap-6">
         {/* Day selector */}
         <nav aria-label="Festival days" className="flex flex-wrap justify-center gap-2">
-          {PUBLIC_SCHEDULE.map((d, i) => (
+          {schedule.map((d, i) => (
             <button
               key={d.iso}
               type="button"
-              aria-pressed={i === dayIndex}
+              aria-pressed={i === safeIndex}
               onClick={() => selectDay(i)}
               className={cn(
                 'tap rounded-full px-4 py-2 text-sm font-semibold transition-colors active:scale-95',
-                i === dayIndex
+                i === safeIndex
                   ? 'bg-brand text-white shadow-fab'
                   : 'bg-surface text-muted shadow-card ring-1 ring-line hover:text-ink',
               )}
             >
-              Day {i + 1}
+              {/* The date, not "Day N". Rounds run from May trials through the
+                  fest week, so a sequential index would label 18 May as "Day 1"
+                  and imply nineteen consecutive fest days. */}
+              {d.date}
             </button>
           ))}
         </nav>
@@ -87,7 +101,9 @@ export default function PublicSchedulePage() {
         )}
 
         <p className="text-center text-xs italic text-muted">
-          Schedule is tentative and subject to change.
+          {loading && fromApi.length === 0
+            ? 'Loading the latest schedule…'
+            : 'Schedule is tentative and subject to change.'}
         </p>
       </div>
     </PublicPageChrome>

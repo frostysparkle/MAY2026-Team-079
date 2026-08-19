@@ -116,10 +116,29 @@ export function buildMessRows(
 export interface MessSummary {
   halls: number;
   seats: number;
-  /** Seats per dietary designation, and that as a share of every seat. */
-  byType: { type: MessType; label: string; halls: number; seats: number; share: number | null }[];
+  /**
+   * Seats and real occupancy per dietary designation.
+   *
+   * `percent` is allocated-within-this-designation, never the designation's share
+   * of total capacity. The summary used to report the latter beside a progress
+   * bar, so an entirely empty 450-seat veg hall read as "38%".
+   */
+  byType: {
+    type: MessType;
+    label: string;
+    halls: number;
+    seats: number;
+    allocated: number | null;
+    percent: number | null;
+  }[];
   /** Halls with at least one team member assigned. */
   staffed: number;
+  /**
+   * Halls with at least one diner allocated, or `null` when statistics are
+   * unreadable. How many halls are in use is a different question from how many
+   * exist, and the table underneath already answers the second one.
+   */
+  occupied: number | null;
   /** Total allocated across every hall, or `null` when statistics are unreadable. */
   allocated: number | null;
   /** Seats still free, or `null` when the allocated total is unreadable. */
@@ -140,12 +159,14 @@ export function summariseMess(rows: MessRow[]): MessSummary {
     .map((type) => {
       const halls = rows.filter((row) => row.type === type);
       const typeSeats = halls.reduce((sum, row) => sum + row.capacity, 0);
+      const typeAllocated = totalAllocated(halls);
       return {
         type,
         label: messTypeLabel(type),
         halls: halls.length,
         seats: typeSeats,
-        share: share(typeSeats, seats),
+        allocated: typeAllocated,
+        percent: share(typeAllocated, typeSeats),
       };
     })
     .filter((entry) => entry.halls > 0);
@@ -155,6 +176,8 @@ export function summariseMess(rows: MessRow[]): MessSummary {
     seats,
     byType,
     staffed: rows.filter((row) => row.staffed).length,
+    // Unreadable statistics must not read as "no hall is in use".
+    occupied: allocated === null ? null : rows.filter((row) => (row.allocated ?? 0) > 0).length,
     allocated,
     // Never negative: an over-allocated campus has no seats left, not "-4" of them.
     available: allocated === null ? null : Math.max(0, seats - allocated),

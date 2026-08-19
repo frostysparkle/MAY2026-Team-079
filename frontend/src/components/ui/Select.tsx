@@ -12,6 +12,8 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
   options: SelectOption[];
   error?: string;
+  /** Guidance shown under the field. Replaced by `error` when one is present. */
+  hint?: string;
   required?: boolean;
   placeholder?: string;
 }
@@ -21,12 +23,13 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
  * label, required marking, aria-invalid/describedby). Forwards ref for RHF.
  */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, options, error, required, placeholder, id, className, ...props },
+  { label, options, error, hint, required, placeholder, id, className, ...props },
   ref,
 ) {
   const autoId = useId();
   const selectId = id ?? autoId;
   const errorId = `${selectId}-error`;
+  const description = error ?? hint;
 
   return (
     <div className="flex flex-col gap-1">
@@ -45,7 +48,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           ref={ref}
           aria-required={required || undefined}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
+          aria-describedby={description ? errorId : undefined}
           className={cn(
             'w-full appearance-none rounded-lg border bg-surface px-3 py-2.5 pr-9 text-sm outline-none transition-colors',
             'focus:border-brand focus:ring-2 focus:ring-brand/30',
@@ -67,9 +70,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
         />
       </div>
-      {error && (
-        <p id={errorId} role="alert" className="text-xs text-danger">
-          {error}
+      {description && (
+        <p
+          id={errorId}
+          role={error ? 'alert' : undefined}
+          className={cn('text-xs', error ? 'text-danger' : 'text-muted')}
+        >
+          {description}
         </p>
       )}
     </div>

@@ -1,22 +1,35 @@
-import { Armchair, Building2, Leaf, Drumstick, Sprout, UtensilsCrossed } from 'lucide-react';
+import { Building2, Drumstick, Leaf, Sprout, UtensilsCrossed } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ProgressBar, Skeleton, StatCard, type StatTone } from '@/components/ui';
-import { formatShare, OCCUPANCY_UNREADABLE } from '@/features/occupancy';
+import {
+  formatPercent,
+  occupancyStatus,
+  occupancyTone,
+  OCCUPANCY_UNREADABLE,
+} from '@/features/occupancy';
 import type { MessSummary, MessType } from './messOccupancy';
 
 /**
- * The headline figures above the mess list: how many halls, how many seats, how
- * many of those seats are taken, and how they split across the dietary
- * designations.
+ * The headline figures above the mess list.
  *
- * One card per designation actually present, rather than a fixed pair of veg and
- * non-veg cards. The campus has jain halls too, and a summary that showed only
- * two of the three would silently omit a slice of the seats it is claiming to
- * account for — the shares would not add up to 100%.
+ * Every number answers "how much of the catering is actually in use". Two of
+ * these used to answer something else, and were rewritten for the same reasons
+ * the hostel cards were:
  *
- * Every figure, including the supporting line under each one, is derived from the
- * inventory. Occupancy is the only one that can be unavailable — it needs the
- * Super-Admin-only statistics endpoint — and says so rather than reading as zero.
+ * - "Total Halls: 3" restated the row count in the table directly below it. It
+ *   now leads with how many halls anyone is actually allocated to.
+ * - The veg / non-veg / jain cards showed each designation's *share of total
+ *   capacity* (38% / 38% / 25%) beside a progress bar, which reads as occupancy —
+ *   an entirely empty 450-seat hall appeared to be 38% full. They now show real
+ *   occupancy within the designation, and the bar tracks that.
+ *
+ * One card per designation actually present, rather than a fixed veg/non-veg
+ * pair: the campus has jain halls too, and omitting one would drop a slice of the
+ * seats this summary claims to account for.
+ *
+ * Occupancy needs the Super-Admin-only statistics endpoint, so anything derived
+ * from it degrades to an explicit "needs access" rather than to a zero that would
+ * read as "nobody is allocated".
  */
 
 const TYPE_STYLE: Record<MessType, { icon: LucideIcon; tone: StatTone }> = {
@@ -24,13 +37,6 @@ const TYPE_STYLE: Record<MessType, { icon: LucideIcon; tone: StatTone }> = {
   non_veg: { icon: Drumstick, tone: 'warning' },
   jain: { icon: Sprout, tone: 'brand' },
   other: { icon: UtensilsCrossed, tone: 'info' },
-};
-
-const BAR_TONE: Record<MessType, 'brand' | 'success' | 'warning' | 'danger'> = {
-  veg: 'success',
-  non_veg: 'warning',
-  jain: 'brand',
-  other: 'brand',
 };
 
 export function MessSummaryCards({ summary }: { summary: MessSummary | null }) {
@@ -49,40 +55,43 @@ export function MessSummaryCards({ summary }: { summary: MessSummary | null }) {
       <StatCard
         icon={Building2}
         tone="brand"
-        label="Total Halls"
-        value={summary.halls}
-        // Staffing, not a restatement of the count. It used to read "Active mess
-        // halls", which claimed a distinction the data does not carry: a hall has
-        // no active flag. What it does carry is whether anyone can scan for it.
+        label="Mess Halls In Use"
+        value={
+          summary.occupied === null ? (
+            '—'
+          ) : (
+            <>
+              {summary.occupied}
+              <span className="text-base font-bold text-muted"> / {summary.halls}</span>
+            </>
+          )
+        }
         footnote={
-          summary.halls === 0
-            ? 'None added yet'
-            : summary.staffed === summary.halls
-              ? 'Every hall has a team'
-              : `${summary.staffed} of ${summary.halls} with a team`
+          summary.occupied === null
+            ? OCCUPANCY_UNREADABLE
+            : `${summary.halls - summary.occupied} empty · ${summary.staffed} of ${summary.halls} staffed`
         }
       />
+
       <StatCard
-        icon={Armchair}
+        icon={UtensilsCrossed}
         tone="info"
-        label="Total Seats"
-        value={summary.seats.toLocaleString()}
-        // The summary already computes occupancy from the per-hall statistics;
-        // this is where it becomes visible rather than being thrown away.
+        label="Seat Occupancy"
+        value={formatPercent(summary.percent)}
         footnote={
-          summary.allocated === null || summary.available === null ? (
+          summary.allocated === null ? (
             OCCUPANCY_UNREADABLE
           ) : (
             <div className="flex flex-col gap-1.5">
               <span className="tabular-nums">
-                {summary.allocated.toLocaleString()} allocated ({formatShare(summary.percent)}) ·{' '}
-                {summary.available.toLocaleString()} free
+                {summary.allocated.toLocaleString()} of {summary.seats.toLocaleString()} seats ·{' '}
+                {(summary.available ?? 0).toLocaleString()} free
               </span>
               <ProgressBar
                 value={summary.allocated}
                 max={summary.seats}
-                tone="brand"
-                label="Overall seats allocated"
+                tone={occupancyTone(occupancyStatus(summary.percent ?? 0))}
+                label="Overall seat occupancy"
               />
             </div>
           )
@@ -97,24 +106,24 @@ export function MessSummaryCards({ summary }: { summary: MessSummary | null }) {
             icon={style.icon}
             tone={style.tone}
             label={`${entry.label} Seats`}
-            value={
-              <>
-                {entry.seats.toLocaleString()}{' '}
-                <span className="text-base font-bold text-muted">({formatShare(entry.share)})</span>
-              </>
-            }
+            value={entry.seats.toLocaleString()}
             footnote={
-              <div className="flex flex-col gap-1.5">
-                <span>
-                  Offered by {entry.halls} hall{entry.halls === 1 ? '' : 's'}
-                </span>
-                <ProgressBar
-                  value={entry.seats}
-                  max={summary.seats}
-                  tone={BAR_TONE[entry.type]}
-                  label={`${entry.label} share of every seat`}
-                />
-              </div>
+              entry.allocated === null ? (
+                OCCUPANCY_UNREADABLE
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <span className="tabular-nums">
+                    {entry.allocated.toLocaleString()} allocated ({formatPercent(entry.percent)}) ·{' '}
+                    {entry.halls} hall{entry.halls === 1 ? '' : 's'}
+                  </span>
+                  <ProgressBar
+                    value={entry.allocated}
+                    max={entry.seats}
+                    tone={occupancyTone(occupancyStatus(entry.percent ?? 0))}
+                    label={`${entry.label} seat occupancy`}
+                  />
+                </div>
+              )
             }
           />
         );

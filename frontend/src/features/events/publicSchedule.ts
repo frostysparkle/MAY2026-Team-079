@@ -1,3 +1,5 @@
+import type { ScheduleRound } from '@/api/types';
+
 /**
  * Public (pre-login) fest schedule, mirrored from the reference site
  * (iitmparadox.org/schedule). Grouped by day; each entry has a time, title,
@@ -360,4 +362,60 @@ export function festivalDateRange(): string | null {
   }
   const firstMonth = first.toLocaleDateString('en-IN', { month: 'long' });
   return `${first.getDate()} ${firstMonth} – ${last.getDate()} ${monthYear}`;
+}
+
+/**
+ * Build the day-grouped schedule from the published programme.
+ *
+ * Every event carries its own `schedule` rounds, so "the schedule" is the
+ * flattening of all of them — the same idea as `features/schedule/festSchedule`,
+ * but shaped as `ScheduleDay[]` so the public page can render either this or the
+ * static `PUBLIC_SCHEDULE` without knowing which it got.
+ *
+ * Rounds with no parseable `start_time` are skipped rather than bucketed under a
+ * fake date: a round whose time nobody recorded should be absent from a timetable,
+ * not shown at midnight on the wrong day.
+ */
+export function buildScheduleDays(
+  events: { name: string; schedule?: ScheduleRound[] | null }[],
+): ScheduleDay[] {
+  const byDay = new Map<string, (ScheduleItem & { at: Date })[]>();
+
+  for (const event of events) {
+    for (const round of event.schedule ?? []) {
+      const raw = (round.start_time ?? '').trim();
+      if (!raw) continue;
+      const at = new Date(raw);
+      if (Number.isNaN(at.getTime())) continue;
+
+      const iso = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(
+        at.getDate(),
+      ).padStart(2, '0')}`;
+
+      const list = byDay.get(iso) ?? [];
+      list.push({
+        at,
+        time: at
+          .toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+          .toUpperCase(),
+        // Matches how the static dataset reads: the event, then which round of it.
+        title: round.name ? `${event.name} - ${round.name}` : event.name,
+        venue: round.venue?.trim() || 'Venue to be announced',
+      });
+      byDay.set(iso, list);
+    }
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([iso, items]) => ({
+      iso,
+      date: new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'long',
+      }),
+      items: items
+        .sort((x, y) => x.at.getTime() - y.at.getTime())
+        .map(({ at: _at, ...item }) => item),
+    }));
 }

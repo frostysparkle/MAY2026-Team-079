@@ -13,9 +13,7 @@ export function useLiveSeats(workshopId: string, fallback: WorkshopSeatsEvent | 
 
   useEffect(() => {
     setSeats(fallback);
-    // Mock mode has no real backend listening for this SSE connection — the
-    // mock API's list/detail responses are already the full picture there.
-    if (env.useMockApi || typeof EventSource === 'undefined') return;
+    if (typeof EventSource === 'undefined') return;
     const source = new EventSource(`${env.apiBaseUrl}/workshops/${workshopId}/seats/stream`);
     source.onmessage = (e) => {
       try {

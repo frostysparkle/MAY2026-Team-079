@@ -32,8 +32,14 @@ export const ROUTES = {
   schedule: '/app/schedule',
   workshops: '/app/workshops',
   workshopDetail: '/app/workshops/:workshopId',
-  mess: '/app/mess',
-  hostel: '/app/hostel',
+  /**
+   * Accommodation & Mess. One route for both halves of a student's stay,
+   * because the choice is made once and across both — and the confirmation
+   * (block, room, hall, entry QR) reads as one thing, not two screens.
+   */
+  accommodation: '/app/accommodation',
+  /** The mock checkout that settles that choice. */
+  accommodationPayment: '/app/accommodation/payment',
 
   // Staff area
   staffHome: '/staff',

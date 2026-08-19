@@ -1,70 +1,73 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CalendarDays, Clock, LayoutGrid, List, MapPin, Ticket, UserCheck } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, Clock, LocateFixed, MapPin, Radio, UserCheck } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event } from '@/api/types';
-import { path, ROUTES } from '@/config/routes';
+import { currentParticipant } from '@/stores/authStore';
 import {
-  Card,
-  DataTable,
+  ANY,
   EmptyState,
   ErrorState,
-  IconTile,
   ListToolbar,
   Skeleton,
   StatCard,
-  StatusBadge,
-  TablePager,
-  ViewToggle,
-  sortRows,
   useListFilters,
-  usePagedList,
-  useTableSort,
-  useViewMode,
-  type DataTableColumn,
   type FilterSpec,
-  type ViewOption,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { useTick } from '@/features/overview/board/useTick';
+import { DayRail } from '@/features/schedule/DayRail';
+import { NowPanel } from '@/features/schedule/NowPanel';
+import { ScheduleTimeline } from '@/features/schedule/ScheduleTimeline';
 import {
   buildScheduleRows,
+  categoryOf,
+  dayKeyOf,
+  groupSchedule,
+  relativeLabel,
+  roundStatus,
   scheduleCategories,
   scheduleDays,
-  timeLabelOf,
-  type ScheduleRow,
 } from '@/features/schedule/festSchedule';
-import { useNow } from '@/features/schedule/useNow';
 
 /**
- * The fest schedule, laid out the way the admin lists are: headline figures over a
- * single panel that holds the controls, the rows, and the pager.
+ * The participant's fest programme.
  *
- * It was a day-by-day stack of cards before, which reads fine on a phone and stops
- * working the moment there are a hundred rounds — there was no way to ask "what is
- * on tomorrow", "where is this happening", or "what do *I* have". Those are now
- * filters over one sortable table, the same `ListToolbar` + `DataTable` +
- * `TablePager` combination `AdminHostelsPage` uses, with a card view kept for
- * narrow screens.
+ * Built from the admin control board's parts, in the board's reading order — a
+ * pulse row of headline figures, then a command row of what is running beside
+ * what is next, then the detail — so the two screens read as one product. What
+ * changes is the subject: the board asks "is the fest running cleanly", this
+ * asks "where do I need to be, and when".
+ *
+ * The detail is a timeline rather than the sortable table this page used to
+ * carry. The table could sort every round in the fest by venue, which nobody
+ * needs; it could not answer "what is on after lunch", which is the only
+ * question a participant standing in a corridor actually has. Time now runs
+ * downwards, each start time is printed once however many rounds share it, and
+ * the day rail chunks the programme the way a participant plans it. Paging went
+ * with the table: a day is a better unit than twelve rows.
+ *
+ * Everything is still one `GET /events` (plus the viewer's registrations) and
+ * every round is still flattened out of `event.schedule` — see `festSchedule`.
  */
-
-/** 12 rows keeps the table roughly one screen tall on a laptop. */
-const PAGE_SIZE = 12;
-
-const VIEW_OPTIONS: readonly ViewOption<'table' | 'cards'>[] = [
-  { value: 'cards', label: 'Card view', icon: LayoutGrid },
-  { value: 'table', label: 'Table view', icon: List },
-];
 
 /** Behind the "Filters" disclosure: whose rounds, rather than which rounds. */
 const MINE_SPEC: FilterSpec = {
   key: 'mine',
   label: 'Registration',
-  anyLabel: 'Everything',
+  anyLabel: 'Everyone’s rounds',
   options: [{ value: 'mine', label: 'Only my events' }],
 };
 
+/** The day rail owns this one; it is registered so the URL and Clear agree. */
+const DAY_KEY = 'day';
+
 export default function FestSchedulePage() {
-  const now = useNow();
+  const participant = currentParticipant();
+  // A ticking clock, unlike the frozen `useNow` the dashboard uses: this page
+  // draws a "now" line, live badges, and countdowns, all of which would quietly
+  // go stale on a screen left open through an afternoon.
+  const now = useTick(30_000);
+
   const [events, setEvents] = useState<Event[] | null>(null);
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -91,54 +94,77 @@ export default function FestSchedulePage() {
 
   const days = useMemo(() => scheduleDays(rows), [rows]);
   const categories = useMemo(() => scheduleCategories(rows), [rows]);
+  const today = dayKeyOf(new Date(now));
 
-  // Options are derived from the rows, so the filters can only offer days and
-  // categories that something is actually filed under.
-  const specs = useMemo<FilterSpec[]>(
-    () => [
-      {
-        key: 'day',
-        label: 'Filter by day',
-        anyLabel: 'All days',
-        options: days.map((day) => ({ value: day.key, label: `${day.label} (${day.count})` })),
-      },
-      {
-        key: 'category',
-        label: 'Filter by category',
-        anyLabel: 'All categories',
-        options: categories.map((value) => ({ value, label: value })),
-      },
-    ],
-    [days, categories],
+  // Options are derived from the rows, so a filter can only offer a day or a
+  // category that something is actually filed under.
+  const daySpec = useMemo<FilterSpec>(
+    () => ({
+      key: DAY_KEY,
+      label: 'Filter by day',
+      anyLabel: 'All days',
+      options: days.map((day) => ({ value: day.key, label: day.label })),
+    }),
+    [days],
   );
-  const allSpecs = useMemo(() => [...specs, MINE_SPEC], [specs]);
+  const categorySpec = useMemo<FilterSpec>(
+    () => ({
+      key: 'category',
+      label: 'Filter by category',
+      anyLabel: 'All categories',
+      options: categories.map((value) => ({ value, label: categoryOf(value).label })),
+    }),
+    [categories],
+  );
+  const allSpecs = useMemo(() => [daySpec, categorySpec, MINE_SPEC], [daySpec, categorySpec]);
 
   const filters = useListFilters(allSpecs);
 
   const visible = useMemo(
     () =>
       rows.filter((row) => {
-        if (!filters.matches('day', row.dayKey)) return false;
+        if (!filters.matches(DAY_KEY, row.dayKey)) return false;
         if (!filters.matches('category', row.eventType)) return false;
         if (filters.values.mine === 'mine' && !row.mine) return false;
         if (!filters.needle) return true;
-        return [row.eventName, row.roundName, row.venue, row.dayLabel]
+        return [row.eventName, row.roundName, row.venue, row.dayLabel, row.categoryLabel]
           .filter(Boolean)
           .some((field) => field!.toLowerCase().includes(filters.needle));
       }),
     [rows, filters],
   );
 
-  const sort = useTableSort('time');
-  const columns = useScheduleColumns();
-  const sorted = useMemo(() => sortRows(visible, columns, sort), [visible, columns, sort]);
+  const groups = useMemo(() => groupSchedule(visible), [visible]);
 
-  const paged = usePagedList(sorted, {
-    pageSize: PAGE_SIZE,
-    resetKey: `${filters.signature}|${sort.signature}`,
-  });
+  /* ---- jump to now ----
+     Scrolling to the marker is immediate when the day showing already contains
+     it. When the rail has to switch days first it cannot be: the marker is not
+     in the document until that day has rendered, so the request is parked on a
+     ref and picked up by the effect the new `groups` fires. A ref rather than
+     state because nothing on screen depends on the request being pending. */
+  const scrollPending = useRef(false);
 
-  const { view, setView } = useViewMode(VIEW_OPTIONS, 'table');
+  useEffect(() => {
+    if (!scrollPending.current) return;
+    scrollPending.current = false;
+    scrollToNow();
+  }, [groups]);
+
+  function scrollToNow() {
+    document
+      .getElementById('schedule-now')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function jumpToNow() {
+    const day = filters.values[DAY_KEY] ?? ANY;
+    if (day === ANY || day === today) {
+      scrollToNow();
+      return;
+    }
+    scrollPending.current = true;
+    filters.setValue(DAY_KEY, today);
+  }
 
   /* ------------------------------------------------------------- render --- */
 
@@ -147,20 +173,28 @@ export default function FestSchedulePage() {
   }
 
   const loading = events === null;
-  const mineCount = rows.filter((row) => row.mine).length;
-  const nextUp = rows.find((row) => row.start.getTime() >= now) ?? null;
+  const liveCount = rows.filter((row) => roundStatus(row, now) === 'live').length;
+  const mine = rows.filter((row) => row.mine);
+  const mineAhead = mine.filter((row) => row.start.getTime() > now);
+  const nextUp = rows.find((row) => row.start.getTime() > now) ?? null;
+  const soonCount = rows.filter(
+    (row) => row.start.getTime() > now && row.start.getTime() - now <= 6 * 3_600_000,
+  ).length;
+  const todayHasRounds = days.some((day) => day.key === today);
 
   return (
     <FestivalScreen
       title="Schedule"
-      eyebrow="Programme"
+      // The house a participant belongs to, as on their dashboard — the eyebrow
+      // is what tells the shared layout which area of the app you are in.
+      eyebrow={participant?.house ?? 'Programme'}
       subtitle={
         loading
-          ? 'Loading the schedule…'
+          ? 'Loading the programme…'
           : `${rows.length} round${rows.length === 1 ? '' : 's'} across ${days.length} day${days.length === 1 ? '' : 's'}`
       }
     >
-      {/* ---- headline figures ---- */}
+      {/* 1 — The pulse row: the four figures worth reading before anything else. */}
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
           {Array.from({ length: 4 }, (_, i) => (
@@ -188,47 +222,68 @@ export default function FestSchedulePage() {
             footnote={
               nextUp === null
                 ? 'Nothing still ahead'
-                : `Next ${nextUp.dayLabel}, ${timeLabelOf(nextUp.start)}`
+                : `Next ${relativeLabel(nextUp.start, now)} · ${nextUp.eventName}`
             }
           />
           <StatCard
-            icon={Ticket}
-            tone="accent"
-            label="Categories"
-            value={categories.length}
-            footnote={categories.length === 0 ? 'None yet' : categories.join(', ')}
+            icon={Radio}
+            tone="success"
+            label="Live Now"
+            value={liveCount}
+            footnote={
+              soonCount > 0
+                ? `${soonCount} starting within 6 hours`
+                : liveCount > 0
+                  ? 'Running right now'
+                  : 'Nothing running'
+            }
           />
           <StatCard
             icon={UserCheck}
-            tone="success"
+            tone="accent"
             label="My Rounds"
-            value={mineCount}
+            value={mine.length}
             footnote={
-              mineCount === 0 ? 'Register to see yours here' : 'Filter to them under “Filters”'
+              mine.length === 0
+                ? 'Register to see yours here'
+                : `${mineAhead.length} still ahead of you`
             }
           />
         </div>
       )}
 
-      {/* One panel holds the controls, the rows, and the pager, so filtering and
-          paging read as acting on the thing directly below them. */}
-      <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
-        <ListToolbar
-          filters={filters}
-          specs={specs}
-          advancedSpecs={[MINE_SPEC]}
-          searchLabel="Search the schedule"
-          searchPlaceholder="Event, round, venue, or day…"
-          shown={visible.length}
-          total={rows.length}
-          noun="rounds"
-          trailing={<ViewToggle options={VIEW_OPTIONS} value={view} onChange={setView} />}
-        />
+      {/* 2 — The command row: what is running, beside what the viewer has next. */}
+      <NowPanel rows={rows} now={now} loading={loading} registeredCount={mine.length} />
+
+      {/* 3 — The programme itself: the rail picks the day, the toolbar narrows
+             it, the timeline draws it. One panel, so the controls read as acting
+             on the thing directly below them. */}
+      <section
+        aria-label="Programme"
+        className="glass-panel flex flex-col gap-4 rounded-3xl p-4 sm:p-5"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span aria-hidden className="h-5 w-1.5 shrink-0 rounded-full bg-brand" />
+            <h2 className="text-lg font-black uppercase tracking-[0.12em] text-ink">Programme</h2>
+          </div>
+          {todayHasRounds && (
+            <button
+              type="button"
+              onClick={jumpToNow}
+              className="tap inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card ring-1 ring-line hover:bg-surface-2 active:scale-95"
+            >
+              <LocateFixed size={14} strokeWidth={2.25} aria-hidden />
+              Jump to now
+            </button>
+          )}
+        </header>
 
         {loading ? (
-          <div className="flex flex-col gap-2" aria-busy="true">
-            {Array.from({ length: PAGE_SIZE }, (_, i) => (
-              <Skeleton key={i} className="h-14 rounded-xl" />
+          <div className="flex flex-col gap-3" aria-busy="true">
+            <Skeleton className="h-24 rounded-2xl" />
+            {Array.from({ length: 5 }, (_, i) => (
+              <Skeleton key={i} className="h-20 rounded-2xl" />
             ))}
           </div>
         ) : rows.length === 0 ? (
@@ -237,134 +292,48 @@ export default function FestSchedulePage() {
             description="Event timings appear here once the organisers publish them."
             icon={CalendarDays}
           />
-        ) : visible.length === 0 ? (
-          <EmptyState
-            title="No matching rounds"
-            description="Try a different search, or clear the filters."
-            icon={CalendarDays}
-          />
-        ) : view === 'table' ? (
-          <DataTable
-            columns={columns}
-            rows={paged.items}
-            rowKey={(row) => row.id}
-            sort={sort}
-            caption="Every published round with its day, time, venue, and event"
-          />
         ) : (
-          <ScheduleCards rows={paged.items} />
-        )}
+          <>
+            <DayRail
+              days={days}
+              value={filters.values[DAY_KEY] ?? ANY}
+              onChange={(next) => filters.setValue(DAY_KEY, next)}
+              today={today}
+              total={rows.length}
+            />
 
-        {!loading && visible.length > 0 && <TablePager paged={paged} noun="rounds" />}
+            <ListToolbar
+              filters={filters}
+              specs={[categorySpec]}
+              advancedSpecs={[MINE_SPEC]}
+              searchLabel="Search the schedule"
+              searchPlaceholder="Event, round, venue…"
+              shown={visible.length}
+              total={rows.length}
+              noun="rounds"
+            />
+
+            {visible.length === 0 ? (
+              <EmptyState
+                title="No matching rounds"
+                description="Try a different day, a different search, or clear the filters."
+                icon={CalendarDays}
+              />
+            ) : (
+              <ScheduleTimeline
+                groups={groups}
+                now={now}
+                today={today}
+                showDayHeadings={groups.length > 1}
+              />
+            )}
+          </>
+        )}
       </section>
 
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted">
         <MapPin size={12} /> Timings are tentative — each event&apos;s page carries the latest.
       </p>
     </FestivalScreen>
-  );
-}
-
-/* -------------------------------------------------------------- columns --- */
-
-function useScheduleColumns(): DataTableColumn<ScheduleRow>[] {
-  return useMemo(
-    () => [
-      {
-        key: 'day',
-        header: 'Day',
-        sortValue: (row) => row.dayKey,
-        cell: (row) => (
-          <span className="whitespace-nowrap font-medium text-ink">{row.dayLabel}</span>
-        ),
-      },
-      {
-        key: 'time',
-        header: 'Time',
-        sortValue: (row) => row.start.getTime(),
-        cell: (row) => (
-          <span className="whitespace-nowrap tabular-nums text-ink">
-            {timeLabelOf(row.start)}
-            {row.end && ` – ${timeLabelOf(row.end)}`}
-          </span>
-        ),
-      },
-      {
-        key: 'event',
-        header: 'Event',
-        sortValue: (row) => row.eventName,
-        cell: (row) => (
-          <Link
-            to={path(ROUTES.eventDetail, { eventId: row.eventId })}
-            className="font-semibold text-ink hover:text-brand"
-          >
-            {row.eventName}
-          </Link>
-        ),
-      },
-      {
-        key: 'round',
-        header: 'Round',
-        sortValue: (row) => row.roundName,
-        cell: (row) => <span className="text-muted">{row.roundName}</span>,
-      },
-      {
-        key: 'venue',
-        header: 'Venue',
-        sortValue: (row) => row.venue ?? '',
-        cell: (row) => <span className="text-muted">{row.venue ?? '—'}</span>,
-      },
-      {
-        key: 'category',
-        header: 'Category',
-        sortValue: (row) => row.eventType,
-        cell: (row) => (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge tone="neutral" className="capitalize">
-              {row.eventType}
-            </StatusBadge>
-            {row.mine && <StatusBadge tone="success">Mine</StatusBadge>}
-          </div>
-        ),
-      },
-    ],
-    [],
-  );
-}
-
-/* ---------------------------------------------------------------- cards --- */
-
-/** The same rows as the table, one per card, for narrow screens. */
-function ScheduleCards({ rows }: { rows: ScheduleRow[] }) {
-  return (
-    <ul className="flex flex-col gap-2">
-      {rows.map((row) => (
-        <li key={row.id}>
-          <Link to={path(ROUTES.eventDetail, { eventId: row.eventId })}>
-            <Card interactive className="flex items-center gap-3">
-              <IconTile icon={Clock} tone="muted" size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-ink">{row.eventName}</p>
-                <p className="truncate text-sm text-muted">
-                  {row.roundName} · {row.dayLabel}, {timeLabelOf(row.start)}
-                  {row.end && ` – ${timeLabelOf(row.end)}`}
-                </p>
-                {row.venue && (
-                  <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted">
-                    <MapPin size={11} className="shrink-0" /> {row.venue}
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <StatusBadge tone="neutral" className="capitalize">
-                  {row.eventType}
-                </StatusBadge>
-                {row.mine && <StatusBadge tone="success">Mine</StatusBadge>}
-              </div>
-            </Card>
-          </Link>
-        </li>
-      ))}
-    </ul>
   );
 }

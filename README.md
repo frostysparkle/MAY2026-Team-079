@@ -26,10 +26,10 @@ with one integrated platform, built around a single participant profile. It cove
 |----------------|--------------------------------------------------------------------|
 | Frontend       | React.js (Progressive Web App)                                      |
 | Backend        | Python + FastAPI                                                    |
-| Database       | MongoDB                                                             |
-| Authentication | Google Sign-in (OAuth, IITM domains only) + JWT sessions           |
+| Database       | MongoDB Atlas (`paradox` database)                                  |
+| Authentication | Email + password (IITM domains only), bcrypt, JWT sessions          |
 | Digital ID     | Rotating QR, RSA-OAEP encrypted payload, per participant             |
-| Payments       | Certified third-party gateway, hosted checkout                     |
+| Payments       | Not implemented — see Project Status                                |
 | Hosting        | Vercel (frontend) · Render (backend) — free tier                   |
 
 ## Project Status
@@ -41,6 +41,7 @@ live FastAPI backend, and the staff/admin console has been built out on top of i
 |---|---|
 | Public site — landing, event catalogue, workshop programme, schedule, sponsors | Built |
 | Participant app — registration, dual login, profile, event & workshop booking | Built |
+| Data source | **Live backend only.** The in-memory mock API was removed; the app always calls the real FastAPI backend. |
 | Digital identity — rotating QR, RSA-OAEP payload (replaces the earlier TOTP scheme) | Built |
 | Checkpoint scanners — event, workshop, mess, hostel | Built |
 | Staff console — staff home, event teams, event participation | Built |

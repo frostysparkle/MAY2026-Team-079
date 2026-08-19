@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Home } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronRight, Home } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { MyHostelResponse } from '@/api/types';
+import { ROUTES } from '@/config/routes';
 import { Button, IconTile, Skeleton, StatusBadge } from '@/components/ui';
 
 /**
@@ -11,8 +13,12 @@ import { Button, IconTile, Skeleton, StatusBadge } from '@/components/ui';
  * two separate fields: not requested, requested but not yet allocated, and
  * allotted. Allocation itself is a batch the organisers run
  * (`POST /hostels/allocate`), and it only considers participants who have opted
- * in — so asking for a place is the participant's half of that, and this panel
- * is where it happens.
+ * in.
+ *
+ * Read-only on purpose. Opting in used to happen right here, on a button, but a
+ * bed now costs a fee that has to be settled first, so the request is made once
+ * on Accommodation & Mess and this panel reports it. Two places that can both
+ * start a booking is two places that can disagree about whether one is paid for.
  *
  * Same surface and header vocabulary as `MessWidget` and as the admin panels, so
  * the dashboard reads as one set of panels rather than a pile of unlike cards.
@@ -21,8 +27,6 @@ export function HostelWidget() {
   const [data, setData] = useState<MyHostelResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,23 +43,6 @@ export function HostelWidget() {
       cancelled = true;
     };
   }, []);
-
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await action();
-      // Re-read rather than patching local state: allocation may have run
-      // between load and click, and the server's answer is the real one.
-      setData(await api.myHostel());
-    } catch (e) {
-      setActionError(
-        e instanceof ApiClientError ? e.message : 'Could not update your accommodation request.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (loading) return <Skeleton className="h-28 w-full rounded-2xl" />;
   if (error) return <PanelNote>{error}</PanelNote>;
@@ -76,10 +63,19 @@ export function HostelWidget() {
 
         {/* Count only. `volunteers` carries names and phone numbers, and this panel
             has never shown them; surfacing staff contact details is a disclosure
-            decision, not a styling one. */}
-        <p className="border-t border-line pt-3 text-xs text-muted">
-          {data.volunteers.length} contact{data.volunteers.length === 1 ? '' : 's'} on duty
-        </p>
+            decision, not a styling one — Accommodation & Mess is where the block's
+            details belong. */}
+        <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+          <p className="text-xs text-muted">
+            {data.volunteers.length} contact{data.volunteers.length === 1 ? '' : 's'} on duty
+          </p>
+          <Link to={ROUTES.accommodation} className="w-fit">
+            <Button variant="ghost" size="sm" className="gap-1.5">
+              Details
+              <ChevronRight size={14} />
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -103,27 +99,13 @@ export function HostelWidget() {
         {requested && <StatusBadge tone="warning">Pending</StatusBadge>}
       </div>
 
-      {actionError && <p className="text-xs font-medium text-danger">{actionError}</p>}
-
       <div className="border-t border-line pt-3">
-        {requested ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => void run(() => api.cancelAccommodationRequest())}
-          >
-            {busy ? 'Working…' : 'Withdraw request'}
+        <Link to={ROUTES.accommodation} className="w-fit">
+          <Button variant={requested ? 'ghost' : 'primary'} size="sm" className="gap-1.5">
+            {requested ? 'View or change' : 'Book accommodation'}
+            <ChevronRight size={14} />
           </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => void run(() => api.registerForAccommodation())}
-          >
-            {busy ? 'Requesting…' : 'Book accommodation'}
-          </Button>
-        )}
+        </Link>
       </div>
     </div>
   );

@@ -1,9 +1,13 @@
 import type { MealSlot } from '@/api/types';
 
 /**
- * PLACEHOLDER — the backend has no mess slot-time config (MessCreateRequest
- * is just {mess_id, name, capacity, preference}). These windows must be
- * replaced with the real fest mess timings before shipping.
+ * The fest mess service windows. Confirmed correct by the organisers.
+ *
+ * These live here because the backend has nowhere to put them: `MessCreateRequest`
+ * is `{mess_id, name, capacity, preference, cuisines}`, stored mess documents carry
+ * no time fields, and the `MessSlotRequest` model in `routers/mess.py` is declared
+ * but wired to no route. The frontend is therefore the only source of truth for
+ * slot times — verified against the API surface, not assumed.
  */
 export const MESS_SLOT_WINDOWS: { slot: MealSlot; startHour: number; endHour: number }[] = [
   { slot: 'breakfast', startHour: 7, endHour: 9 },

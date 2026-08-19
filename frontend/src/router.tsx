@@ -16,10 +16,12 @@ import AccessDeniedPage from '@/pages/AccessDeniedPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorPage from '@/pages/ErrorPage';
 
-import HomePage from '@/pages/HomePage';
+import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import MyQrPage from '@/pages/MyQrPage';
+import AccommodationPage from '@/pages/stay/AccommodationPage';
+import StayPaymentPage from '@/pages/stay/StayPaymentPage';
 
 import EventsListPage from '@/pages/events/EventsListPage';
 import EventDetailPage from '@/pages/events/EventDetailPage';
@@ -133,7 +135,7 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <HomePage /> },
+      { index: true, element: <DashboardPage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'profile/change-password', element: <ChangePasswordPage /> },
       { path: 'qr', element: <MyQrPage /> },
@@ -143,6 +145,8 @@ export const router = createBrowserRouter([
       { path: 'schedule', element: <FestSchedulePage /> },
       { path: 'workshops', element: <WorkshopsListPage /> },
       { path: 'workshops/:workshopId', element: <WorkshopDetailPage /> },
+      { path: 'accommodation', element: <AccommodationPage /> },
+      { path: 'accommodation/payment', element: <StayPaymentPage /> },
     ],
   },
 

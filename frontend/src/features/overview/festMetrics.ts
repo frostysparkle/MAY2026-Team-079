@@ -189,7 +189,11 @@ export interface EventSummary {
   startingSoon: EventRow[];
 }
 
-export function summariseEvents(rows: EventRow[], withinHours = 6): EventSummary {
+export function summariseEvents(
+  rows: EventRow[],
+  withinHours = 6,
+  now: Date = new Date(),
+): EventSummary {
   const readable = rows.filter((row) => row.registrations !== null);
   const allRead = readable.length === rows.length && rows.length > 0;
 
@@ -203,7 +207,12 @@ export function summariseEvents(rows: EventRow[], withinHours = 6): EventSummary
     ? scansReadable.reduce((sum, row) => sum + (row.scansToday ?? 0), 0)
     : null;
 
-  const horizon = Date.now() + withinHours * 3_600_000;
+  // Takes the clock from the caller, like `eventPhase` and `buildEventRows` do.
+  // `row.phase` was computed against whatever `now` built the rows, so reading
+  // the wall clock here instead would mix two clocks: rows built for a fixed
+  // instant would be filtered against the real one, and events outside the
+  // horizon would leak into `startingSoon`.
+  const horizon = now.getTime() + withinHours * 3_600_000;
 
   return {
     total: rows.length,

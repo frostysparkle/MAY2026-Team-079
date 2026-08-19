@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, EyeOff, Home, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import { env } from '@/config/env';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
@@ -20,7 +19,6 @@ import { ResultBanner, Spinner } from '@/components/ui';
  */
 
 /** Seed account surfaced in the mock dev quick-fill for local testing. */
-const MOCK_ACCOUNT = { email: 'superadmin@paradox.dev', password: 'password123' };
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -182,22 +180,6 @@ export default function AdminLoginPage() {
           </div>
         </div>
       </div>
-
-      {env.useMockApi && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-line bg-surface-2 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Dev quick-fill</p>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail(MOCK_ACCOUNT.email);
-              setPassword(MOCK_ACCOUNT.password);
-            }}
-            className="tap rounded-xl bg-surface py-2 text-sm font-semibold text-ink shadow-card ring-1 ring-line hover:bg-surface-2 active:scale-[0.98]"
-          >
-            Fill seeded Super Admin
-          </button>
-        </div>
-      )}
     </AuthLayout>
   );
 }
