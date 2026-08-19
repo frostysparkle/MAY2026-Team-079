@@ -42,6 +42,7 @@ class ProfileCompleteRequest(BaseModel):
     program: str   # DS | ES | AE | MS
     course_stage: str # foundational | diploma | degree
     photo: Optional[str] = None # Base64 encoded string
+    event_preferences: Optional[str] = None # free text: what sort of events/workshops the participant prefers
 
 # QR Scanning
 class ScanQRRequest(BaseModel):

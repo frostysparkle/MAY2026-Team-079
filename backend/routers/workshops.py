@@ -9,6 +9,7 @@ import asyncio
 from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest, ScanQRRequest
 from database import workshops_collection, participants_collection, backend_teams_collection, workshop_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
+from embedding_service import generate_embedding
 
 router = APIRouter(prefix="/workshops", tags=["Workshops"])
 
@@ -24,6 +25,7 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "slot_id": request.slot_id,
         "name": request.name,
         "description": request.description,
+        "embedding": generate_embedding(request.description),
         "venue": request.venue,
         "capacity": request.capacity,
         "registration_count": 0,
@@ -61,6 +63,7 @@ PUBLIC_WORKSHOP_FIELDS = {
     "slot_id": 1,
     "name": 1,
     "description": 1,
+    "embedding": 1,
     "venue": 1,
     "capacity": 1,
     "registration_count": 1,
@@ -105,7 +108,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
     for entry in current_user.get("workshops", []):
         workshop = workshops_collection.find_one(
             {"_id": entry.get("workshop_id")},
-            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "venue": 1, "capacity": 1, "instructions": 1},
+            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "embedding": 1, "venue": 1, "capacity": 1, "instructions": 1},
         )
         if not workshop:
             # A workshop deleted after booking leaves an entry with nothing to
@@ -115,6 +118,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
                 "slot_id": entry.get("slot_id"),
                 "name": None,
                 "description": None,
+                "embedding": None,
                 "venue": None,
                 "booking_type": entry.get("booking_type"),
                 "attended": entry.get("attended", False),
@@ -125,6 +129,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
             "slot_id": entry.get("slot_id"),
             "name": workshop.get("name"),
             "description": workshop.get("description"),
+            "embedding": workshop.get("embedding"),
             "venue": workshop.get("venue"),
             "booking_type": entry.get("booking_type"),
             "attended": entry.get("attended", False),
@@ -140,6 +145,10 @@ def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_us
         raise HTTPException(status_code=403, detail="Only Super Admins can edit workshops")
         
     update_data = {k: v for k, v in request.dict().items() if v is not None}
+    if "description" in update_data:
+        existing = workshops_collection.find_one({"workshop_id": workshop_id}, {"description": 1})
+        if not existing or existing.get("description") != update_data["description"]:
+            update_data["embedding"] = generate_embedding(update_data["description"])
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         workshops_collection.update_one({"workshop_id": workshop_id}, {"$set": update_data})

@@ -2026,6 +2026,11 @@ components:
           - type: string
           - type: 'null'
           title: Photo
+        event_preferences:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Preferences
       type: object
       required:
       - full_name

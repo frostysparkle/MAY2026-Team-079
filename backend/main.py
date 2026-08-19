@@ -25,6 +25,7 @@ from security import (
     get_password_hash, verify_password, create_access_token,
     generate_rsa_key_pair, decrypt_qr_data, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from embedding_service import generate_embedding, zero_embedding
 
 app = FastAPI(title="Paradox Connect API")
 
@@ -101,6 +102,10 @@ def register(request: RegisterRequest):
         "qr_secrets": {
             "private_key": private_key,
             "public_key": public_key
+        },
+        "embedding": {
+            "workshop": zero_embedding(),
+            "event": zero_embedding()
         },
         "events": [],
         "workshops": [],
@@ -240,8 +245,9 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
         "emergency_contact": request.emergency_contact.model_dump() if request.emergency_contact else None,
         "program": request.program,
         "course_stage": request.course_stage,
+        "event_preferences": request.event_preferences,
     }
-    
+
     update_doc = {
         "profile": profile_data,
         "updated_at": datetime.utcnow()
@@ -249,11 +255,24 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
     if request.photo:
         update_doc["photo"] = request.photo
 
+    # Only re-embed when the preference text actually changed, so resubmitting
+    # an unchanged profile form doesn't burn an embeddings API call every time.
+    previous_preferences = current_user.get("profile", {}).get("event_preferences")
+    if request.event_preferences and request.event_preferences != previous_preferences:
+        preference_vector = generate_embedding(request.event_preferences)
+        # One shared preference embedding, stored under both slots: there is
+        # currently only one preference field, so workshop- and event-side
+        # matching start out identical until the two are given separate inputs.
+        update_doc["embedding"] = {
+            "workshop": preference_vector,
+            "event": preference_vector
+        }
+
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": update_doc}
     )
-    
+
     return {
         **profile_data,
         "photo": request.photo or current_user.get("photo")

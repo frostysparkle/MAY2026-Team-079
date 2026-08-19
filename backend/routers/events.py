@@ -8,6 +8,7 @@ import random
 from models import EventCreateRequest, EventUpdateRequest, EventRegistrationInput, ScanQRRequest
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
+from embedding_service import generate_embedding
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -34,6 +35,7 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
         "event_type": request.event_type,
         "name": request.name,
         "description": request.description,
+        "embedding": generate_embedding(request.description),
         "poster": request.poster,
         "team": request.team.model_dump(),
         "open": True,
@@ -72,6 +74,7 @@ PUBLIC_EVENT_FIELDS = {
     "event_type": 1,
     "name": 1,
     "description": 1,
+    "embedding": 1,
     "poster": 1,
     "team": 1,
     "open": 1,
@@ -107,6 +110,8 @@ def update_event(event_id: str, request: EventUpdateRequest, current_user: dict 
         raise HTTPException(status_code=403, detail="Only Super Admins can edit this event")
         
     update_data = {k: v for k, v in request.dict().items() if v is not None}
+    if "description" in update_data and event.get("description") != update_data["description"]:
+        update_data["embedding"] = generate_embedding(update_data["description"])
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         event_collection.update_one({"event_id": event_id}, {"$set": update_data})
