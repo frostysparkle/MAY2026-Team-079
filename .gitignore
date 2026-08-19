@@ -9,3 +9,10 @@ graphify-out
 
 __pycache__/
 *.pyc
+
+# Secrets. backend/atlas-credentials.env holds the MongoDB Atlas connection
+# string (username, password, cluster host) and must never be committed.
+# `*.example` templates are deliberately still tracked.
+*.env
+.env
+!*.env.example

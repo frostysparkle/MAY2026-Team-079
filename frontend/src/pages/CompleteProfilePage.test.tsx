@@ -31,7 +31,7 @@ const returningUser: ParticipantLoginResponse = {
   ...newUser,
   full_name: 'Ananya Raghavan',
   dob: '2003-04-11',
-  house: 'House 3',
+  house: 'Wayanad House',
   gender: 'female',
   phone: '9876543210',
   country: 'India',
@@ -77,9 +77,35 @@ describe('CompleteProfilePage', () => {
     expect(screen.getByLabelText(/Country/i)).toHaveDisplayValue('India');
     expect(screen.getByLabelText(/State/i)).toHaveDisplayValue('Kerala');
     expect(screen.getByLabelText(/City/i)).toHaveDisplayValue('Kochi');
-    expect(screen.getByLabelText(/House/i)).toHaveDisplayValue('House 3');
+    expect(screen.getByLabelText(/House/i)).toHaveDisplayValue('Wayanad House');
     expect(screen.getByLabelText(/Program/i)).toHaveDisplayValue('DS');
     expect(screen.getByLabelText(/Course Stage/i)).toHaveDisplayValue('Foundational');
+  });
+
+  // The pass is only usable at a checkpoint with a face on it, so the photo is
+  // required here even though the backend accepts a profile without one.
+  it('requires a profile photo before the form can be submitted', async () => {
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Save and continue/i }));
+
+    expect(await screen.findByText('A profile photo is required.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Upload photo/i })).toBeInTheDocument();
+  });
+
+  it('no longer collects an emergency contact', () => {
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText(/Emergency Contact/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Contact Name/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Relation/i)).not.toBeInTheDocument();
   });
 
   it('frames itself as an edit, not a first-time setup, when a profile exists', () => {

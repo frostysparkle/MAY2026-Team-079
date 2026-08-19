@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  BedDouble,
   CalendarClock,
   CalendarDays,
   ChevronRight,
@@ -35,10 +36,15 @@ import { useNow } from '@/features/schedule/useNow';
  * column below `md`.
  *
  * Section navigation is deliberately absent: `AppShell` renders the rail (and, on
- * a phone, the scrolling tab row) with the same links on every screen, so a panel
- * of them here would be a second copy that can only drift from the first. What
- * this page carries instead is *state* — what the participant is registered for,
- * what is next, and where their mess and hostel stand.
+ * a phone, the scrolling tab row) with the same links on every screen, and
+ * `StudentHomePage` renders the section cards, so a panel of them here would be a
+ * third copy that can only drift from the other two. What this page carries
+ * instead is *state* — what the participant is registered for, what is next, and
+ * where their mess and hostel stand.
+ *
+ * It used to be the `/app` index, which meant signing in dropped a student onto a
+ * figures screen. The hub at `ROUTES.home` is the index now and this lives at
+ * `ROUTES.dashboard`, one nav entry away.
  */
 
 /** One round of one event the participant is registered for. */
@@ -57,7 +63,7 @@ const timeFmt = (d: Date) =>
     minute: '2-digit',
   });
 
-export default function HomePage() {
+export default function DashboardPage() {
   const participant = currentParticipant();
   const navigate = useNavigate();
   const now = useNow();
@@ -273,9 +279,16 @@ export default function HomePage() {
           </Panel>
         )}
 
-        <Panel title="My Stay">
+        <Panel title="Accommodation & Mess">
           <MessWidget />
           <HostelWidget />
+          <Link to={ROUTES.accommodation} className="w-fit">
+            {/* The panel heading now names the section, so the button says what
+                the tap does rather than repeating it. */}
+            <Button variant="ghost" size="sm" className="gap-1.5">
+              <BedDouble size={14} /> Manage my stay
+            </Button>
+          </Link>
         </Panel>
 
         <Panel title="My Pass">

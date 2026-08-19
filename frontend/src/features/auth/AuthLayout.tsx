@@ -18,6 +18,7 @@ export function AuthLayout({
   children,
   backTo,
   mark,
+  markInline = false,
   size = 'sm',
   align = 'center',
   fit = false,
@@ -29,6 +30,8 @@ export function AuthLayout({
   backTo?: string;
   /** Brand mark / icon rendered above the title. */
   mark?: ReactNode;
+  /** Sets the mark beside the title on one row instead of above it. */
+  markInline?: boolean;
   /** `xs` for compact single-purpose cards (sign-in), `sm` for short screens,
    *  `md` for longer forms, `lg` for wide multi-column forms, `xl` for a form
    *  plus a side rail (Complete Your Profile) — the widest the signed-in
@@ -109,17 +112,19 @@ export function AuthLayout({
 
           {(mark || title || subtitle) && (
             <div>
-              {mark}
-              {title && (
-                <h1
-                  className={cn(
-                    'text-2xl font-black tracking-tight text-ink sm:text-3xl',
-                    Boolean(mark) && 'mt-3',
-                  )}
-                >
-                  {title}
-                </h1>
-              )}
+              <div className={cn(markInline && 'flex items-center gap-3')}>
+                {mark}
+                {title && (
+                  <h1
+                    className={cn(
+                      'text-2xl font-black tracking-tight text-ink sm:text-3xl',
+                      Boolean(mark) && !markInline && 'mt-3',
+                    )}
+                  >
+                    {title}
+                  </h1>
+                )}
+              </div>
               {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
             </div>
           )}

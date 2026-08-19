@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
-import { env } from '@/config/env';
 import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
@@ -28,7 +27,6 @@ import { cn } from '@/lib/cn';
 type Mode = 'login' | 'register';
 
 /** Seed account surfaced in the mock dev quick-fill for local testing. */
-const MOCK_ACCOUNT = { email: 'participant@ds.study.iitm.ac.in', password: 'password123' };
 
 const FORM_ID = 'auth-form';
 
@@ -398,22 +396,6 @@ export default function LoginPage({ initialMode }: { initialMode?: Mode }) {
           </div>
         </div>
       </div>
-
-      {env.useMockApi && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-brand/30 bg-brand-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">Dev quick-fill</p>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail(MOCK_ACCOUNT.email);
-              setPassword(MOCK_ACCOUNT.password);
-            }}
-            className="tap rounded-xl bg-surface py-2 text-sm font-semibold text-ink shadow-card ring-1 ring-line hover:bg-surface-2 active:scale-[0.98]"
-          >
-            Fill seeded participant
-          </button>
-        </div>
-      )}
     </AuthLayout>
   );
 }

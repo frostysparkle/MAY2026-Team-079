@@ -1,8 +1,18 @@
-import { QRCodeCanvas } from 'qrcode.react';
+import {
+  Building2,
+  DoorOpen,
+  RefreshCw,
+  ScanLine,
+  ShieldCheck,
+  Ticket,
+  UserRound,
+  UtensilsCrossed,
+  WifiOff,
+} from 'lucide-react';
 import { currentParticipant } from '@/stores/authStore';
-import { useLiveQr } from '@/features/qr/useLiveQr';
-import { encodeQrPayload } from '@/features/qr/payload';
-import { Avatar, ErrorState, SectionHeading, Spinner, StatusBadge } from '@/components/ui';
+import { QR_REFRESH_SECONDS, useLiveQr } from '@/features/qr/useLiveQr';
+import { EntryQrCard } from '@/features/qr/EntryQrCard';
+import { DetailPanel, Fact, FactList, IconTile, ProgressBar, StatusBadge } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 
 /**
@@ -11,75 +21,154 @@ import { FestivalScreen } from '@/components/layout/FestivalScreen';
  * the public key cached at login; no network call on refresh, so this still
  * works offline exactly like the old TOTP scheme did.
  *
- * Framed by `FestivalScreen` like every other screen, with the gradient tile kept
- * as the panel's contents: the brand-coloured card is what makes the pass
- * recognisable at a checkpoint from arm's length, so it stays.
+ * Laid out as an admin detail screen is: `FestivalScreen`, then panels on the
+ * shared `DetailPanel` surface. The pass itself keeps its brand-gradient tile —
+ * that is what makes it recognisable at a checkpoint from arm's length — but it
+ * is now a *card*, with the wordmark and house on it, rather than a coloured box
+ * around a QR. Beside it, from `lg` up, sit the two things a participant
+ * actually needs to know and previously had to infer from one line of small
+ * print: where the pass works, and why it keeps changing.
  *
  * Deliberately free of router imports — nothing here links anywhere, and keeping
  * it that way means the page can be rendered and tested on its own.
  */
 export default function MyQrPage() {
   const participant = currentParticipant();
-  const { payload, status, error, secondsRemaining, retry } = useLiveQr();
+  const qr = useLiveQr();
+  const { status, secondsRemaining } = qr;
 
   return (
     <FestivalScreen
       title="My QR"
       eyebrow={participant?.house ?? 'Participant'}
       subtitle="Show this at any checkpoint to be scanned. It works offline."
-      width="md"
     >
-      <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <SectionHeading title="Digital ID" />
-          {status === 'ready' && (
-            <StatusBadge tone="success">Refreshes in {secondsRemaining}s</StatusBadge>
-          )}
-        </div>
-
-        <div className="flex flex-col items-center gap-4 rounded-2xl bg-gradient-to-br from-brand to-accent p-6 shadow-lift">
-          {status === 'loading' && (
-            <div className="flex h-64 flex-col items-center justify-center gap-3 text-white">
-              <Spinner size={32} label="Preparing your digital ID" />
-              <p className="text-sm opacity-90">Preparing your ID…</p>
-            </div>
-          )}
-
-          {status === 'error' && (
-            <div className="w-full rounded-2xl bg-surface p-2">
-              <ErrorState title="ID not ready" description={error ?? undefined} onRetry={retry} />
-            </div>
-          )}
-
-          {status === 'ready' && payload && participant && (
-            <>
-              <div className="rounded-2xl bg-white p-4 shadow-card">
-                <QRCodeCanvas
-                  value={encodeQrPayload(payload)}
-                  size={220}
-                  level="M"
-                  aria-label="Your digital ID QR code"
+      {/* The pass leads, and on a phone it is the whole screen. From `lg` it
+          takes a fixed column and *sticks*, so the guidance beside it scrolls
+          past a pass that stays readable — the same treatment the
+          complete-profile rail uses. Sticking is also what makes the height
+          difference between the two columns deliberate rather than a gap. */}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <DetailPanel
+          className="lg:sticky lg:top-4"
+          title="Digital ID"
+          trailing={
+            status === 'ready' ? (
+              <StatusBadge tone="success" className="gap-1.5">
+                <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                Live
+              </StatusBadge>
+            ) : undefined
+          }
+          footer={
+            status === 'ready' ? (
+              <div className="flex flex-col gap-1.5">
+                <span className="flex items-center justify-between gap-2 tabular-nums">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw size={12} strokeWidth={2.5} aria-hidden /> Refreshes automatically
+                  </span>
+                  <span>in {secondsRemaining}s</span>
+                </span>
+                <ProgressBar
+                  value={secondsRemaining}
+                  max={QR_REFRESH_SECONDS}
+                  label="Seconds until this QR code refreshes"
                 />
               </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-sm">
-                <Avatar
-                  src={participant.photo}
-                  name={participant.full_name || participant.email}
-                  size={36}
-                />
-                <div className="text-left text-white">
-                  <p className="font-semibold">{participant.full_name || participant.email}</p>
-                  <p className="text-xs opacity-80">ID: {participant.id}</p>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+            ) : undefined
+          }
+        >
+          <EntryQrCard qr={qr} />
+        </DetailPanel>
 
-        <p className="text-center text-xs text-muted">
-          Your QR refreshes automatically for security. A screenshot will stop working.
-        </p>
-      </section>
+        <div className="grid items-start gap-5 xl:grid-cols-2">
+          <DetailPanel
+            title="Where It Works"
+            meta="4 checkpoints"
+            footer="Nothing to choose and nothing to provision — the same code is read at every one of them."
+          >
+            <FactList>
+              <Fact
+                icon={UtensilsCrossed}
+                label="Mess Halls"
+                value="Scanned at the counter for each meal"
+              />
+              <Fact
+                icon={Building2}
+                label="Hostel Entry"
+                value="Scanned on your way into your block"
+              />
+              <Fact
+                icon={DoorOpen}
+                label="Hostel Exit"
+                value="Scanned again on your way out, so the block's headcount stays right"
+              />
+              <Fact
+                icon={Ticket}
+                label="Events & Workshops"
+                value="Scanned by the organising team at the venue"
+              />
+            </FactList>
+          </DetailPanel>
+
+          <DetailPanel title="How It Stays Safe">
+            <FactList>
+              <Fact
+                icon={ShieldCheck}
+                label="Encrypted"
+                value="Your ID is encrypted with the fest's public key, so only a checkpoint can read it"
+              />
+              <Fact
+                icon={RefreshCw}
+                label="Short-Lived"
+                value={`A new code every ${QR_REFRESH_SECONDS} seconds — a screenshot stops working almost immediately`}
+              />
+              <Fact
+                icon={WifiOff}
+                label="Works Offline"
+                value="Generated on your phone, so a patchy signal at the gate changes nothing"
+              />
+            </FactList>
+          </DetailPanel>
+
+          <DetailPanel title="At The Checkpoint" className="xl:col-span-2">
+            <ol className="flex flex-col">
+              <Step icon={UserRound} n={1} text="Open this screen and turn your brightness up." />
+              <Step icon={ScanLine} n={2} text="Hold the code steady under the scanner." />
+              <Step
+                icon={ShieldCheck}
+                n={3}
+                text="Wait for the volunteer's confirmation before moving on."
+              />
+            </ol>
+          </DetailPanel>
+        </div>
+      </div>
     </FestivalScreen>
+  );
+}
+
+/**
+ * One numbered instruction, on a `Fact` row's rhythm — same tile, same hairline,
+ * same padding — so all three panels on this screen read as one list vocabulary
+ * rather than as two.
+ */
+function Step({
+  icon,
+  n,
+  text,
+}: {
+  icon: React.ComponentProps<typeof IconTile>['icon'];
+  n: number;
+  text: string;
+}) {
+  return (
+    <li className="flex items-center gap-3 border-b border-line py-3 first:pt-0 last:border-b-0 last:pb-0">
+      <IconTile icon={icon} size="sm" tone="muted" />
+      <span className="min-w-0 text-sm leading-relaxed text-ink">
+        <span className="mr-1.5 font-black tabular-nums text-brand">{n}.</span>
+        {text}
+      </span>
+    </li>
   );
 }

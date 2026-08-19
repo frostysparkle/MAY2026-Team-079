@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
+  Camera,
   CircleCheck,
   CircleDashed,
   FileEdit,
   GraduationCap,
-  IdCard,
   type LucideIcon,
   MapPin,
-  Siren,
   User,
 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
@@ -32,6 +31,7 @@ import {
 } from '@/components/ui';
 import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
+import { cn } from '@/lib/cn';
 
 const HOUSE_OPTIONS = HOUSES.map((h) => ({ value: h, label: h }));
 const MESS_PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({
@@ -44,6 +44,17 @@ const COURSE_STAGE_OPTIONS = COURSE_STAGES.map((s) => ({
   label: s[0].toUpperCase() + s.slice(1),
 }));
 
+/**
+ * The one panel surface this screen uses — the same `rounded-3xl` card as the
+ * sign-in and password screens. Declared once so every card on the page (form
+ * section and side rail alike) shares an identical radius, padding, shadow and
+ * hairline, instead of each block re-typing its own near-miss variant.
+ */
+const PANEL = 'rounded-3xl bg-surface p-5 shadow-lift ring-1 ring-black/[0.04] sm:p-6';
+
+/** Uppercase micro-label used above a sub-block inside a panel. */
+const MICRO_LABEL = 'text-[11px] font-semibold uppercase tracking-[0.14em] text-muted';
+
 type FormValues = {
   full_name: string;
   dob: string;
@@ -54,9 +65,6 @@ type FormValues = {
   address: string;
   program: string;
   course_stage: string;
-  emergency_contact_name?: string;
-  emergency_contact_relation?: string;
-  emergency_contact_phone?: string;
 };
 
 /** How far along the required half of the form is. */
@@ -66,15 +74,23 @@ interface Progress {
   personal: boolean;
   location: boolean;
   academic: boolean;
-  emergency: boolean;
+  photo: boolean;
 }
 
 /**
- * Which groups are filled in, and how many of the twelve fields the backend
- * requires are answered. Derived rather than tracked, so it can never disagree
+ * Which groups are filled in, and how many of the thirteen answers the profile
+ * requires are given. Derived rather than tracked, so it can never disagree
  * with what is in the form.
+ *
+ * The photo counts as a required answer like any field: it is mandatory before
+ * a profile can be completed, so the count, the checklist and the submit hint
+ * all have to agree that it is outstanding.
  */
-function progressOf(values: Partial<FormValues>, location: LocationValue): Progress {
+function progressOf(
+  values: Partial<FormValues>,
+  location: LocationValue,
+  photo: string | null,
+): Progress {
   const required = [
     values.full_name,
     values.dob,
@@ -88,6 +104,7 @@ function progressOf(values: Partial<FormValues>, location: LocationValue): Progr
     values.program,
     values.course_stage,
     values.mess_preference,
+    photo,
   ];
   return {
     filled: required.filter(Boolean).length,
@@ -97,62 +114,105 @@ function progressOf(values: Partial<FormValues>, location: LocationValue): Progr
     ),
     location: Boolean(location.country && location.state && location.city && values.address),
     academic: Boolean(values.program && values.course_stage && values.mess_preference),
-    emergency: Boolean(values.emergency_contact_name && values.emergency_contact_phone),
+    photo: Boolean(photo),
   };
 }
 
 /**
- * One group of fields as a themed surface card — the same
- * `rounded-3xl` / `shadow-lift` panel the sign-in and password screens use,
- * with the icon-tile + uppercase-tracked heading that titles sections
- * elsewhere in the app. A real <fieldset>/<legend> so the grouping is
- * announced to screen readers, not just drawn.
+ * The heading every panel on this screen wears: icon tile, uppercase tracked
+ * title, an optional badge, and an optional line of guidance beneath.
  *
- * The fields sit in a two-column grid on anything wider than a phone, and
- * every section uses that same grid, so a field's width is decided by how long
- * its answer is (a name or an address spans both columns) rather than by how
- * many fields the section happens to hold.
+ * Shared by the form's `<fieldset>` sections and the rail's `<section>`s so a
+ * panel title is one shape with one spacing rhythm, wherever it appears.
+ * Everything is a `<span>` (`headingId` promotes the title to an `<h2>`), which
+ * keeps it valid inside a `<legend>` as well as inside a section.
  */
-function FormSection({
+function PanelTitle({
   icon: Icon,
   title,
-  optional = false,
+  description,
+  badge,
+  headingId,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  badge?: React.ReactNode;
+  /** Renders the title as an `<h2>` with this id, for `aria-labelledby`. */
+  headingId?: string;
+}) {
+  const titleClass = 'text-sm font-black uppercase tracking-[0.12em] text-ink';
+  // Phrasing-only elements when the title sits inside a <legend>, which cannot
+  // hold a <div>; a real heading (and the divs around it) everywhere else.
+  const Box = headingId ? 'div' : 'span';
+  return (
+    <Box className="flex flex-col gap-1.5">
+      <Box className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <IconTile icon={Icon} size="sm" />
+        {headingId ? (
+          <h2 id={headingId} className={titleClass}>
+            {title}
+          </h2>
+        ) : (
+          <span className={titleClass}>{title}</span>
+        )}
+        {badge}
+      </Box>
+      {description && (
+        <span className="block text-xs leading-relaxed text-muted">{description}</span>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * One group of fields as a panel — a real `<fieldset>`/`<legend>` so the
+ * grouping is announced to screen readers, not just drawn.
+ *
+ * Every section uses the same two-column grid on anything wider than a phone,
+ * so a field's width is decided by how long its answer is (a name spans both
+ * columns) rather than by how many fields the section happens to hold, and
+ * fields line up column-for-column from one card to the next.
+ */
+function FormSection({
+  icon,
+  title,
+  description,
   children,
 }: {
   icon: LucideIcon;
   title: string;
-  /** Renders an "Optional" pill beside the title. */
-  optional?: boolean;
+  description?: string;
   children: React.ReactNode;
 }) {
   // `min-w-0` because a fieldset defaults to `min-inline-size: min-content`,
   // which long <select> option labels (the country list) would otherwise use to
   // push the card wider than its column.
   return (
-    <fieldset className="min-w-0 rounded-3xl bg-surface p-4 shadow-lift ring-1 ring-black/[0.04] sm:p-5">
-      <legend className="flex items-center gap-2.5">
-        <IconTile icon={Icon} size="sm" />
-        <span className="text-sm font-black uppercase tracking-[0.12em] text-ink">{title}</span>
-        {optional && <StatusBadge tone="neutral">Optional</StatusBadge>}
+    <fieldset className={cn('min-w-0', PANEL)}>
+      {/* Floated so the browser stops rendering it as a straddling legend,
+          which would sit on top of the panel's rounded edge instead of inside
+          its padding. */}
+      <legend className="float-left w-full">
+        <PanelTitle icon={icon} title={title} description={description} />
       </legend>
-      <div className="mt-3.5 grid gap-4 sm:grid-cols-2">{children}</div>
+      <div className="clear-both grid gap-4 pt-4 sm:grid-cols-2">{children}</div>
     </fieldset>
   );
 }
 
+/** A field that takes the whole row of a section's two-column grid. */
+function Wide({ children }: { children: React.ReactNode }) {
+  // A wrapper rather than a col-span class on the field: `className` on the
+  // field primitives styles the control itself, not the grid item.
+  return <div className="sm:col-span-2">{children}</div>;
+}
+
 /** One line of the side rail's checklist. */
-function ChecklistRow({
-  label,
-  done,
-  optional,
-}: {
-  label: string;
-  done: boolean;
-  optional?: boolean;
-}) {
+function ChecklistRow({ label, done }: { label: string; done: boolean }) {
   const Icon = done ? CircleCheck : CircleDashed;
   return (
-    <li className="flex items-center gap-2 text-sm">
+    <li className="flex items-center gap-2.5 text-sm">
       <Icon
         aria-hidden
         size={16}
@@ -160,93 +220,96 @@ function ChecklistRow({
         className={done ? 'shrink-0 text-success' : 'shrink-0 text-muted'}
       />
       <span className={done ? 'font-medium text-ink' : 'text-muted'}>{label}</span>
-      {optional && !done && (
-        <span className="ml-auto text-[11px] font-medium uppercase tracking-wide text-muted">
-          Optional
-        </span>
-      )}
       <span className="sr-only">{done ? ' — complete' : ' — not filled in'}</span>
     </li>
   );
 }
 
 /**
- * The side rail: pass preview, photo picker, and a live checklist.
+ * The side rail: the mandatory photo (with the pass it will appear on), and a
+ * live checklist of what is still outstanding.
  *
  * Its own component so that `useWatch` re-renders only the rail as fields are
  * typed, leaving the form's inputs untouched — and so the page never calls
  * `watch()`, which would opt the whole screen out of compiler memoization.
+ *
+ * It is first in the DOM, and placed into the second column only from `lg` up.
+ * On a phone that puts the required photo at the top of the flow rather than
+ * stranded below every field; the checklist, which is an at-a-glance aid rather
+ * than a control, is desktop-only, because the sticky bar already carries the
+ * same count where the rail is not shown.
  */
 function ProfileRail({
   control,
   participantId,
   location,
   photo,
+  photoError,
   onPhotoChange,
+  className,
 }: {
   control: Control<FormValues>;
   participantId: string;
   location: LocationValue;
   photo: string | null;
+  photoError?: string;
   onPhotoChange: (dataUrl: string | null) => void;
+  className?: string;
 }) {
   const values = useWatch({ control });
-  const progress = progressOf(values, location);
+  const progress = progressOf(values, location, photo);
   const complete = progress.filled === progress.total;
 
   const displayName = values.full_name?.trim() || 'Your name';
   const chips = [values.house, values.program, location.city].filter(Boolean) as string[];
 
   return (
-    <aside className="flex flex-col gap-5 lg:sticky lg:top-4 lg:self-start">
-      <section
-        aria-labelledby="pass-preview-title"
-        className="flex flex-col gap-4 rounded-3xl bg-surface p-4 shadow-lift ring-1 ring-black/[0.04] sm:p-5"
-      >
-        <div className="flex items-center gap-2.5">
-          <IconTile icon={IdCard} size="sm" />
-          <h2
-            id="pass-preview-title"
-            className="text-sm font-black uppercase tracking-[0.12em] text-ink"
-          >
-            Your Pass
-          </h2>
-        </div>
+    <aside className={cn('flex flex-col gap-5 lg:sticky lg:top-4 lg:self-start', className)}>
+      <section aria-labelledby="photo-panel-title" className={cn('flex flex-col gap-4', PANEL)}>
+        <PanelTitle
+          icon={Camera}
+          title="Profile Photo"
+          headingId="photo-panel-title"
+          badge={<StatusBadge tone="danger">Required</StatusBadge>}
+        />
 
-        {/* The same gradient digital-ID card as My QR, so what the photo and
-            name are for is visible while they are being entered. */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-accent p-4 shadow-lift">
-          <div
-            aria-hidden
-            className="absolute -right-10 -top-12 h-32 w-32 rounded-full bg-white/20 blur-2xl"
-          />
-          <div className="relative flex items-center gap-3 rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
-            <Avatar src={photo} name={displayName} size={40} />
-            <div className="min-w-0 text-left text-white">
-              <p className="truncate text-sm font-semibold">{displayName}</p>
-              <p className="truncate text-xs opacity-80">ID: {participantId}</p>
+        <PhotoUpload value={photo} onChange={onPhotoChange} error={photoError} required />
+
+        <div className="flex flex-col gap-2 border-t border-line pt-4">
+          <span className={MICRO_LABEL}>Pass preview</span>
+          {/* The same gradient digital-ID card as My QR, so what the photo and
+              name are for is visible while they are being entered. */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-accent p-4 shadow-lift">
+            <div
+              aria-hidden
+              className="absolute -right-10 -top-12 h-32 w-32 rounded-full bg-white/20 blur-2xl"
+            />
+            <div className="relative flex items-center gap-3 rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
+              <Avatar src={photo} name={displayName} size={40} />
+              <div className="min-w-0 text-left text-white">
+                <p className="truncate text-sm font-semibold">{displayName}</p>
+                <p className="truncate text-xs opacity-80">ID: {participantId}</p>
+              </div>
             </div>
+            {chips.length > 0 && (
+              <div className="relative mt-3 flex flex-wrap gap-1.5">
+                {chips.map((chip) => (
+                  <span
+                    key={chip}
+                    className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          {chips.length > 0 && (
-            <div className="relative mt-3 flex flex-wrap gap-1.5">
-              {chips.map((chip) => (
-                <span
-                  key={chip}
-                  className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"
-                >
-                  {chip}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
-
-        <PhotoUpload value={photo} onChange={onPhotoChange} />
       </section>
 
       <section
-        aria-labelledby="progress-title"
-        className="flex flex-col gap-3 rounded-3xl bg-surface p-4 shadow-lift ring-1 ring-black/[0.04] sm:p-5"
+        aria-labelledby="progress-panel-title"
+        className={cn('hidden flex-col gap-4 lg:flex', PANEL)}
       >
         <div className="flex items-center gap-3">
           <ProgressRing
@@ -259,70 +322,55 @@ function ProfileRail({
           />
           <div className="min-w-0">
             <h2
-              id="progress-title"
+              id="progress-panel-title"
               className="text-sm font-black uppercase tracking-[0.12em] text-ink"
             >
               Progress
             </h2>
             <p className="text-xs text-muted">
-              {progress.filled} of {progress.total} required fields
+              {progress.filled} of {progress.total} required answers
             </p>
           </div>
         </div>
 
-        <ul className="flex flex-col gap-2 border-t border-line pt-3">
+        <ul className="flex flex-col gap-2.5 border-t border-line pt-4">
           <ChecklistRow label="Personal" done={progress.personal} />
           <ChecklistRow label="Location" done={progress.location} />
           <ChecklistRow label="Academic & Mess" done={progress.academic} />
-          <ChecklistRow label="Emergency Contact" done={progress.emergency} optional />
-          <ChecklistRow label="Photo" done={Boolean(photo)} optional />
+          <ChecklistRow label="Profile photo" done={progress.photo} />
         </ul>
       </section>
     </aside>
   );
 }
 
-/** Live count beside the submit button, in the sticky action bar. */
-function RequiredFieldsHint({
-  control,
-  location,
-}: {
-  control: Control<FormValues>;
-  location: LocationValue;
-}) {
-  const values = useWatch({ control });
-  const { filled, total } = progressOf(values, location);
-  const left = total - filled;
-
-  return (
-    <p className="text-xs text-muted">
-      {left === 0
-        ? 'All required fields are filled in.'
-        : `${left} required field${left === 1 ? '' : 's'} left.`}
-    </p>
-  );
-}
-
 /**
- * Complete Your Profile — the last step of signing in, laid out as a form
- * beside a live side rail on wide viewports and a single column on a phone.
+ * Complete Your Profile — the last step of signing in, laid out as a stack of
+ * field panels beside a live side rail on wide viewports and a single column on
+ * a phone.
  *
  * Fields match ProfileCompleteRequest exactly; location and photo are
- * custom-controlled and validated separately from react-hook-form's fields.
+ * custom-controlled and validated separately from react-hook-form's fields. The
+ * photo is required here, on the frontend: the backend accepts a profile
+ * without one, but a pass with no photo is not usable at a checkpoint, so the
+ * form will not submit until one is picked.
  *
  * Doubles as the edit screen, reached from Profile → Edit profile, and opens
  * already answered from the stored session in that case. That matters for more
  * than convenience: `PATCH /profile/complete` replaces the whole profile
  * document, so a blank form would submit a blank record over a complete one.
- * `mess_preference` and the emergency contact are the exception — `/auth/login`
- * does not return them, so they can only be prefilled within the session that
- * saved them, and the checklist shows when they still need an answer.
+ * `mess_preference` is the exception — `/auth/login` does not return it, so it
+ * can only be prefilled within the session that saved it, and the checklist
+ * shows when it still needs an answer. For the same reason the stored emergency
+ * contact is resubmitted untouched: the screen no longer collects one, and
+ * leaving it out of the payload would erase a contact already on file.
  *
  * The rail exists because the form's fields are capped at a readable measure,
  * which left a wide screen empty on both sides of a narrow column. It carries
- * the pass preview (the same gradient digital-ID card the participant will
- * carry at checkpoints, so the photo has a visible purpose), the photo picker,
- * and a live checklist — rather than a taller stack of the same fields.
+ * the mandatory photo picker and the pass preview (the same gradient digital-ID
+ * card the participant will carry at checkpoints, so the photo has a visible
+ * purpose), plus a live checklist — rather than a taller stack of the same
+ * fields.
  *
  * Rendered in the shared AuthLayout shell: this route sits outside the app's
  * nav shell, so it wears the same festival-sky backdrop, wordmark and surface
@@ -349,9 +397,6 @@ export default function CompleteProfilePage() {
       address: participant?.address ?? '',
       program: participant?.program ?? '',
       course_stage: participant?.course_stage ?? '',
-      emergency_contact_name: participant?.emergency_contact?.name ?? '',
-      emergency_contact_relation: participant?.emergency_contact?.relation ?? '',
-      emergency_contact_phone: participant?.emergency_contact?.phone ?? '',
     },
   });
 
@@ -363,6 +408,7 @@ export default function CompleteProfilePage() {
   const [photo, setPhoto] = useState<string | null>(participant?.photo ?? null);
   const [customErrors, setCustomErrors] = useState<{
     location?: Partial<Record<keyof LocationValue, string>>;
+    photo?: string;
   }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -376,27 +422,29 @@ export default function CompleteProfilePage() {
   // participant has nothing to go back to, so the back control is hidden.
   const isEditing = session.full_name !== null;
 
+  function choosePhoto(dataUrl: string | null) {
+    setPhoto(dataUrl);
+    // Clear the "photo required" message the moment one is picked, rather than
+    // leaving it up until the next submit.
+    if (dataUrl) setCustomErrors((prev) => ({ ...prev, photo: undefined }));
+  }
+
   function validateCustom(): boolean {
     const locErrors: Partial<Record<keyof LocationValue, string>> = {};
     if (!location.country) locErrors.country = 'Country is required.';
     if (!location.state) locErrors.state = 'State is required.';
     if (!location.city) locErrors.city = 'City is required.';
-    setCustomErrors({ location: Object.keys(locErrors).length ? locErrors : undefined });
-    return Object.keys(locErrors).length === 0;
+    const photoError = photo ? undefined : 'A profile photo is required.';
+    setCustomErrors({
+      location: Object.keys(locErrors).length ? locErrors : undefined,
+      photo: photoError,
+    });
+    return Object.keys(locErrors).length === 0 && !photoError;
   }
 
   async function onSubmit(formValues: FormValues) {
     setSubmitError(null);
     if (!validateCustom()) return;
-
-    const emergency_contact =
-      formValues.emergency_contact_name && formValues.emergency_contact_phone
-        ? {
-            name: formValues.emergency_contact_name.trim(),
-            relation: formValues.emergency_contact_relation?.trim() ?? '',
-            phone: formValues.emergency_contact_phone.trim(),
-          }
-        : undefined;
 
     const payload: ProfileCompleteRequest = {
       full_name: formValues.full_name.trim(),
@@ -409,7 +457,9 @@ export default function CompleteProfilePage() {
       state: location.state,
       city: location.city,
       address: formValues.address.trim(),
-      emergency_contact,
+      // Carried through untouched: the profile document is replaced wholesale,
+      // so an existing contact has to be resent to survive this save.
+      emergency_contact: session.emergency_contact ?? undefined,
       program: formValues.program,
       course_stage: formValues.course_stage,
       photo: photo ?? undefined,
@@ -418,7 +468,14 @@ export default function CompleteProfilePage() {
     try {
       const updated = await api.completeProfile(payload);
       updateParticipantProfile(updated);
-      navigate(postLoginRoute({ ...session, ...updated }), { replace: true });
+      // A first-time completion continues the sign-up: the next thing a student
+      // has to decide is whether they need a bed and meals, and rooms are
+      // finite, so that question is asked once, here, rather than left to be
+      // discovered on a dashboard panel. Editing an existing profile is not
+      // sign-up and goes back where it came from.
+      navigate(isEditing ? postLoginRoute({ ...session, ...updated }) : ROUTES.accommodation, {
+        replace: true,
+      });
     } catch (e) {
       setSubmitError(
         e instanceof ApiClientError ? e.message : 'Could not save your profile. Please try again.',
@@ -432,6 +489,7 @@ export default function CompleteProfilePage() {
       align="top"
       backTo={isEditing ? ROUTES.profile : undefined}
       mark={<IconTile icon={FileEdit} size="lg" />}
+      markInline
       title={isEditing ? 'Edit Your Profile' : 'Complete Your Profile'}
     >
       {submitError && (
@@ -446,13 +504,22 @@ export default function CompleteProfilePage() {
         noValidate
       >
         {/* The fields keep a readable measure; the rail uses the space that
-            leaves on a wide screen. Both collapse to one column on a phone. */}
+            leaves on a wide screen. Both collapse to one column on a phone,
+            where the rail's photo panel leads instead of trailing. */}
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
-          <div className="flex flex-col gap-5">
+          <ProfileRail
+            className="lg:col-start-2 lg:row-start-1"
+            control={control}
+            participantId={session.id}
+            location={location}
+            photo={photo}
+            photoError={customErrors.photo}
+            onPhotoChange={choosePhoto}
+          />
+
+          <div className="flex flex-col gap-5 lg:col-start-1 lg:row-start-1">
             <FormSection icon={User} title="Personal">
-              {/* Wrapped rather than given a col-span class: `className` on the
-                  field primitives styles the control itself, not the grid item. */}
-              <div className="sm:col-span-2">
+              <Wide>
                 <TextInput
                   label="Full Name"
                   required
@@ -461,7 +528,7 @@ export default function CompleteProfilePage() {
                   error={errors.full_name?.message}
                   {...register('full_name', { required: 'Full name is required.' })}
                 />
-              </div>
+              </Wide>
               <TextInput
                 label="Date of Birth"
                 type="date"
@@ -535,73 +602,39 @@ export default function CompleteProfilePage() {
                 error={errors.course_stage?.message}
                 {...register('course_stage', { required: 'Course stage is required.' })}
               />
-              <Select
-                label="Mess Preference"
-                required
-                placeholder="Select preference"
-                options={MESS_PREF_OPTIONS}
-                error={errors.mess_preference?.message}
-                {...register('mess_preference', { required: 'Mess preference is required.' })}
-              />
-            </FormSection>
-
-            <FormSection icon={Siren} title="Emergency Contact" optional>
-              <div className="sm:col-span-2">
-                <TextInput
-                  label="Contact Name"
-                  autoComplete="off"
-                  placeholder="e.g. Meera Raghavan"
-                  {...register('emergency_contact_name')}
+              <Wide>
+                <Select
+                  label="Mess Preference"
+                  required
+                  placeholder="Select preference"
+                  options={MESS_PREF_OPTIONS}
+                  error={errors.mess_preference?.message}
+                  {...register('mess_preference', { required: 'Mess preference is required.' })}
                 />
-              </div>
-              <TextInput
-                label="Relation"
-                autoComplete="off"
-                placeholder="e.g. Parent"
-                {...register('emergency_contact_relation')}
-              />
-              <TextInput
-                label="Contact Phone"
-                type="tel"
-                autoComplete="off"
-                placeholder="10 digits"
-                error={errors.emergency_contact_phone?.message}
-                {...register('emergency_contact_phone', {
-                  // Same rule as the participant's own number, so one field is
-                  // not stricter than the other about the same kind of answer.
-                  pattern: { value: /^\d{10}$/, message: 'Enter a 10-digit phone number.' },
-                })}
-              />
+              </Wide>
             </FormSection>
           </div>
-
-          <ProfileRail
-            control={control}
-            participantId={session.id}
-            location={location}
-            photo={photo}
-            onPhotoChange={setPhoto}
-          />
         </div>
 
-        {/* Sticky action bar — the same one the admin editors use, so a long
-            form never hides its primary action below the fold, and the same
-            Save / Cancel pairing when there is an existing record to return to. */}
-        <div className="safe-bottom sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t border-line bg-canvas/95 py-4 backdrop-blur">
-          <Button type="submit" size="lg" loading={isSubmitting}>
-            {isEditing ? 'Save changes' : 'Save and continue'}
-          </Button>
-          {isEditing && (
-            <Button
-              type="button"
-              size="lg"
-              variant="ghost"
-              onClick={() => navigate(ROUTES.profile)}
-            >
-              Cancel
+        {/* Sticky action bar — the same Save-then-Cancel pairing the admin
+            editors use, so a long form never hides its primary action below the
+            fold. */}
+        <div className="safe-bottom sticky bottom-0 z-10 border-t border-line bg-canvas/95 py-4 backdrop-blur">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+            <Button type="submit" size="lg" loading={isSubmitting}>
+              {isEditing ? 'Save changes' : 'Save and continue'}
             </Button>
-          )}
-          <RequiredFieldsHint control={control} location={location} />
+            {isEditing && (
+              <Button
+                type="button"
+                size="lg"
+                variant="ghost"
+                onClick={() => navigate(ROUTES.profile)}
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </AuthLayout>

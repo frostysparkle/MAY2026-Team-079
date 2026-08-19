@@ -181,7 +181,7 @@ describe('summariseEvents', () => {
       {},
       NOW,
     );
-    expect(summariseEvents(rows, 6).startingSoon.map((row) => row.id)).toEqual(['Soon']);
+    expect(summariseEvents(rows, 6, NOW).startingSoon.map((row) => row.id)).toEqual(['Soon']);
   });
 
   it('reports zero totals rather than null for an empty fest', () => {

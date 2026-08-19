@@ -87,16 +87,29 @@ export function buildHostelRows(
 export interface HostelSummary {
   hostels: number;
   beds: number;
-  /** Blocks and beds per category, and that as a share of every bed. */
+  /**
+   * Blocks, beds, and real occupancy per category.
+   *
+   * `percent` is allocated-within-this-category, never the category's share of
+   * total capacity. The two are easy to confuse and the summary used to report
+   * the latter next to a progress bar, so 16 empty men's blocks read as "73%".
+   */
   byCategory: {
     category: HostelCategory;
     label: string;
     hostels: number;
     beds: number;
-    share: number | null;
+    allocated: number | null;
+    percent: number | null;
   }[];
   /** Blocks with at least one team member assigned. */
   staffed: number;
+  /**
+   * Blocks with at least one participant allocated, or `null` when statistics
+   * are unreadable. "How many blocks are in use" is a different question from
+   * "how many exist", and only the first one tells an admin anything.
+   */
+  occupied: number | null;
   /** Total allocated across every block, or `null` when statistics are unreadable. */
   allocated: number | null;
   /** Beds still free, or `null` when the allocated total is unreadable. */
@@ -118,12 +131,14 @@ export function summariseHostels(rows: HostelRow[]): HostelSummary {
     .map((category) => {
       const blocks = rows.filter((r) => r.category === category);
       const categoryBeds = blocks.reduce((sum, r) => sum + r.capacity, 0);
+      const categoryAllocated = totalAllocated(blocks);
       return {
         category,
         label: hostelCategoryLabel(category),
         hostels: blocks.length,
         beds: categoryBeds,
-        share: share(categoryBeds, beds),
+        allocated: categoryAllocated,
+        percent: share(categoryAllocated, categoryBeds),
       };
     })
     .filter((entry) => entry.hostels > 0);
@@ -133,6 +148,8 @@ export function summariseHostels(rows: HostelRow[]): HostelSummary {
     beds,
     byCategory,
     staffed: rows.filter((r) => r.staffed).length,
+    // Unreadable statistics must not read as "no block is in use".
+    occupied: allocated === null ? null : rows.filter((r) => (r.allocated ?? 0) > 0).length,
     allocated,
     // Never negative: an over-allocated campus has no beds left, not "-4" of them.
     available: allocated === null ? null : Math.max(0, beds - allocated),

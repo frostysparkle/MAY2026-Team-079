@@ -18,6 +18,7 @@ export { ConfirmDialog } from './ConfirmDialog';
 export { ActionMenu } from './ActionMenu';
 export type { ActionMenuItem } from './ActionMenu';
 export { SectionHeading } from './SectionHeading';
+export { DetailPanel, FactList, Fact } from './DetailPanel';
 export { AuroraBackdrop } from './AuroraBackdrop';
 export { FAB } from './FAB';
 export { Pagination, usePagedList, DEFAULT_PAGE_SIZE } from './Pagination';

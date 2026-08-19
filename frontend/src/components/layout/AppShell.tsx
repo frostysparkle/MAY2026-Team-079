@@ -19,6 +19,7 @@ const NAV: { to: string; label: string }[] = [
   { to: ROUTES.events, label: 'Events' },
   { to: ROUTES.workshops, label: 'Workshops' },
   { to: ROUTES.schedule, label: 'Schedule' },
+  { to: ROUTES.accommodation, label: 'Stay' },
   { to: ROUTES.myQr, label: 'My QR' },
   { to: ROUTES.profile, label: 'Profile' },
 ];
