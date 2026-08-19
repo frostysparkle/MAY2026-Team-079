@@ -1550,7 +1550,8 @@ paths:
         text-embeddings-inference, ...) purely by changing configuration.
         Request and response shapes match the openai library's
         client.embeddings.create(...) exactly, so any OpenAI SDK client can
-        call this endpoint as a drop-in.
+        call this endpoint as a drop-in. Requires authentication (participant
+        or staff) and is rate limited to one call per user per minute.
       operationId: create_embedding_embeddings_post
       requestBody:
         content:

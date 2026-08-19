@@ -48,8 +48,13 @@ def fake_client(monkeypatch):
     return fake
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def participant_token():
+    """
+    Function-scoped (not module-scoped): each test gets its own user, so the
+    per-user rate limit on POST /embeddings can't make one test's call count
+    against another's.
+    """
     rand_id = random.randint(100000, 999999)
     email = f"23f{rand_id}@ds.study.iitm.ac.in"
     password = "secure_password"

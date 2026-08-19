@@ -2511,7 +2511,7 @@
           "Embeddings"
         ],
         "summary": "Create Embedding",
-        "description": "Text -> embedding vector(s), proxied to whatever OpenAI-compatible\nprovider this deployment is configured for (see the EMBEDDINGS_* /\nOPENAI_* env vars above). Request and response shapes match the openai\nlibrary's `client.embeddings.create(...)` exactly.\n\nOptional fields are only forwarded when set, rather than as explicit\nnulls, since some local OpenAI-compatible servers reject unrecognised\nnull fields.",
+        "description": "Text -> embedding vector(s), proxied to whatever OpenAI-compatible\nprovider this deployment is configured for (see the EMBEDDINGS_* /\nOPENAI_* env vars above). Request and response shapes match the openai\nlibrary's `client.embeddings.create(...)` exactly.\n\nRequires authentication (participant or staff), and is rate limited to\none call per user per RATE_LIMIT_SECONDS to keep it from being used as a\nfree-standing embeddings proxy.\n\nOptional fields are only forwarded when set, rather than as explicit\nnulls, since some local OpenAI-compatible servers reject unrecognised\nnull fields.",
         "operationId": "create_embedding_embeddings_post",
         "requestBody": {
           "content": {
