@@ -1,0 +1,178 @@
+[
+  {
+    "hostel_id": "HS01",
+    "name": "Alakananda",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS02",
+    "name": "Brahmaputra",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS03",
+    "name": "Cauvery",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS04",
+    "name": "Ganga",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS05",
+    "name": "Godavari",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS06",
+    "name": "Jamuna",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS07",
+    "name": "Krishna",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS08",
+    "name": "Mahanadi",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS09",
+    "name": "Mandakini A",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS10",
+    "name": "Mandakini B",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS11",
+    "name": "Narmada",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS12",
+    "name": "Pampa",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS13",
+    "name": "Saraswathi",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS14",
+    "name": "Sindhu",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS15",
+    "name": "Tamiraparani",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS16",
+    "name": "Tapti",
+    "category": "men",
+    "gender": "male",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS17",
+    "name": "Bhadra",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS18",
+    "name": "Sabarmati",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS19",
+    "name": "Sarayu",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS20",
+    "name": "Sharavathi",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS21",
+    "name": "Swarnamukhi",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  },
+  {
+    "hostel_id": "HS22",
+    "name": "Tunga",
+    "category": "women",
+    "gender": "female",
+    "capacity": 300,
+    "coordinator": {}
+  }
+]

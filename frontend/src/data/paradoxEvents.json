@@ -1,0 +1,2744 @@
+[
+  {
+    "event_id": "22",
+    "event_type": "sports",
+    "name": "Last1Standing",
+    "description": "Last1Standing is a competitive elimination-based event featuring multiple fun games and challenges designed to test participants’ presence of mind, strategy, communication, intelligence, speed, adaptability, luck, and quick decision-making skills.",
+    "poster": "/images/events/posters/22.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/12jri3M-V2l7BnEhQYi8AyGp69Yv4t3Fl-7SS8qEr5oQ/",
+      "faqs": "[{\"q\":\"What should participants carry?\",\"a\":\"A valid IITM BS ID card, a charged mobile phone (if instructed), comfortable clothing and footwear, and a water bottle (recommended).\"},{\"q\":\"Will instructions be provided before every round?\",\"a\":\"Yes. Organisers and moderators explain the rules and objectives before the start of every round.\"},{\"q\":\"Is the event solo or team-based?\",\"a\":\"Primarily a solo competition, though some rounds may temporarily involve duos or teams for specific challenges.\"},{\"q\":\"How many rounds are there?\",\"a\":\"One online preliminary round and four offline elimination rounds during Paradox.\"},{\"q\":\"Do I need prior gaming experience?\",\"a\":\"No. The event is designed for everyone — presence of mind, communication, strategy, adaptability, and quick thinking matter more.\"},{\"q\":\"Can eliminated participants re-enter?\",\"a\":\"No. Once eliminated, participants cannot re-enter unless officially announced under exceptional circumstances.\"},{\"q\":\"Is the organisers’ decision final?\",\"a\":\"Yes. Decisions on gameplay, verification, scoring, penalties, and qualifications are final and binding.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"2 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]",
+      "round_when": "[\"2 Jun, 04:00 pm · Online\",\"10 Jun, 03:30 pm\",\"12 Jun, 08:00 am\",\"12 Jun, 11:00 am\",\"13 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Preliminary Round",
+        "description": "Online rounds shortlist the top 80 players for the offline games. The round is played on Blooket (a luck-and-strategy game) in the browser — no software to install.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Task Rush",
+        "description": "Each participant gets a unique task and must prove its completion. The first 40 across multiple lobbies advance to Round 2. Tasks are fun and easy, like “click a picture with a person wearing glasses”.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Dual Challenge",
+        "description": "The 40 winners split into two groups of 20. Game A is a 1v1 where both players complete 5 challenges — first to finish advances. Game B is a 2v2 obstacle course where one player is blindfolded and guided by verbal instructions.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Steal or No Steal",
+        "description": "The 20 Round-2 winners play Steal or No Steal; 10 are eliminated and 10 advance. See the rulebook for full details.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN102"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Points Championship",
+        "description": "The 10 finalists complete a set of specially designed tasks, earning points plus bonuses for the fastest completions. The player topping the leaderboard is crowned the Last1Standing champion of Paradox’26.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN201"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "74",
+    "event_type": "sports",
+    "name": "Sprintsaga",
+    "description": "Sprint Saga is a high-energy athletics event testing speed, strength, endurance, and competitive spirit through track and field competitions — sprints plus field events like Discus Throw and Shot Put, run under standard athletics rules.",
+    "poster": "/images/events/posters/74.avif",
+    "team": {
+      "min": 1,
+      "max": 4,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1oEO_mw4pnmWMy78Zz2lsVDuWENpydApDAzuidz3kfIg/",
+      "faqs": "[{\"q\":\"Who can participate?\",\"a\":\"All BS-registered students of the college are eligible.\"},{\"q\":\"What equipment is used in throwing events?\",\"a\":\"Shot Put: 7.26kg (Men), 4kg (Women). Discus: 2kg (Men), 1kg (Women).\"},{\"q\":\"Are spikes allowed?\",\"a\":\"No. Spikes are not allowed to ensure fairness among participants.\"},{\"q\":\"Are there awards and certificates?\",\"a\":\"Yes. Medals and certificates are awarded to top performers in individual and relay events.\"},{\"q\":\"Will medical assistance be available?\",\"a\":\"Yes. First aid, medical volunteers, and hydration zones will be available.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 4\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"9 June\"}]",
+      "round_when": "[\"10 Jun, 06:00 am\",\"10 Jun, 06:00 am\",\"11 Jun, 03:00 pm\",\"11 Jun, 03:00 pm\",\"12 Jun, 06:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "100m Sprint (Gender-wise)",
+        "description": "A short-distance race testing speed and reaction time. Runners use the starting blocks provided; false starts lead to disqualification. Spikes are not allowed.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Manohar C Watsa Stadium"
+      },
+      {
+        "round_id": "RND2",
+        "name": "400m Sprint (Gender-wise)",
+        "description": "A one-lap race testing speed and stamina. Athletes stay in lane throughout; the fastest official time wins. Spikes are not allowed.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Manohar C Watsa Stadium"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Shot Put (Gender-wise)",
+        "description": "A throwing event testing strength and control. Three attempts each; the farthest valid throw counts.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Discus Throw (Gender-wise)",
+        "description": "A field event testing balance, technique, and power. Three attempts each; the best valid throw decides the ranking.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Relay Race (4×400m Mixed Relay)",
+        "description": "An inter-house relay with teams of two male and two female athletes. Coordination and smooth baton passing are key.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Manohar C Watsa Stadium"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "75",
+    "event_type": "sports",
+    "name": "Kampus Run",
+    "description": "Kampus Run is a campus-wide running event centered on mental wellness, fitness, and participation. It features a 3 KM fun run and a 5 KM competitive race along a predefined route, encouraging everyone to stay active.",
+    "poster": "/images/events/posters/75.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vSWGI8y2yB9v-df3JQBYlg0r_nGNeNoy0eouE_WfEvxZsrrtbrWXengxOLMv1MX_l96IN5sWIHYIBz0/pub",
+      "faqs": "[{\"q\":\"What are the categories?\",\"a\":\"A 3 KM participation-based fun run and a 5 KM competitive run.\"},{\"q\":\"What are the reporting and start timings?\",\"a\":\"3 KM: report by 05:00 AM, start 06:00 AM. 5 KM: report by 05:30 AM, start 06:30 AM. Late arrivals may not participate.\"},{\"q\":\"Are bibs mandatory?\",\"a\":\"Yes. Bibs are provided and must be worn visibly on the front throughout the run; running without one leads to disqualification.\"},{\"q\":\"Can I switch between 3 KM and 5 KM?\",\"a\":\"No. Participants compete in the category they registered for; changes are not permitted on or after the event day.\"},{\"q\":\"Will there be hydration and medical support?\",\"a\":\"Yes. Hydration stations are placed along the route, with first-aid support at multiple locations.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]",
+      "round_when": "[\"11 Jun, 05:00 am\",\"11 Jun, 05:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "3 KM Run — Rise & Move",
+        "description": "A fun, non-competitive run open to all fitness levels — run, jog, or walk. Aligned with the theme of mental health and wellness.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IITM Campus"
+      },
+      {
+        "round_id": "RND2",
+        "name": "5 KM Run — Compete & Challenge",
+        "description": "The competitive segment with age-wise and gender-wise categories, testing endurance, pace, stamina, and focus.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IITM Campus"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "76",
+    "event_type": "sports",
+    "name": "IPL Auction Showdown 4.0",
+    "description": "The IPL Auction Showdown is a strategy-based event where participants act as team owners in a simulated player auction. With a fixed budget, they bid for players, build balanced squads, and compete on strategic decisions.",
+    "poster": "/images/events/posters/76.avif",
+    "team": {
+      "min": 3,
+      "max": 3,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vRRRNJb-DksmOUbn5OKbGpwmQrAIHOJz2cGESXk0GoqTc5FN26n6wR7vBAFH486QsdDtiKALynlVgEb/pub",
+      "faqs": "[{\"q\":\"Who places the bids?\",\"a\":\"Only the designated House Representative (Bidder). A backup bidder must be nominated before the auction; mid-bid substitutions are not allowed.\"},{\"q\":\"How does bidding work?\",\"a\":\"Players enter at a base price and all bids follow a strict incremental structure; invalid increments are rejected.\"},{\"q\":\"How is the winner determined?\",\"a\":\"Each player has predefined points; teams score based on their Playing XI, with multipliers for captain and vice-captain. Highest total wins.\"},{\"q\":\"Are player points fixed?\",\"a\":\"Yes. All points are predefined and fixed before the auction and do not change during or after the event.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"3\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"4 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"3 June\"}]",
+      "round_when": "[\"4 Jun, 06:00 pm\",\"10 Jun, 12:30 pm\",\"11 Jun, 11:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Qualifiers — Unstop Round",
+        "description": "A quiz on cricket, IPL dynamics, and auction strategy. The top 3 per house qualify for the main auction.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Auction Day 1 — Build Your Core",
+        "description": "Teams enter the live auction with an 80-crore budget to build a squad of 11–15 players, securing key players and a strong core.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 202"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Auction Day 2 — The Final Moves",
+        "description": "Teams complete their squads within the player limit and budget. The best-constructed, strategically balanced squad wins.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 301"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "77",
+    "event_type": "sports",
+    "name": "Squid Games",
+    "description": "Step into a Squid Game-inspired showdown: a treasure hunt for limited entry passes followed by five gripping elimination rounds where strategy, agility, and teamwork are your only weapons.",
+    "poster": "/images/events/posters/77.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1KfNqtOjXILoJBVtfMvV_o0quePXtMfvLyKt01074Wdo/",
+      "faqs": "[{\"q\":\"Is this a team or individual event?\",\"a\":\"Primarily individual, but some rounds require temporary team formations.\"},{\"q\":\"How many people can participate?\",\"a\":\"There is no registration limit, but only 350 player cards (from the treasure hunt) grant access to the main event.\"},{\"q\":\"Is there a physical fitness requirement?\",\"a\":\"It is accessible to all fitness levels; strategic thinking and mental agility matter most.\"},{\"q\":\"What safety precautions are in place?\",\"a\":\"All games are supervised and safety measures are strictly enforced.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"6\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"9 June\"}]",
+      "round_when": "[\"11 Jun, 09:30 am\",\"11 Jun, 03:30 pm\",\"11 Jun, 04:30 pm\",\"11 Jun, 05:00 pm\",\"11 Jun, 05:30 pm\",\"11 Jun, 06:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Treasure Hunt",
+        "description": "Solve riddles pointing to campus locations to claim one of 350 entry cards — your only passage to the main event.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Red Light Green Light",
+        "description": "A college makeover of the classic game with a ticking timer — sprint on green, freeze on red. Only top contestants advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Hitch Hike",
+        "description": "Teams of four form a human chain to collect and transport balls across the field. The top three teams advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND4",
+        "name": "90-Second Collapse",
+        "description": "A duo challenge: balance a ball head-to-goal, then knock down a pyramid of cups with the non-dominant hand — all within 90 seconds.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Glass Bridge",
+        "description": "A safe take on the glass-bridge scene, testing courage and decision-making across a platform of mystery.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      },
+      {
+        "round_id": "RND6",
+        "name": "The Wright Way",
+        "description": "A real-life labyrinth built on trust and communication — a blindfolded teammate is guided through twists and turns.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "KV Ground"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "78",
+    "event_type": "sports",
+    "name": "Paradox Champions League",
+    "description": "The Paradox Champions League is an inter-house 7-a-side football tournament with group stages and knockouts, rewarding teamwork, positioning, and quick decision-making.",
+    "poster": "/images/events/posters/78.avif",
+    "team": {
+      "min": 7,
+      "max": 9,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vTKj_9bJ4bqYT_q2gD9wyDh24EGUH9s-35t6NaUbr2HjauNprUfFFi2WQgWIAqgXi83dseiCQa16Z9o/pub",
+      "faqs": "[{\"q\":\"What is the tournament format?\",\"a\":\"12 houses in 4 groups of 3. Each team plays two group matches; the top team per group advances to the semi-finals, then the final.\"},{\"q\":\"What is the match format?\",\"a\":\"7-a-side. Group matches are two 10-minute halves; semi-finals and finals run longer as specified in the rulebook.\"},{\"q\":\"What is the team composition?\",\"a\":\"Seven players on the field including a goalkeeper, plus up to 2 substitutes (squad of 9).\"},{\"q\":\"What footwear is allowed?\",\"a\":\"Football studs or spikes are strictly prohibited; wear appropriate sports shoes.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"7 – 9\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "round_when": "[\"10 Jun, 06:00 am\",\"11 Jun, 03:30 pm\",\"12 Jun, 07:00 am\",\"13 Jun, 07:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Trials — House Selections",
+        "description": "Each house selects its squad based on technical ability, positioning, passing, ball control, and defensive discipline.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Football Ground"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Group Stage",
+        "description": "All 12 houses compete; teams balance attack and defense to secure a place in the knockouts.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Football Ground"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Semi-Finals",
+        "description": "Top houses meet in high-intensity encounters where coordination and composure are crucial.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Football Ground"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Finals",
+        "description": "The two best houses compete for the championship in the ultimate test of skill and teamwork.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Football Ground"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "79",
+    "event_type": "sports",
+    "name": "The Burn Club",
+    "description": "The Burn Club is a high-energy Zumba fitness workshop focused on movement, wellness, and community. Organised by PRAVĀHA – Dance Society and Sportify, it’s a fun, inclusive space to dance, de-stress, and stay active.",
+    "poster": "/images/events/posters/79.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1w4zRnEwDJx5PdtQoQYcR2gIM50PL5J_4V8G5XYQOsjk/",
+      "faqs": "[{\"q\":\"Who can participate?\",\"a\":\"All IIT Madras BS students. No prior dance or fitness experience required.\"},{\"q\":\"Is there a registration fee?\",\"a\":\"No, participation is completely free.\"},{\"q\":\"What should I wear and bring?\",\"a\":\"Comfortable sportswear and footwear, a water bottle, an optional small towel — and positive energy.\"},{\"q\":\"Is it a competition?\",\"a\":\"No. It is a non-competitive workshop focused on participation, fitness, and enjoyment.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "83",
+    "event_type": "sports",
+    "name": "VolleyVibes",
+    "description": "VolleyVibes is a high-energy volleyball event combining an inter-house tournament and dedicated women’s matches — built around teamwork, communication, and fast-paced gameplay.",
+    "poster": "/images/events/posters/83.avif",
+    "team": {
+      "min": 6,
+      "max": 10,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vQk0Pn79Qd75Qwu2Owaj_HwHWqtGZwwe73w99sQB8bskU4taBvmKBBAI8ZTww_ckf0cgeoJR5VML05g/pub",
+      "faqs": "[{\"q\":\"How are teams selected?\",\"a\":\"Through house-level trials; each house POC selects the final team based on trial performance.\"},{\"q\":\"What is the team composition?\",\"a\":\"A minimum of 6 players on court plus up to 4 substitutes (squad of 10).\"},{\"q\":\"Are the women’s matches separate?\",\"a\":\"Yes — dedicated women’s matches run alongside the main inter-house tournament to encourage participation.\"},{\"q\":\"Can women play in the main tournament too?\",\"a\":\"Yes. The inter-house tournament is open to all genders, subject to scheduling.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"6 – 10\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"9 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"7 June\"}]",
+      "round_when": "[\"9 Jun, 04:30 pm\",\"10 Jun, 04:30 pm\",\"11 Jun, 04:00 pm\",\"12 Jun, 05:00 pm\",\"12 Jun, 06:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Trials — House Selections",
+        "description": "Each house selects its team based on serving, passing, setting, spiking, and defensive reflexes.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Volleyball Court"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Group Stage",
+        "description": "All 12 houses compete to establish their standings through consistent, coordinated play.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Volleyball Court"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Semi-Finals",
+        "description": "Top teams face tactical, high-pressure matches; composure and minimal errors are key.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Volleyball Court"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Women’s Matches",
+        "description": "Dedicated women’s volleyball matches showcasing skill and encouraging greater participation.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Volleyball Court"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Finals",
+        "description": "The two best houses clash for the championship where every serve, block, and spike can shift momentum.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Volleyball Court"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "84",
+    "event_type": "sports",
+    "name": "Paradox Premier League 3.0",
+    "description": "Paradox Premier League 3.0 is the official cricket tournament of the fest — an inter-house showdown plus exclusive females-only matches, celebrating the true spirit of the game.",
+    "poster": "/images/events/posters/84.avif",
+    "team": {
+      "min": 9,
+      "max": 12,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1yjE5zkPPXPIPjxp7tjxbdCFZUPPEHTZoKCRz3mLjVAM/",
+      "faqs": "[{\"q\":\"How many players per team?\",\"a\":\"9 playing members on the ground plus up to 3 substitutes (max squad of 12).\"},{\"q\":\"How can I follow live scores?\",\"a\":\"All matches are digitally scored and broadcast live on the CricHeroes app and website.\"},{\"q\":\"Can females participate in the inter-house tournament?\",\"a\":\"The inter-house tournament is for male participants; females can participate in the dedicated females-only matches.\"},{\"q\":\"What ball and bat are used?\",\"a\":\"A tennis ball and an organizer-approved wooden cricket bat, for uniformity and fairness.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"9 – 12\"},{\"label\":\"Rounds\",\"value\":\"8\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"7 June\"}]",
+      "round_when": "[\"10 Jun\",\"11 Jun\",\"12 Jun\",\"13 Jun, 05:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Trials",
+        "description": "House trials select cricket squads; POCs submit team sheets. Female participant trials form the females-only match teams.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sangam Ground"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Knockouts",
+        "description": "All 12 houses begin in the knockout stage (6-over format); only winners advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sangam Ground"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Super Knockouts & Eliminator",
+        "description": "9-over matches; net run rate decides direct finalists, with an eliminator for the last final spot.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sangam Ground"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Final",
+        "description": "The two best teams meet (12-over format); the winner is crowned PPL 3.0 champion.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sangam Ground"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "85",
+    "event_type": "sports",
+    "name": "Chronos Crossfire",
+    "description": "Chronos Crossfire is Shah-Maat’s flagship inter-house chess event — a fast-paced contest of strategy, coordination, and house pride, combining blitz with team formats like Bughouse and Hand & Brain.",
+    "poster": "/images/events/posters/85.avif",
+    "team": {
+      "min": 4,
+      "max": 4,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1QObynsrfuikZA-BUb2B66d2Q0QDbA7g_b20MioZ4lxs/",
+      "faqs": "[{\"q\":\"Who can participate?\",\"a\":\"All BS Program students.\"},{\"q\":\"Is there an online selection round?\",\"a\":\"Yes, on Chess.com, conducted independently by each house after registration.\"},{\"q\":\"Is there a rating cap?\",\"a\":\"No. Anyone can participate regardless of experience; selection is via the house round.\"},{\"q\":\"How are winners decided?\",\"a\":\"Houses earn points throughout the event; winners are decided on overall points (see the rulebook).\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"4\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"1 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"2 June\"}]",
+      "round_when": "[\"3 Jun\",\"10 Jun, 12:30 pm\",\"11 Jun, 10:00 am\",\"12 Jun, 10:00 am\",\"12 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Selection Round",
+        "description": "Conducted online by each house before the on-campus event.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Round Robin (Day 1)",
+        "description": "Round-robin format across two pools.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Chess Hall (Gymkhana)"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Round Robin (Day 2)",
+        "description": "Round-robin continues with tie-breakers if needed.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Chess Hall (Gymkhana)"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Hand & Brain",
+        "description": "A two-player format: the “Brain” names a piece type, the “Hand” makes the move — indirect strategy and trust.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Chess Hall (Gymkhana)"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Bughouse",
+        "description": "A fast team format on two boards; captured pieces pass to the teammate. Coordination and speed are key.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Chess Hall (Gymkhana)"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "86",
+    "event_type": "sports",
+    "name": "Escape Room",
+    "description": "Escape Room is a multi-stage event testing logical thinking, problem-solving, teamwork, and adaptability — combining puzzles, riddles, ciphers, and a real-time escape challenge.",
+    "poster": "/images/events/posters/86.avif",
+    "team": {
+      "min": 4,
+      "max": 4,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 4000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1jMq3u1jTRa8fEoczY6-QKlmhroLFvUkcMMFZEbkxkjI/",
+      "faqs": "[{\"q\":\"Are AI tools or phones allowed?\",\"a\":\"No. External help, AI tools, and mobile phones are strictly prohibited during the event.\"},{\"q\":\"Is individual participation allowed?\",\"a\":\"Only solo registrations are accepted; teams form later per the format.\"},{\"q\":\"Do I need prior experience?\",\"a\":\"No. Creativity, observation, and logical thinking are enough.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"4\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"4 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"4 June\"}]",
+      "prize_amounts": "[\"₹4000\"]",
+      "round_when": "[\"5 Jun, 07:55 pm\",\"11 Jun, 10:30 am\",\"12 Jun, 10:30 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Prelims (Online)",
+        "description": "A puzzle, logic, and riddle round on Unstop; top 4 per house qualify for the offline semi-finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Semi-Finals",
+        "description": "Team-based puzzles, ciphers, and analytical challenges under time constraints. Top 6 teams advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 302"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Finals",
+        "description": "An immersive, real-time escape room with progressive elimination; ranked on speed, accuracy, and performance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "UTIL"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "87",
+    "event_type": "sports",
+    "name": "Paradox Badminton League",
+    "description": "The Paradox Badminton League is an inter-house tournament of singles and doubles matches, testing footwork, shot accuracy, and composure through fast-paced rallies.",
+    "poster": "/images/events/posters/87.avif",
+    "team": {
+      "min": 4,
+      "max": 6,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vS-40N_0KX58mXv3x6ojSxjRpcMIWt58iuC6oz7uL-g7gqRetWm172DjMp-JrmVM5yUcOG6Sgxx3yYF/pub",
+      "faqs": "[{\"q\":\"What matches are in each tie?\",\"a\":\"Men’s Singles, Women’s Singles, Men’s Doubles, and Mixed Doubles. The team winning the majority wins the tie.\"},{\"q\":\"Can a player play multiple sub-matches?\",\"a\":\"Yes — at least one and at most two sub-matches per tie.\"},{\"q\":\"What footwear and equipment are required?\",\"a\":\"Non-marking badminton shoes; players bring their own rackets, shuttlecocks are provided.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"4 – 6\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "round_when": "[\"10 Jun, 12:30 pm\",\"11 Jun, 10:00 am\",\"12 Jun, 10:00 am\",\"12 Jun, 02:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Trials — House Selections",
+        "description": "Players are evaluated on shot accuracy, footwork, reflexes, and court awareness.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sitara — Badminton Court"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Group Stage",
+        "description": "All 12 houses compete for knockout qualification.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sitara — Badminton Court"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Semi-Finals",
+        "description": "Top houses meet where precision and composure decide who advances.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sitara — Badminton Court"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Finals",
+        "description": "The two best houses compete for the championship.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Sitara — Badminton Court"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "88",
+    "event_type": "sports",
+    "name": "The Hoop Hustle 2.0",
+    "description": "The Hoop Hustle 2.0 is a basketball tournament on two courts, featuring a Men’s Inter-House Tournament and a Women’s Open Tournament — a celebration of basketball and house pride.",
+    "poster": "/images/events/posters/88.avif",
+    "team": {
+      "min": 5,
+      "max": 10,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vRJ059VJeGX8WAybkCJc4r_3uPBNANFcwH7CnTSdkIHBqJ3M_JbRlGiZeOLkM0gYFeuesghKB5RWWS6/pub",
+      "faqs": "[{\"q\":\"How are teams formed?\",\"a\":\"Boys: house-wise, finalised on Day 0 by the house POC. Girls: formed by the organizing team on Day 0 (open tournament).\"},{\"q\":\"Can a player play for more than one team?\",\"a\":\"No. A player represents only one team throughout the tournament.\"},{\"q\":\"What should participants wear?\",\"a\":\"Proper sportswear and sports shoes; report at least 10 minutes before the scheduled match.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"5 – 10\"},{\"label\":\"Rounds\",\"value\":\"6\"},{\"label\":\"Start Date\",\"value\":\"9 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"7 June\"}]",
+      "round_when": "[\"9 Jun, 04:00 pm\",\"10 Jun, 04:00 pm\",\"10 Jun, 04:00 pm\",\"11 Jun, 03:30 pm\",\"11 Jun, 03:30 pm\",\"12 Jun, 05:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Selection Round",
+        "description": "Men’s house teams are formed via a skill-based selection; women confirm participation and four balanced teams are finalised.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Men’s Preliminary Matches",
+        "description": "12 house teams play 6 knockout matches; 6 winners advance to the Quarter Finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Women’s Qualifiers",
+        "description": "Four teams play two matches; the two winners progress to the Finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Men’s Quarter & Semi Finals",
+        "description": "Six teams compete; the highest-scoring quarter-final winner earns a direct final spot.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Women’s Finals",
+        "description": "The two qualifier winners compete in one decisive match.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      },
+      {
+        "round_id": "RND6",
+        "name": "Men’s Finals",
+        "description": "One team, one trophy, one champion — the ultimate battle of skill, stamina, and house pride.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Basketball Court"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "89",
+    "event_type": "sports",
+    "name": "Ranneeti 5.0 : BGMI",
+    "description": "Ranneeti 5.0: BGMI brings competitive Battlegrounds Mobile India to Paradox 2026 — teams battle through online qualifiers to reach the offline finals at IIT Madras. Outplay. Outlast. Outthink.",
+    "poster": "/images/events/posters/89.avif",
+    "team": {
+      "min": 1,
+      "max": 5,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/e/2PACX-1vS5-idoH-5Amf11rQ-Lwe2ZJtU14KN3JkO23f92MMZ1Jc6pR4OcQAafQ3MmmeoLDsMi0EO9z5ipd2wc/pub",
+      "faqs": "[{\"q\":\"Can anyone participate?\",\"a\":\"It is exclusive to IIT Madras BS students.\"},{\"q\":\"Solo or team?\",\"a\":\"Teams have 4 main players plus 1 optional substitute; solo players compete via the ShowDown qualifier.\"},{\"q\":\"Are devices/internet provided?\",\"a\":\"No. Players arrange their own devices, peripherals, and connectivity.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 5\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"1 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]",
+      "round_when": "[\"1 Jun, 06:00 pm\",\"1 Jun, 06:00 pm\",\"10 Jun, 02:00 pm\",\"11 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "ShowDown (Qualifiers Round 1)",
+        "description": "Three matches for solo participants; qualifiers advance to Round 2.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "The Grind (Qualifiers Round 2)",
+        "description": "Three matches between advancing players and pre-registered teams; top 16 teams reach the finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Finals-1",
+        "description": "Battle-royale matches on campus over two days.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 301"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Finals-2",
+        "description": "Battle-royale matches continue to decide the leaderboard champion.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 102"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "90",
+    "event_type": "sports",
+    "name": "Ranneeti 5.0 : Pocket Arcade",
+    "description": "Pocket Arcade Showdown is a 3-day offline solo gaming tournament celebrating classic mobile games across three elimination stages: Angry Birds 2, Subway Surfers, and Hill Climb Racing.",
+    "poster": "/images/events/posters/90.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1-uF0n1d55lmVFpumx7A_CGCscGV_-fOZAG-U5SuebxI/",
+      "faqs": "[{\"q\":\"Who is eligible?\",\"a\":\"Any active IIT Madras BS Program student with a valid student email ID.\"},{\"q\":\"Is it solo or team?\",\"a\":\"Strictly a solo event.\"},{\"q\":\"Are devices provided?\",\"a\":\"No. Participants use their own mobile phones with the required games pre-installed.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"4 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"4 June\"}]",
+      "round_when": "[\"4 Jun, 07:00 pm\",\"11 Jun, 12:00 pm\",\"12 Jun, 01:00 pm\",\"13 Jun, 01:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Preliminary Quest",
+        "description": "A timed Unstop quiz shortlists the top 100 participants for the on-campus rounds.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Precision Pulse: Angry Birds 2",
+        "description": "Clear as many levels as possible within the time limit; top performers advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 202"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Agility Ascension: Subway Surfers",
+        "description": "One run per participant for the highest score; top scorers advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 102"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Skill Saga: Hill Climb Racing",
+        "description": "The final stage; rankings and winners are decided here.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 101"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "91",
+    "event_type": "sports",
+    "name": "Ranneeti 5.0 : Valorant",
+    "description": "Ranneeti 5.0 – VALORANT is a tactical battleground where solo players unite under their houses, fight through online qualifiers, and compete for the offline finale at IIT Madras.",
+    "poster": "/images/events/posters/91.avif",
+    "team": {
+      "min": 5,
+      "max": 6,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1pO7Pawzk0jtYznYx0yLwthn_oED2JTz0Rk5dU-g3_vc/",
+      "faqs": "[{\"q\":\"Can I join as a solo player?\",\"a\":\"Yes. Solo players take part in the qualifier round and are grouped into teams for the bracket stage.\"},{\"q\":\"Must the whole team be on campus?\",\"a\":\"Of 5 players, 2 may play online while 3 must be present on campus.\"},{\"q\":\"Do I bring my own gear?\",\"a\":\"Yes — bring your own laptop and gear; only internet connectivity is provided.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"5 – 6\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"1 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]",
+      "round_when": "[\"1 Jun\",\"11 Jun, 02:00 pm\",\"12 Jun, 04:00 pm\",\"13 Jun, 03:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Solo Qualifiers",
+        "description": "Participants are split into 12 houses; the top 6 players per house qualify for the main stage.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Bracket Stage",
+        "description": "Single-elimination matches through the semi-finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "MSB / Chem Dept / DOMS"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Semi Finals",
+        "description": "Winners secure a spot in the Grand Finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 101"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Finals",
+        "description": "A Best-of-3 grand final determines the champion.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Raman Block 201"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "94",
+    "event_type": "sports",
+    "name": "Inner Engineering 4 Days Youth Program",
+    "description": "A transformative Inner Engineering program for youth (15–25 yrs) offering tools to master body, mind, emotions, and energies — including the powerful 21-minute Shambhavi Mahamudra Kriya. Benefits include increased energy and mental clarity, better sleep, stress relief, and improved relationships.",
+    "poster": "/images/events/posters/94.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "http://isha.co/IE-IIT",
+      "faqs": "[{\"q\":\"What are the session timings?\",\"a\":\"Day 1 (11 Jun) & Day 2 (12 Jun): 10:00 am–1:15 pm and 5:30 pm–8:45 pm. Day 3 (13 Jun): 8:00 am–6:00 pm. Day 4 (14 Jun): 6:00 am–6:00 pm.\"},{\"q\":\"Who is it for?\",\"a\":\"Youth aged 15–25 seeking tools for wellbeing and inner transformation.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"14 June\"},{\"label\":\"Reg. Start\",\"value\":\"20 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "42",
+    "event_type": "culturals",
+    "name": "Paradox Got Talent 2.0",
+    "description": "Paradox Got Talent 2.0 is a dynamic talent showcase celebrating creativity, confidence, and performance across diverse domains. An online preliminary round shortlists acts for a live offline grand finale judged on creativity, execution, and audience engagement.",
+    "poster": "/images/events/posters/42.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 3000
+      },
+      {
+        "position": "First Runner-up",
+        "amount": 2000
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 1000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1PSM2nJ53rlLFnjvSOZWXt1n_yLlI4Qf8bDQv8LW9bX8/edit?usp=sharing",
+      "faqs": "[{\"q\":\"What types of performances are allowed?\",\"a\":\"Music, dance, comedy, acting, magic, creative arts, physical acts, or any unique talent within event guidelines.\"},{\"q\":\"Is there a time limit?\",\"a\":\"Yes — each performance must not exceed 3 minutes.\"},{\"q\":\"How are winners decided?\",\"a\":\"By judges’ scores, with audience input considered for tie-breakers or special awards.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"6 June\"}]",
+      "prize_amounts": "[\"₹3000\",\"₹2000\",\"₹1000\"]",
+      "round_when": "[\"22 May\",\"13 Jun, 11:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Preliminary Round",
+        "description": "Participants are shortlisted based on their submitted performance videos; selected acts are invited to perform live.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "The Grand Finale",
+        "description": "A competitive live round focused on artistic refinement, stage presence, and impact, scored by the judges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "CLT"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "43",
+    "event_type": "culturals",
+    "name": "Mr & Ms Paradox",
+    "description": "Mr & Ms Paradox is a fashion-based competition focused on confidence, self-expression, and personality. Participants showcase individuality through ramp walks and presentations, judged on stage presence, styling, communication, and overall impact.",
+    "poster": "/images/events/posters/43.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Mr Paradox",
+        "amount": 5000
+      },
+      {
+        "position": "Ms Paradox",
+        "amount": 5000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1u3sZEkkCuf1_WfcGXTDobXjR2eEuGrK_z_6fAeVvl0M/",
+      "faqs": "[{\"q\":\"Do I need prior modeling experience?\",\"a\":\"No — confidence and willingness to perform matter most.\"},{\"q\":\"Is this solo or group?\",\"a\":\"This is a solo event.\"},{\"q\":\"Do I arrange my own outfits?\",\"a\":\"Yes, participants arrange outfits according to the theme.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"3 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹5000\"]",
+      "round_when": "[\"22 May\",\"13 Jun, 11:00 am\",\"13 Jun, 11:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Preliminary Round",
+        "description": "Upload a ramp-walk video with basic details; the top 25–30 are shortlisted for the semi-finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Google Form"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Semi Final Round",
+        "description": "An individual ramp walk with a signature pose. Theme: Traditional & Western fusion.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "SAC"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Final Round",
+        "description": "A final ramp walk plus a rapid-fire Q&A round to select Mr and Ms Paradox.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "SAC"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "44",
+    "event_type": "culturals",
+    "name": "Anime Jeopardy: Rang & Reload",
+    "description": "A two-day anime-themed competition across five diverse rounds — beginning online and moving to offline on-campus rounds, with teams progressively eliminated after each stage.",
+    "poster": "/images/events/posters/44.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 5000
+      },
+      {
+        "position": "Side-quest",
+        "amount": 1500
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/14PeHMDNC5eO3jnjtal6mkvg9aVQABhPZ6wJsbUR1jww/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Is the first round mandatory?\",\"a\":\"Yes — the preliminary round is compulsory to qualify for the offline rounds.\"},{\"q\":\"Can I participate individually?\",\"a\":\"Registration is individual, but most rounds are played in teams formed during the event.\"},{\"q\":\"Any dress code?\",\"a\":\"No strict dress code, but anime outfits or cosplay are encouraged.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"4 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"5 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹1500\"]",
+      "round_when": "[\"6 Jun, 04:00 pm\",\"10 Jun, 03:30 pm\",\"10 Jun, 03:30 pm\",\"11 Jun, 02:30 pm\",\"11 Jun, 02:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Otaku Bingo Blast (Online)",
+        "description": "Teams of 5 play an anime quiz-based bingo; the top 80 advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Echoes of Eternium",
+        "description": "A music round identifying anime from OST clips, with bonus points for naming the track/artist. Top 60 advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Silent Shinobi",
+        "description": "An offline dumb-charades round acting out anime clues. Top 40 advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN101"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Clash of Characters",
+        "description": "A strategic 1v1 card battle with hidden ranks and an “Absolute Truth” lifeline. One team advances to the finale.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Race to the One Piece (Finale)",
+        "description": "A campus-wide treasure hunt of clues and puzzles; the first team to finish wins.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "45",
+    "event_type": "culturals",
+    "name": "Stand-Up Comedy Showdown",
+    "description": "The Stand-Up Comedy Showdown is a hybrid event giving students a platform for humor, storytelling, and stage presence — an online audition round followed by an offline final performance.",
+    "poster": "/images/events/posters/45.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 5000
+      },
+      {
+        "position": "Runner-up",
+        "amount": 3000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1SbExWVbF6r63ip0IaDbB-HAM0GNHszfr5Swgzr9Arw8/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Do I need prior comedy experience?\",\"a\":\"No, but good humor, confidence, and delivery are important.\"},{\"q\":\"Are there content restrictions?\",\"a\":\"Yes — content must be original, clean, and non-offensive.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"25 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"7 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\"]",
+      "round_when": "[\"22 May\",\"11 Jun, 02:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Audition Round",
+        "description": "Submit a 1–2 minute (max 5) original stand-up video. The top 8–10 are shortlisted.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Offline Final Round",
+        "description": "Shortlisted comics perform live, judged on content quality, stage presence, and audience engagement.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "CLT"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "46",
+    "event_type": "culturals",
+    "name": "Paradox Unwind - The Showdown 4.0",
+    "description": "Paradox Unwind – The Showdown 4.0, organized by Akord Music Society, is a flagship music competition featuring Solo Singing, Solo Instrumental, and Battle of Bands across a high-energy stage.",
+    "poster": "/images/events/posters/46.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 3000
+      },
+      {
+        "position": "First Runner-up",
+        "amount": 2000
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 1000
+      },
+      {
+        "position": "Band Winner",
+        "amount": 2500
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1d5LHf5-YpP6UpmggCDWdCyx4FQCQqWKxKQP5El1wbjE/edit",
+      "faqs": "[{\"q\":\"What categories are available?\",\"a\":\"Solo Singing, Solo Instrumental, and Battle of Bands.\"},{\"q\":\"Do bands submit auditions?\",\"a\":\"No — bands perform directly in the offline rounds.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"6 June\"}]",
+      "prize_amounts": "[\"₹3000\",\"₹2000\",\"₹1000\",\"₹2500\"]",
+      "round_when": "[\"22 May\",\"10 Jun, 12:30 pm\",\"11 Jun, 11:30 am\",\"12 Jun, 07:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Eliminations",
+        "description": "Solo vocal and instrumental participants submit audition videos for shortlisting.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Solo Vocal — Semi Final",
+        "description": "Live performances before the judges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Solo Instrumental — Semi Finale",
+        "description": "Live instrumental performances before the judges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Music Room"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Grand Finale",
+        "description": "Finalists perform live before judges and audience.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "OAT"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "47",
+    "event_type": "culturals",
+    "name": "RAPADOX 2.0: The Ultimate Rap Challenge",
+    "description": "RAPadox 2.0 is a high-energy rap battle competition highlighting storytelling, rhythm, and lyrical creativity — an online preliminary round followed by on-ground semi-finals and 1v1 final battles.",
+    "poster": "/images/events/posters/47.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 2500
+      },
+      {
+        "position": "First Runner-up",
+        "amount": 1500
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 1000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1wK5__4BKPHRVn-2yAqMVF9J0z5gUfVY_aOWSiFGnutU/edit",
+      "faqs": "[{\"q\":\"Can I perform in any language?\",\"a\":\"Yes — rap in any language you are comfortable with.\"},{\"q\":\"Is group participation allowed?\",\"a\":\"No — this is an individual-only competition.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "prize_amounts": "[\"₹2500\",\"₹1500\",\"₹1000\"]",
+      "round_when": "[\"22 May\",\"13 Jun, 07:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Mic Check (Online Prelim)",
+        "description": "Submit a 30–60 second rap video showcasing flow, creativity, and lyrical skill.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "RAPadox — KillShot",
+        "description": "Live performances; the top 6 pair into 1v1 rap battles to crown the champion.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Himalayan Lawn"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "48",
+    "event_type": "culturals",
+    "name": "Dream2Dance 5.0",
+    "description": "An inclusive dance competition across multiple stages — online auditions, an open workshop, street dance battles, and stage performances — open to all dance forms from freestyle and hip-hop to classical and Bollywood.",
+    "poster": "/images/events/posters/48.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 7500
+      },
+      {
+        "position": "First Runner-up",
+        "amount": 4500
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 3000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/16fc0kJu7MFPbuDsVZGoODxWmuRXfIMmbB4jBV12_2RA/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Is the finale self-choreographed?\",\"a\":\"Yes — every finalist performs a self-learned, pre-choreographed piece.\"},{\"q\":\"Do I choose my own songs in the battle?\",\"a\":\"No — songs for the street dance battle are assigned randomly.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"3 June\"}]",
+      "prize_amounts": "[\"₹7500\",\"₹4500\",\"₹3000\"]",
+      "round_when": "[\"22 May\",\"10 Jun, 03:30 pm\",\"12 Jun, 05:00 pm\",\"13 Jun, 02:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Submission Round",
+        "description": "Submit a 1–2 minute audition video; shortlisted dancers advance to the street dance battle.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Workshop Round (Non-competitive)",
+        "description": "A 2–3 hour session led by a professional choreographer, open to every student.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "UTIL"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Street Dance Battle",
+        "description": "One-on-one battles across Classical/Semi-Classical, Hip-Hop/Western, and Bollywood/Others categories.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Himalayan Lawn"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Finale",
+        "description": "Battle winners perform a 3–5 minute piece; three winners are chosen per category.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "SAC"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "49",
+    "event_type": "culturals",
+    "name": "Rants & Riffs",
+    "description": "Rants & Riffs is a non-competitive, multi-format literary event combining interactive wordplay and creative satire — a place for your random thoughts, sharp comebacks, and dramatic complaints.",
+    "poster": "/images/events/posters/49.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1qqv4JOjulpz2aWwjtcOXrdTtl2UkVgKjCy5dOtwTJnE/edit",
+      "faqs": "[{\"q\":\"Do I need a literature background?\",\"a\":\"No — it is open to anyone who enjoys wordplay, quick thinking, and humor.\"},{\"q\":\"Is this competitive?\",\"a\":\"No — it is deliberately non-competitive; everyone is encouraged to express themselves freely.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "round_when": "[\"11 Jun, 11:30 am\",\"11 Jun, 11:30 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Chain of Words",
+        "description": "Build a continuous chain of logically connected words/sentences within a theme; break the chain and you are out.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Officially Offended",
+        "description": "Turn everyday annoyances into witty, formal-style complaint letters and perform them.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "50",
+    "event_type": "culturals",
+    "name": "ANUBHUTI 4.0",
+    "description": "Anubhuti 4.0, Sahityika’s flagship poetry event, explores the evolution of poetic expression across the ancient, medieval, and modern literary eras, with separate English and Hindi tracks.",
+    "poster": "/images/events/posters/50.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 3000
+      },
+      {
+        "position": "Runner-up",
+        "amount": 2000
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 1000
+      },
+      {
+        "position": "Special Mention",
+        "amount": 2
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1k3A8nb9P7e1nvHcIrOGHq4uwOsjuTShT6rlcUZrkZXc/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Are there language tracks?\",\"a\":\"Yes — English and Hindi, each with its own judging and prizes.\"},{\"q\":\"Are AI tools permitted?\",\"a\":\"Strictly no — all poems must be original; AI-generated content or plagiarism leads to disqualification.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"6 June\"}]",
+      "prize_amounts": "[\"₹3000\",\"₹2000\",\"₹1000\",\"2 plaques\"]",
+      "round_when": "[\"22 May\",\"10 Jun, 03:30 pm\",\"12 Jun, 12:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Akashic Records",
+        "description": "A submission-based round of original poems inspired by the Ancient Era.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Karunic Codex",
+        "description": "Medieval-era poetry composed and performed through live oration.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Anityic Permanence",
+        "description": "Modern-era poetry reinterpreted and performed with a tonal-contrast challenge.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "51",
+    "event_type": "culturals",
+    "name": "Youth Parliament",
+    "description": "The Youth Parliament is a simulation of India’s parliamentary system where participants take on roles such as MPs, Prime Minister, and Opposition Leaders, engaging in structured debates, question hour, and a surprise crisis situation.",
+    "poster": "/images/events/posters/51.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Best Delegate",
+        "amount": 4000
+      },
+      {
+        "position": "Best Delegate (Govt)",
+        "amount": 3000
+      },
+      {
+        "position": "Best Delegate (Opposition)",
+        "amount": 3000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1hWTyqEX-e-jl8nhvNUeU3ZYpPxJ_R-3wcOIVY57BNeE/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Do I need prior experience?\",\"a\":\"No — beginners are welcome; only an interest in governance is needed.\"},{\"q\":\"Are real parties or leaders allowed?\",\"a\":\"No — references to real political parties, leaders, or MPs are strictly prohibited.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"2 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"14 May\"},{\"label\":\"Reg. End\",\"value\":\"1 June\"}]",
+      "prize_amounts": "[\"₹4000\",\"₹3000\",\"₹3000\"]",
+      "round_when": "[\"2 Jun, 07:00 pm\",\"10 Jun, 12:30 pm\",\"12 Jun, 12:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Preliminary Selection (Online)",
+        "description": "Group discussions on governance and public policy; top participants are selected.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Simulation — Session 1",
+        "description": "Roles are assigned and a bill is introduced for structured debate.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "DOMS-101"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Simulation — Session 2",
+        "description": "Amendments, consensus-building, and a question hour where ministers are questioned.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "DOMS-101"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "52",
+    "event_type": "culturals",
+    "name": "Sach, Scroll aur Shuturmurg",
+    "description": "Sach, Scroll aur Shuturmurg is Aayam Drama Society’s combined theatre event — a stage play and a street play. A performance-based event (not a competition) that asks: when the whole world is watching, why does no one see?",
+    "poster": "/images/events/posters/52.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Street & Stage Play Actors",
+        "amount": 25
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1BEqdB42PkX3-WUddkoFBb3TH7J0vTaUk5KxSUmNGSuI/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Do I need prior theatre experience?\",\"a\":\"No — beginners are encouraged; auditions look for honesty over technique.\"},{\"q\":\"Is this a competition?\",\"a\":\"No — there are no winners or eliminations after casting; the production is the prize.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]",
+      "prize_amounts": "[\"25 Plaques\"]",
+      "round_when": "[\"22 May\",\"10 Jun, 05:00 pm\",\"11 Jun, 12:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Registration & Auditions",
+        "description": "Register, submit an audition video (acting or backstage), get shortlisted, and rehearse.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Final Performance — Street Play",
+        "description": "A 40-minute street play performance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Outside SAC"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Final Performance — Stage Play",
+        "description": "A 70-minute stage play performance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "CLT"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "53",
+    "event_type": "culturals",
+    "name": "Pictionary Art Relay",
+    "description": "Pictionary Art Relay is a high-energy drawing and guessing competition blending creativity, speed, and teamwork — an online individual qualifier followed by an offline team relay.",
+    "poster": "/images/events/posters/53.avif",
+    "team": {
+      "min": 4,
+      "max": 4,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "Winner Team",
+        "amount": 2500
+      },
+      {
+        "position": "First Runner-up Team",
+        "amount": 1500
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1a5W8fFVUVut5XbELxbIhHgZuoRY0ovjXs818j8QdaR4/edit",
+      "faqs": "[{\"q\":\"Is the online round mandatory?\",\"a\":\"Yes — it is compulsory to qualify for the offline finals.\"},{\"q\":\"Can I use letters or numbers in drawings?\",\"a\":\"No — text, numbers, or symbols are strictly prohibited.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"4\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"1 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"4 June\"}]",
+      "prize_amounts": "[\"₹2500\",\"₹1500\"]",
+      "round_when": "[\"1 Jun, 05:00 pm\",\"12 Jun, 03:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Qualifier",
+        "description": "Timed individual drawing-and-guessing rounds; top performers are shortlisted.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Offline Main Relay Round",
+        "description": "Teams of 4 take turns drawing while teammates guess within a time limit.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "54",
+    "event_type": "culturals",
+    "name": "Qutopia o’ Paradox 2026",
+    "description": "Qutopia o’ Paradox is an inter-house quiz spanning “anything and everything under the sun” — from forgotten history to modern pop culture, where curiosity meets courage.",
+    "poster": "/images/events/posters/54.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner Team",
+        "amount": 4500
+      },
+      {
+        "position": "Runner-up Team",
+        "amount": 3000
+      },
+      {
+        "position": "Second Runner-up Team",
+        "amount": 2250
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1oIxRPJvAOFtjOQECJjGOE4bshq27mSp7GWe-6BHbmP0/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Is it a solo event?\",\"a\":\"Prelims are individual; based on results, participants are grouped into house teams for the finals.\"},{\"q\":\"What topics are covered?\",\"a\":\"History, geography, current affairs, science, sports, entertainment, and more.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "prize_amounts": "[\"₹4500\",\"₹3000\",\"₹2250\"]",
+      "round_when": "[\"11 Jun, 10:00 am\",\"12 Jun, 03:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Qutopia — Prelims",
+        "description": "A written round of 15–20 questions; the top 3 per house (36 total) qualify for the finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "CLT"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Qutopia — Finale",
+        "description": "House teams compete across 4–5 rounds with eliminations; top six teams proceed further.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "55",
+    "event_type": "culturals",
+    "name": "Capitol Conclave - The Mega Debate Championship",
+    "description": "Capitol Conclave is an inter-house debate championship recreating the vibrancy of historical assemblies and salons — discourse on the social, political, ethical, and cultural dilemmas that shape our world.",
+    "poster": "/images/events/posters/55.avif",
+    "team": {
+      "min": 2,
+      "max": 2,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "Winner Team",
+        "amount": 4500
+      },
+      {
+        "position": "Runner-up Team",
+        "amount": 3000
+      },
+      {
+        "position": "Best Speaker",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1CzvU4HzoUJngusDXKgQRXQagHajU97WvI3UvH3bU5uE/edit?usp=sharing",
+      "faqs": "[{\"q\":\"What language is used?\",\"a\":\"The debate is conducted strictly in English.\"},{\"q\":\"Can I use my phone during the debate?\",\"a\":\"No — no devices or external help once the debate begins.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"2\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"9 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"1 June\"}]",
+      "prize_amounts": "[\"₹4500\",\"₹3000\",\"₹2000\"]",
+      "round_when": "[\"2 Jun, 06:00 pm\",\"10 Jun, 12:30 pm\",\"12 Jun, 12:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Qualifying Round (Online GD)",
+        "description": "Narrows to the top 5 per house; each house council selects 2 primaries and 1 reserve.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Debate Rounds (On Campus)",
+        "description": "12 teams across a 5-round format; slot winners advance to the finale.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Finale (British Parliamentary)",
+        "description": "The top 4 teams compete under the British Parliamentary system; the highest scorer wins.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "56",
+    "event_type": "culturals",
+    "name": "Shutter Safari 3.0",
+    "description": "Shutter Safari 3.0 is a photography competition focused on storytelling through visuals, with two photography rounds and a bonus videography round capturing the journey to Paradox and the fest experience.",
+    "poster": "/images/events/posters/56.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "Winner",
+        "amount": 3000
+      },
+      {
+        "position": "First Runner-up",
+        "amount": 2000
+      },
+      {
+        "position": "Second Runner-up",
+        "amount": 1000
+      },
+      {
+        "position": "Special Mention (Video)",
+        "amount": 1
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1WtA9Opn53uZKkAKwWWgPtIfbVQ8bB55WtHpMrjoyxXI/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Where must photos be taken?\",\"a\":\"All photos must be clicked within the IIT Madras campus during Paradox 2026.\"},{\"q\":\"Can I submit edited photos?\",\"a\":\"Minor post-processing is allowed, but excessive editing that alters authenticity leads to disqualification.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"9 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"7 May\"},{\"label\":\"Reg. End\",\"value\":\"8 June\"}]",
+      "prize_amounts": "[\"₹3000\",\"₹2000\",\"₹1000\",\"1 Plaque\"]",
+      "round_when": "[\"9 Jun, 10:00 am\",\"10 Jun, 10:00 am\",\"11 Jun, 10:00 am\",\"13 Jun, 11:30 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Bonus Videography Round",
+        "description": "An optional short video of the journey to Paradox and the fest experience.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Frames of Summer",
+        "description": "Capture the essence of summer through everyday campus moments.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Campus"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Freeze the Fest",
+        "description": "Capture the energy of Paradox — performances, candid emotions, and instant moments.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Campus"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Final Judgement Day",
+        "description": "Finalists present their work to the judges, who share feedback and announce winners.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RMN 102"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "64",
+    "event_type": "culturals",
+    "name": "Samvaad 2.0",
+    "description": "Samvaad 2.0 is a flagship civil-services interaction event rooted in the spirit of “सेवा परमो धर्मः”. Students engage directly with distinguished UPSC achievers to learn from their journeys, preparation strategies, and interview experiences.",
+    "poster": "",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1YfVnS3q9QfhDKJwz77MklrC8JLI629ePSLSbJWY2cjs/edit",
+      "faqs": "[{\"q\":\"Is prior UPSC knowledge required?\",\"a\":\"No — the event is designed for both beginners and experienced aspirants.\"},{\"q\":\"Will there be direct interaction with speakers?\",\"a\":\"Yes — participants can ask questions during interactive sessions.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"10 June\"},{\"label\":\"Reg. Start\",\"value\":\"20 May\"},{\"label\":\"Reg. End\",\"value\":\"10 June\"}]",
+      "round_when": "[\"10 Jun, 12:30 pm\",\"10 Jun, 12:30 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Prerna: The Civil Services Journey",
+        "description": "An interactive virtual session on UPSC CSE preparation, strategy, and interview experiences (Speaker: Disha Dwivedi, AIR 672, CSE 2024).",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 3"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Shaurya: The Path of Service and Courage",
+        "description": "A session on the UPSC CAPF journey — strategy, leadership, discipline, and resilience (Speaker: Rupali Singh, AIR 365, CAPF 2024).",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "deeptech-venture-building",
+    "event_type": "technical",
+    "name": "DeepTech Venture Building",
+    "description": "A panel discussion exploring the intersection of cutting-edge technology and venture building, bringing together founders, investors, and industry experts to discuss opportunities, challenges, and strategies for building successful deeptech startups. (11 Jun, 10:00 AM–1:00 PM, Venue: TTJ.)",
+    "poster": "/images/events/DeepTech.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "meta": "[{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"}]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "40",
+    "event_type": "technical",
+    "name": "CHROMATIX",
+    "description": "Chromatix is a techno-cultural spectacle where technology and choreography collide — dancers in responsive RGB LED suits move in harmony with an electrifying score. The responsive LED tech and sync software were custom-built (“Made in India”) by a startup born out of the Centre for Innovation (CFI), IIT Madras.",
+    "poster": "/images/events/posters/40.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"14 June\"},{\"label\":\"End Date\",\"value\":\"14 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"12 June\"}]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "57",
+    "event_type": "technical",
+    "name": "Circuit Design Competition 2.0",
+    "description": "Circuit Design Competition 2.0 is a multi-stage electronics competition — from online talks and a quiz, to simulating a solution at the fest, to building the circuit live on a breadboard before a panel of professors. Think it. Simulate it. Build it.",
+    "poster": "/images/events/posters/57.avif",
+    "team": {
+      "min": 1,
+      "max": 2,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/14MFsR8m1anNCBd2Futl1wGIKypcRUIbjlZSWGSShVnE/edit?usp=drive_link",
+      "faqs": "[{\"q\":\"What is the team size?\",\"a\":\"Participate solo or as a duo (team of two).\"},{\"q\":\"Which simulation software is used?\",\"a\":\"LTspice — bring your own laptop with it pre-installed.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 2\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"24 May\"},{\"label\":\"End Date\",\"value\":\"14 June\"},{\"label\":\"Reg. Start\",\"value\":\"16 May\"},{\"label\":\"Reg. End\",\"value\":\"5 June\"}]",
+      "round_when": "[\"24 May\",\"6 Jun, 09:00 am\",\"11 Jun, 09:00 am\",\"12 Jun, 09:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Workshops & Industry Talk",
+        "description": "Talks by experienced people plus workshops on the basics of circuit design and electronics.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Quiz",
+        "description": "A basic electronics and circuit-theory quiz that contributes to the final score.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Simulation Round",
+        "description": "Choose a problem statement and design a simulation; those passing the criteria advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Hardware Round (Finale)",
+        "description": "Build the breadboard circuit; EE Department professors evaluate. Winner decided on combined score.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "New IE Lab"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "58",
+    "event_type": "technical",
+    "name": "CrashLab: Collegiate Air Crash Investigation Challenge",
+    "description": "CrashLab is an immersive air-crash investigation challenge by AVASYA Society — step into the role of an accident investigator, reconstruct events from flight data, cockpit transcripts, weather reports, and forensic clues, and defend your findings. The devil is in the DATA.",
+    "poster": "/images/events/posters/58.avif",
+    "team": {
+      "min": 1,
+      "max": 3,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1mQ2ltCiADX88ffy-6jBMzC-fY8YCuiZVn5nxn644UAY/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Do I need aviation knowledge?\",\"a\":\"No — it is a test of logic, critical thinking, and data interpretation; context is provided in Phase 0.\"},{\"q\":\"Do we need forensic software?\",\"a\":\"No — use whatever you are comfortable with (Excel, Python, or a whiteboard).\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 3\"},{\"label\":\"Rounds\",\"value\":\"4\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"20 May\"},{\"label\":\"Reg. End\",\"value\":\"31 May\"}]",
+      "round_when": "[\"10 Jun, 10:00 am\",\"10 Jun, 12:00 pm\",\"11 Jun, 10:00 am\",\"11 Jun, 03:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Phase 0: Investigator Briefing",
+        "description": "A domain expert introduces the fundamentals of aviation accident investigation.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Pre-Flight Check (Online Screening)",
+        "description": "An analytical screening of reasoning and evidence interpretation; the top 12–16 teams advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Wreckage to Reality (Case Analysis)",
+        "description": "Teams reconstruct the flight from a crash dossier and submit an evidence-based investigation report.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Board of Inquiry (Final Presentation)",
+        "description": "Finalists defend their conclusions before an expert panel in a simulated hearing.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "59",
+    "event_type": "technical",
+    "name": "DSA Triathlon 3.0",
+    "description": "DSA Triathlon is a coding challenge organized in three levels, testing your skills and logic with brain-twisting problem sets.",
+    "poster": "/images/events/posters/59.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "faqs": "[{\"q\":\"Is there any eligibility criteria?\",\"a\":\"Anyone at any level of the program can join — you should have an idea of DSA.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"29 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"15 May\"},{\"label\":\"Reg. End\",\"value\":\"29 May\"}]",
+      "round_when": "[\"31 May, 10:58 am\",\"9 Jun, 08:30 am\",\"10 Jun, 08:30 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Round 1 (Online)",
+        "description": "A HackerRank MCQ round (~20 questions); the top 50% qualify for Level 2. (~1 hour.)",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Round 2 (Day 1)",
+        "description": "Beginner logic and beginner-to-intermediate DSA questions on HackerRank (~14 questions); top 30% qualify. (~2 hours.)",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Round 3 (Trio Round)",
+        "description": "Random trios solve 10 intermediate-to-advanced DSA questions; the top 3 teams win. (~3 hours.)",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "60",
+    "event_type": "technical",
+    "name": "Echo//Prometheus",
+    "description": "Echo//Prometheus is a story-driven technical investigation combining cryptography, cybersecurity, coding, steganography, logic, and social deduction — decode information, uncover patterns, and piece together an evolving conspiracy.",
+    "poster": "/images/events/posters/60.avif",
+    "team": {
+      "min": 3,
+      "max": 5,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1XAzZbekrkHCa_TciJ-SVCOIg9T81zECb8q2XznLVutU/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Do I need a team to register?\",\"a\":\"No — the preliminary round is individual; teams of 3–5 form from the top qualifiers per house.\"},{\"q\":\"What are the prerequisites?\",\"a\":\"Basic familiarity with a programming language, classical cryptography, Morse code, and cybersecurity concepts.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"3 – 5\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"10 May\"},{\"label\":\"Reg. End\",\"value\":\"30 May\"}]",
+      "round_when": "[\"10 Jun, 03:00 pm\",\"11 Jun, 11:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Phase 1",
+        "description": "Navigate interconnected acts of encrypted information, hidden clues, digital evidence, and technical challenges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Echo Point — The Final Boss Puzzle",
+        "description": "The final convergence puzzle — piece everything together before time runs out.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "61",
+    "event_type": "technical",
+    "name": "Manch of Traders",
+    "description": "Manch of Traders (MOT) is a flagship finance & markets experience — expert-led bootcamp sessions, structured market simulations, and a live Grand Finale Summit for networking, discussions, and ecosystem interaction.",
+    "poster": "/images/events/posters/61.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://drive.google.com/file/d/1nXCyt_lfj-mgznrrNdxqXgmg6XD7XvAR/view?usp=drive_link",
+      "faqs": "[{\"q\":\"Is MOT beginner friendly?\",\"a\":\"Yes — it is designed for beginners, enthusiasts, and aspiring traders.\"},{\"q\":\"Is real money used in the competition?\",\"a\":\"No — it uses a simulated trading environment for educational purposes.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"22 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"10 June\"}]",
+      "round_when": "[\"22 May, 09:00 pm\",\"26 May\",\"11 Jun, 11:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Bootcamp",
+        "description": "A beginner-friendly bootcamp on finance, markets, psychology, and risk management.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Trading Competition",
+        "description": "A structured simulated trading environment with live leaderboards and risk parameters.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "The5ers"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Final Summit",
+        "description": "A grand finale summit for networking, discussions, Q&A, and live recognition.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR, IITM"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "62",
+    "event_type": "technical",
+    "name": "Python Coding Challenge 5.0",
+    "description": "Python Coding Challenge (PCC) 5.0 is a multi-round competitive programming event by the Women in Tech Society — elimination rounds, collaborative relays, and a high-intensity strategic final.",
+    "poster": "/images/events/posters/62.avif",
+    "team": {
+      "min": 2,
+      "max": 3,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1YbnNNJxRNij3T1sNuWYxy2vdr9w-LkXP1oojw_kqQ60/edit?usp=sharing",
+      "faqs": "[{\"q\":\"What language can I use?\",\"a\":\"Only Python is allowed during the competition.\"},{\"q\":\"Are AI tools allowed?\",\"a\":\"No — AI tools, internet search, and external help are prohibited during the contest.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"2 – 3\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"2 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"19 May\"},{\"label\":\"Reg. End\",\"value\":\"2 June\"}]",
+      "round_when": "[\"2 Jun, 03:00 pm\",\"10 Jun, 10:00 am\",\"11 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Py-liminators",
+        "description": "An individual elimination contest across multiple difficulty levels; qualifiers form teams of three.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Remote"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Code Relay",
+        "description": "A relay where one member writes only pseudocode and teammates implement it without seeing the original problem.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND3",
+        "name": "The Heist",
+        "description": "A “Fastest Finger First” strategy round — claim and solve problems using coins; correct answers score, wrong ones deduct.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "63",
+    "event_type": "technical",
+    "name": "RoboSoccer 5.0",
+    "description": "RoboSoccer 5.0 challenges participants to design, build, and battle custom soccer robots in a dedicated arena. Two weight categories (Lightweight and Heavyweight), optional FPV control, and pre-event workshops make it a learning journey and a competition.",
+    "poster": "/images/events/posters/63.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/12x1omHaxbAmcIpHkGyX5RgR2nZ0rfvAbUyD1lnjMG3g/edit",
+      "faqs": "[{\"q\":\"Who can participate?\",\"a\":\"Only IIT Madras BS Degree students; anyone interested in robotics and electronics is encouraged.\"},{\"q\":\"What are the robot limits?\",\"a\":\"Maximum dimensions 40×40×40 cm and maximum weight 4 kg.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"14 May\"},{\"label\":\"Reg. End\",\"value\":\"12 June\"}]",
+      "round_when": "[\"10 Jun, 09:00 am\",\"10 Jun, 08:00 am\",\"11 Jun, 09:03 am\",\"11 Jun, 09:00 am\",\"12 Jun, 09:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Round 1 — Qualifier",
+        "description": "One minute to score as many goals as possible against an open goal; top scorers advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 4"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Round 2 — Quarter Finals",
+        "description": "3-minute head-to-head matches; winners advance to the semi-finals.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 4"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Round 3 — Semi Finals",
+        "description": "5-minute matches demanding durable robots and sharper strategy.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 4"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Round 4 — Grand Finale",
+        "description": "A 10-minute championship match; winners declared per weight category.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 4"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Free Play",
+        "description": "An FPV free-play arena — drive pre-built bots and score goals, no experience required.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall 4"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "66",
+    "event_type": "technical",
+    "name": "We Found You Online",
+    "description": "We Found You Online is a 3-day OSINT intelligence competition where you live inside digital exposure — no hacking or coding, just your eyes and instincts to find others before they find you.",
+    "poster": "/images/events/posters/66.avif",
+    "team": {
+      "min": 1,
+      "max": 3,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1FlXYX15ctnu5GrE_QbGJTlHFIBTcv5_3e21GKSCP9Zg/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Is Day 1 online?\",\"a\":\"Yes — the guest session and qualifier are online; shortlisted participants attend offline Days 2 and 3.\"},{\"q\":\"What is the team size?\",\"a\":\"This is a solo-only event; all participants compete individually.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 3\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"30 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"9 June\"}]",
+      "round_when": "[\"30 May, 05:00 pm\",\"10 Jun, 10:00 am\",\"11 Jun, 09:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Day 1 — Guest Session & Qualifier",
+        "description": "An OSINT expert shows how people are found and tracked, followed by qualifier challenges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Day 2 — You Were Always Looking",
+        "description": "Follow trails through images, documents, and fragments to find the answers.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Day 3 — The Last Look",
+        "description": "Subtle challenges rewarding those who slow down and notice the smallest details.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "67",
+    "event_type": "technical",
+    "name": "Final Lap: Formula Racing",
+    "description": "Final Lap: Formula Racing is an indoor RC-bot time-attack challenge on a specially designed circuit — bots are provided; show up, take control, and set the fastest lap. Best Formula-styled builds are profiled on social media.",
+    "poster": "/images/events/posters/67.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 5000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 3000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1wEvk2suwvqU0e0Ol-jc9Vbv2Fm3vjZTN79hSLNJc6KA/edit?usp=drivesdk",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"12 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\",\"₹2000\"]",
+      "round_when": "[\"12 Jun, 10:00 am\",\"12 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Practice Round",
+        "description": "Two untimed practice laps to get familiar with the RC controls and track.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Timed Laps",
+        "description": "Three official timed laps; the best time counts, with a precision bonus for clean laps.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "TBD"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "68",
+    "event_type": "technical",
+    "name": "GadgetXpo 2.0",
+    "description": "GadgetXpo 2.0 is a national-level hardware innovation challenge inviting participants to design functional gadgets, embedded systems, and hardware prototypes. Online technical screening shortlists the top ~10 for a final live demonstration before professors and industry experts at Paradox’26.",
+    "poster": "/images/events/posters/68.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 5000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 3000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"12 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\",\"₹2000\"]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "69",
+    "event_type": "technical",
+    "name": "RopeWalker",
+    "description": "RopeWalker challenges participants to engineer a robot that traverses a suspended rope from start to finish — a time trial where precision, grip, and weight distribution are pushed to the limit. Round 1 is a level run; higher rounds add steeper inclines demanding torque and traction.",
+    "poster": "/images/events/posters/69.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 5000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 3000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1DPuQ5lBHxuAlqkpuPsjxsuRXbnXo2j_LWw1Xy2aUs54/edit?usp=sharing",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"14 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\",\"₹2000\"]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "70",
+    "event_type": "technical",
+    "name": "Research: To Infinity & Beyond",
+    "description": "Research: To Infinity and Beyond, by the Ramanujan Society of Research, is a full-cycle research simulation across two tracks — Beginners (experimental: hypotheses, experiments, findings) and Intermediate (theoretical: a complete peer-reviewed research journal).",
+    "poster": "/images/events/posters/70.avif",
+    "team": {
+      "min": 1,
+      "max": 8,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "rulebook": "https://drive.google.com/file/d/1-XRfEBWqf8uXn-CaRYTc_jq4lMzCm-nJ/view?usp=sharing",
+      "faqs": "[{\"q\":\"Can I participate in both tracks?\",\"a\":\"No — each participant registers in only one track that matches their experience level.\"},{\"q\":\"Is AI-generated content allowed?\",\"a\":\"No — submissions are scanned with AI-detection tools; flagged teams are disqualified.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 8\"},{\"label\":\"Rounds\",\"value\":\"2\"},{\"label\":\"Start Date\",\"value\":\"20 May\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"18 May\"},{\"label\":\"Reg. End\",\"value\":\"4 June\"}]",
+      "round_when": "[\"20 May\",\"11 Jun, 10:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Intermediate Track",
+        "description": "Produce a comprehensive research journal — theory, methodology, results, peer review, and a formal presentation to an expert jury.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Beginners’ Track",
+        "description": "Teams design an experiment for an assigned hypothesis and present a structured design document across two rounds.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "71",
+    "event_type": "technical",
+    "name": "Probably Paradoxical",
+    "description": "Probably Paradoxical gives participants a hands-on understanding of how statistical paradoxes appear in the real world — choose a paradox, design a survey, collect and clean data, analyse it, and interpret the findings through the full research workflow.",
+    "poster": "/images/events/posters/71.avif",
+    "team": {
+      "min": 2,
+      "max": 5,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 5000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 3000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1XPNpa8oEWEkfbtQNZtVpS_Ha_IJ53IJIjQx_pkaGRs4/edit?usp=sharing",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"2 – 5\"},{\"label\":\"Rounds\",\"value\":\"5\"},{\"label\":\"Start Date\",\"value\":\"10 June\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"21 May\"},{\"label\":\"Reg. End\",\"value\":\"9 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\",\"₹2000\"]",
+      "round_when": "[\"10 Jun, 10:00 am\",\"10 Jun, 12:00 pm\",\"10 Jun, 04:30 pm\",\"11 Jun, 12:00 pm\",\"12 Jun, 01:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Stage 0 — Problem Statement Release",
+        "description": "A curated list of statistical paradoxes is released with short explanatory documents.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RJN101"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Stage 1 — Theme & Questionnaire Design",
+        "description": "Teams pick a paradox and design a survey questionnaire around it.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Campus"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Stage 2 — Data Collection",
+        "description": "Conduct surveys on campus and submit the raw dataset.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Campus"
+      },
+      {
+        "round_id": "RND4",
+        "name": "Stage 3 — Cleaning & Analysis",
+        "description": "Clean and analyse the data and prepare deliverables in a supervised setting.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RJN102"
+      },
+      {
+        "round_id": "RND5",
+        "name": "Stage 4 — Final Presentation",
+        "description": "Shortlisted teams present their full workflow and conclusions before the judges.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "RJN102"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "72",
+    "event_type": "technical",
+    "name": "Compassion-A-Thon 3.0",
+    "description": "Compassion-A-Thon 3.0 is a pre-pre-incubation innovation challenge that helps students turn socially relevant ideas into viable startups — guiding them from problem validation and solution design to MVPs and pitching, under the guidance of Prof. Bala Ramadurai with support from Nirmaan IIT Madras and Spirelia.",
+    "poster": "/images/events/posters/72.avif",
+    "team": {
+      "min": 1,
+      "max": 5,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 5000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 3000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 2000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1vexgFYeSYttNT5eRZWm0MpM64jZpigwT0I_GA8OBSuY/edit?usp=sharing",
+      "faqs": "[{\"q\":\"Is the event online or offline?\",\"a\":\"Hybrid — an online round followed by on-campus final presentations for shortlisted teams.\"},{\"q\":\"Are customer interviews mandatory?\",\"a\":\"Yes — customer interviews and validation are a core part of the competition.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 5\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"18 May\"},{\"label\":\"End Date\",\"value\":\"12 June\"},{\"label\":\"Reg. Start\",\"value\":\"19 May\"},{\"label\":\"Reg. End\",\"value\":\"4 June\"}]",
+      "prize_amounts": "[\"₹5000\",\"₹3000\",\"₹2000\"]",
+      "round_when": "[\"18 May, 11:00 am\",\"11 Jun, 10:00 am\",\"12 Jun, 09:00 am\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Round",
+        "description": "Teams transform ideas into validated startup concepts using a pre-pre-incubation template and submit a pitch deck.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "POD Workshop",
+        "description": "A grand-finale workshop by Prof. Bala Ramadurai on the journey from idea to MVP to incubation.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Presentation Round Finale",
+        "description": "Shortlisted teams pitch their ventures before the jury, with mentorship and refinement sessions.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "73",
+    "event_type": "technical",
+    "name": "Syngenta Hackathon",
+    "description": "The Syngenta Hackathon, with the Industry Interaction Cell, is an AI and innovation challenge focused on transforming agriculture — design AI/ML solutions for marketing, field operations, and farmer engagement. Winning solutions may be considered for pilot implementation in Syngenta’s ecosystem.",
+    "poster": "/images/events/posters/73.avif",
+    "team": {
+      "min": 4,
+      "max": 8,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "1st Prize",
+        "amount": 40000
+      },
+      {
+        "position": "2nd Prize",
+        "amount": 20000
+      },
+      {
+        "position": "3rd Prize",
+        "amount": 20000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/u/2/d/e/2PACX-1vRt0GzHk4VkGHLA7d9HbucBuhc7M4OqrZsAATp-maFZOK-DWgcK_vnaSPTBxKOTKDrz3dWm9VlR9wHW/pub",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"4 – 8\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"11 June\"},{\"label\":\"End Date\",\"value\":\"11 June\"},{\"label\":\"Reg. Start\",\"value\":\"8 May\"},{\"label\":\"Reg. End\",\"value\":\"21 May\"}]",
+      "prize_amounts": "[\"₹40000\",\"₹20000\",\"₹20000\"]"
+    },
+    "schedule": [],
+    "registration_fields": []
+  },
+  {
+    "event_id": "93",
+    "event_type": "technical",
+    "name": "goboxd",
+    "description": "goboxd challenges you to build a sandbox that runs untrusted code in Go on Linux. Solo or pairs; open registration for Stage 1, with IITM BS students eligible for placing. Top teams are also offered internship slots at SEEK.",
+    "poster": "/images/events/posters/93.avif",
+    "team": {
+      "min": 1,
+      "max": 2,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [
+      {
+        "position": "1st Place",
+        "amount": 50000
+      },
+      {
+        "position": "2nd Place",
+        "amount": 25000
+      },
+      {
+        "position": "3rd Place",
+        "amount": 10000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://intern-iitm.github.io/goboxd-hackathon/",
+      "faqs": "[{\"q\":\"Where do I register officially?\",\"a\":\"At the official spec page (intern-iitm.github.io/goboxd-hackathon); the central form confirms it.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1 – 2\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"20 May\"},{\"label\":\"End Date\",\"value\":\"10 June\"},{\"label\":\"Reg. Start\",\"value\":\"19 May\"},{\"label\":\"Reg. End\",\"value\":\"22 May\"}]",
+      "prize_amounts": "[\"₹50000\",\"₹25000\",\"₹10000\"]",
+      "round_when": "[\"20 May\",\"2 Jun\",\"10 Jun\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Stage 01 — Build a prototype",
+        "description": "Build a working sandbox that talks to the API; 10 teams advance.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Stage 02 — Extend to multiple languages",
+        "description": "Extend the sandbox to multiple language toolchains; the same 10 teams continue.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND3",
+        "name": "Stage 03 — Harden it under pressure",
+        "description": "An in-person 24-hour final stage to harden the sandbox; winners announced on site.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "102",
+    "event_type": "technical",
+    "name": "Logi Innoverse 2026",
+    "description": "Logi InnoVerse 2026 challenges interdisciplinary student teams to solve real-world problems and build next-generation product ecosystems, exploring the future of tech, AI, and UX with Logitech. A pre-event journey (themes, an Innovation Preparation Kit, and a concept sprint) leads into a two-day main event.",
+    "poster": "/images/events/posters/102.avif",
+    "team": {
+      "min": 1,
+      "max": 1,
+      "house": false,
+      "allow_single_registration": true
+    },
+    "prize_money": [],
+    "registration": {
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"1\"},{\"label\":\"Rounds\",\"value\":\"0\"},{\"label\":\"Start Date\",\"value\":\"12 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"17 May\"},{\"label\":\"Reg. End\",\"value\":\"30 May\"}]",
+      "round_when": "[\"12 June\",\"13 June\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Day 1 — Innovation Connect",
+        "description": "Event introduction, a “Future of Innovation” tech talk by Logitech experts, and a mentorship sprint.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      },
+      {
+        "round_id": "RND2",
+        "name": "Day 2 — Innovation Expo",
+        "description": "Mentor review checkpoint, an innovation showcase walkthrough, and final jury evaluation.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "IIT Madras"
+      }
+    ],
+    "registration_fields": []
+  },
+  {
+    "event_id": "122",
+    "event_type": "technical",
+    "name": "Hustlepreneurs By Escape Room",
+    "description": "Hustlepreneurs is an entrepreneurial challenge extending Escape Room — combine problem-solving with startup thinking. Pitch a startup idea, navigate a high-pressure business-crisis case study, and present your venture to the judging panel.",
+    "poster": "/images/events/posters/122.avif",
+    "team": {
+      "min": 2,
+      "max": 4,
+      "house": false,
+      "allow_single_registration": false
+    },
+    "prize_money": [
+      {
+        "position": "Top 5 Teams",
+        "amount": 10000
+      }
+    ],
+    "registration": {
+      "rulebook": "https://docs.google.com/document/d/1XAmCMYrmaxpZyJttA3oZiUQA9Hb9woZVgjpycxEyS-A/",
+      "faqs": "[{\"q\":\"Is the event team-based?\",\"a\":\"Yes — teams of 2 to 4 participants.\"},{\"q\":\"Is a prototype required?\",\"a\":\"No — you can present a startup idea through a pitch deck.\"}]",
+      "meta": "[{\"label\":\"Team Size\",\"value\":\"2 – 4\"},{\"label\":\"Rounds\",\"value\":\"3\"},{\"label\":\"Start Date\",\"value\":\"3 June\"},{\"label\":\"End Date\",\"value\":\"13 June\"},{\"label\":\"Reg. Start\",\"value\":\"3 June\"},{\"label\":\"Reg. End\",\"value\":\"11 June\"}]",
+      "prize_amounts": "[\"₹10000 each\"]",
+      "round_when": "[\"4 Jun\",\"13 Jun, 12:30 pm\",\"13 Jun, 02:00 pm\"]"
+    },
+    "schedule": [
+      {
+        "round_id": "RND1",
+        "name": "Online Submission",
+        "description": "Submit a pitch deck covering vision, problem, solution, innovation, scalability, and business potential.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "Online"
+      },
+      {
+        "round_id": "RND2",
+        "name": "The Escape (Case Study)",
+        "description": "Teams tackle a high-pressure startup crisis and pitch the most practical escape strategy.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall III"
+      },
+      {
+        "round_id": "RND3",
+        "name": "The Pitch",
+        "description": "Shortlisted teams present their startup ideas and field strategic questions from the panel.",
+        "start_time": "",
+        "end_time": "",
+        "venue": "ICSR Hall III"
+      }
+    ],
+    "registration_fields": []
+  }
+]

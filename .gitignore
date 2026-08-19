@@ -1,0 +1,11 @@
+# Local editor configuration
+.zed/
+*.pdf
+*.md
+node_modules/
+
+graphify-out/
+graphify-out
+
+__pycache__/
+*.pyc

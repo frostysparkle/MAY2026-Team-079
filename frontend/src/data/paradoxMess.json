@@ -1,0 +1,23 @@
+[
+  {
+    "mess_id": "MS01",
+    "name": "Himalaya",
+    "capacity": 450,
+    "preference": "veg",
+    "cuisines": ["north_indian"]
+  },
+  {
+    "mess_id": "MS02",
+    "name": "Vindhya",
+    "capacity": 450,
+    "preference": "non_veg",
+    "cuisines": ["south_indian"]
+  },
+  {
+    "mess_id": "MS03",
+    "name": "Nilgiri",
+    "capacity": 300,
+    "preference": "jain",
+    "cuisines": ["north_indian", "south_indian"]
+  }
+]
