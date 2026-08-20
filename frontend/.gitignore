@@ -1,5 +1,9 @@
 # Logs
-logs
+# Anchored to the project root: a bare `logs` matches at any depth, which
+# silently swallowed `src/features/logs/` — four source modules the audit trail
+# and the control board's activity panel import. Only the runtime log directory
+# Vite/npm write at the root is meant to be ignored here.
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
