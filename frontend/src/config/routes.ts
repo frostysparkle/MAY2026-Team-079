@@ -21,8 +21,19 @@ export const ROUTES = {
   publicWorkshopDetail: '/workshops/:workshopId',
   sponsors: '/sponsors',
 
-  // Participant area (inside the nav shell)
+  /**
+   * Participant area.
+   *
+   * `home` is the participant's Landing Page — the same PARADOX portal a visitor
+   * sees at `splash`, with the perimeter nav filtered to the sections a signed-in
+   * participant may open. It is deliberately *not* inside the nav shell: the
+   * portal is a full-viewport hero and owns its own header.
+   *
+   * Every other participant route below renders inside `AppShell`, unchanged.
+   */
   home: '/app',
+  /** The figures screen that used to be the `/app` index. */
+  dashboard: '/app/dashboard',
   profile: '/app/profile',
   changePassword: '/app/profile/change-password',
   myQr: '/app/qr',
@@ -42,7 +53,15 @@ export const ROUTES = {
   accommodationPayment: '/app/accommodation/payment',
 
   // Staff area
+  /**
+   * The staff Landing Page — the PARADOX portal again, with the perimeter nav
+   * filtered by role (a Super Admin sees the admin sections, everyone else sees
+   * their duty list plus the public programme). Outside `StaffShell`, as `home` is
+   * outside `AppShell`.
+   */
   staffHome: '/staff',
+  /** The personal duty list that used to live at `/staff`. */
+  staffDuties: '/staff/duties',
   staffChangePassword: '/staff/change-password',
   scanMess: '/staff/scan/mess/:messId',
   scanHostel: '/staff/scan/hostel/:hostelId',

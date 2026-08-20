@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Download, ScanLine, Users } from 'lucide-react';
+import { DoorOpen, Download, ScanLine, Ticket, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, EventParticipationResponse } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import { isUhc, uhcHouse } from '@/stores/authStore';
 import { toCsv, downloadCsv } from '@/lib/csv';
+import { ADMITTED_NOTE, readEventCapacity } from '@/features/events/eventCapacity';
+import { readEventExtras } from '@/features/events/eventExtras';
 import {
   Avatar,
   Button,
   Card,
   EmptyState,
   ErrorState,
+  ProgressBar,
   ResultBanner,
   Spinner,
+  StatCard,
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
@@ -26,6 +30,10 @@ import { FestivalScreen } from '@/components/layout/FestivalScreen';
  * staff dashboard. Visibility is scoped server-side: a UHC member only sees
  * their own house, so a short list is not necessarily an error — hence the
  * house-detection warning below.
+ *
+ * Story 3.2 lives at the top of this screen: the organiser's answer to "how many
+ * entries are left today", derived in `features/events/eventCapacity`. It is
+ * shown only for events whose organiser has published a capacity.
  */
 export default function EventParticipationPage() {
   const { eventId = '' } = useParams();
@@ -42,7 +50,8 @@ export default function EventParticipationPage() {
         setError(e instanceof ApiClientError ? e.message : 'Could not load participation.'),
       );
 
-    // Only for the event's name in the title — never block the page on it.
+    // For the event's name in the title and its published capacity — never block
+    // the page on it.
     api
       .listEvents()
       .then((events) => setEvent(events.find((e) => e.event_id === eventId) ?? null))
@@ -72,6 +81,19 @@ export default function EventParticipationPage() {
   }
 
   const houseWarning = isUhc() && uhcHouse() === null;
+
+  // Absent for UHC callers, so narrow rather than assert. `total_daily_scans`
+  // counts distinct participants, not scan rows, so it needs no correction here.
+  const attendedToday = typeof data.total_daily_scans === 'number' ? data.total_daily_scans : null;
+  const capacity = readEventCapacity(
+    event ? readEventExtras(event.registration).capacity : undefined,
+    attendedToday,
+  );
+
+  // Registrations against the same published limit — a different question from
+  // "who has walked in", and the one that tells an organiser they have sold more
+  // places than the venue holds.
+  const oversubscribed = capacity ? Math.max(0, data.count - capacity.capacity) : 0;
 
   return (
     <FestivalScreen
@@ -119,6 +141,68 @@ export default function EventParticipationPage() {
           UHC visibility is derived from your email (e.g. wayanad-sec@...). Your email has no
           hyphen, so this list may show nobody even if participants exist.
         </ResultBanner>
+      )}
+
+      {capacity && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-black uppercase tracking-[0.12em] text-ink">
+            Entry capacity today
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatCard
+              icon={Ticket}
+              label="Published capacity"
+              value={capacity.capacity.toLocaleString()}
+              tone="brand"
+              footnote={
+                oversubscribed > 0
+                  ? `${oversubscribed.toLocaleString()} more registered than the venue holds`
+                  : `${data.count.toLocaleString()} registered`
+              }
+            />
+            <StatCard
+              icon={DoorOpen}
+              label="Admitted today"
+              value={capacity.admitted === null ? '—' : capacity.admitted.toLocaleString()}
+              tone={capacity.atCapacity ? 'warning' : 'info'}
+              footnote={
+                capacity.admitted === null
+                  ? 'Today’s attendance is not readable from this account'
+                  : ADMITTED_NOTE
+              }
+            />
+            <StatCard
+              icon={Users}
+              label="Entries left"
+              value={capacity.remaining === null ? '—' : capacity.remaining.toLocaleString()}
+              tone={capacity.atCapacity ? 'warning' : 'success'}
+              footnote={
+                capacity.admitted === null ? (
+                  capacity.summary
+                ) : (
+                  <span className="flex flex-col gap-1">
+                    <ProgressBar
+                      value={capacity.admitted}
+                      max={capacity.capacity}
+                      tone={capacity.barTone}
+                      label={`${event?.name ?? 'Event'} entries used`}
+                    />
+                    <span>{capacity.summary}</span>
+                  </span>
+                )
+              }
+            />
+          </div>
+          {capacity.over > 0 && (
+            <ResultBanner
+              variant="warning"
+              title={`${capacity.over.toLocaleString()} past the published capacity`}
+            >
+              More people have been scanned in today than the published limit. The capacity is an
+              organiser’s figure, not an enforced cap — the gate does not refuse anyone.
+            </ResultBanner>
+          )}
+        </section>
       )}
 
       {data.event_team.length > 0 && (

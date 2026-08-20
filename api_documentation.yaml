@@ -909,6 +909,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /events/{event_id}/capacity:
+    get:
+      tags:
+      - Events
+      summary: Event Capacity
+      description: >-
+        How full one event is, as counts and nothing else. Readable by any
+        signed-in user, participants included, which is what makes it the crowd
+        signal an event page can show before somebody walks to the venue. Every
+        other count of how full an event is returns the roster and is staff-gated;
+        this one carries no participant_id, name, email or registration data for
+        anybody. `registered` is the current registration count, so it falls when
+        somebody cancels. `attended_today` counts distinct participants scanned in
+        today rather than scan rows, so one person admitted by two volunteers
+        counts once. The published capacity is not returned: it rides in the
+        event's `registration` map, which GET /events and GET /events/public
+        already return in full.
+      operationId: event_capacity_events__event_id__capacity_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Event not found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /events/{event_id}/my_daily_scans:
     get:
       tags:

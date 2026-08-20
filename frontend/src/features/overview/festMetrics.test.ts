@@ -8,6 +8,7 @@ import type {
   ScheduleRound,
   Workshop,
 } from '@/api/types';
+import { writeEventRegistration } from '@/features/events/eventExtras';
 import {
   buildEventRows,
   buildStaffWorkload,
@@ -44,6 +45,15 @@ function event(id: string, schedule: ScheduleRound[] = [], overrides: Partial<Ev
     event_team: [],
     ...overrides,
   };
+}
+
+/**
+ * An event whose organiser has published an entry capacity. Built through
+ * `writeEventRegistration` rather than by hand, so the fixture cannot drift from
+ * the key the admin form actually writes.
+ */
+function capped(id: string, capacity: number): Event {
+  return event(id, [], { registration: writeEventRegistration({ capacity }) });
 }
 
 const round = (start: string, end?: string): ScheduleRound => ({
@@ -146,6 +156,25 @@ describe('buildEventRows', () => {
     const rows = buildEventRows([event('E1')], { E1: participation(5) }, NOW);
     expect(rows[0].scansToday).toBeNull();
   });
+
+  it('derives entries left from the published capacity and the scans today', () => {
+    const rows = buildEventRows([capped('E1', 200)], { E1: participation(150, 142) }, NOW);
+    expect(rows[0].capacity?.capacity).toBe(200);
+    expect(rows[0].capacity?.remaining).toBe(58);
+    expect(rows[0].capacity?.atCapacity).toBe(false);
+  });
+
+  it('leaves capacity null for an event that publishes no limit', () => {
+    // Most events do not. "No limit declared" is not "no entries left".
+    const rows = buildEventRows([event('E1')], { E1: participation(150, 142) }, NOW);
+    expect(rows[0].capacity).toBeNull();
+  });
+
+  it('keeps entries left null when the scan count could not be read', () => {
+    const rows = buildEventRows([capped('E1', 200)], { E1: participation(150) }, NOW);
+    expect(rows[0].capacity?.capacity).toBe(200);
+    expect(rows[0].capacity?.remaining).toBeNull();
+  });
 });
 
 describe('summariseEvents', () => {
@@ -188,6 +217,49 @@ describe('summariseEvents', () => {
     const summary = summariseEvents([]);
     expect(summary.total).toBe(0);
     expect(summary.registrations).toBeNull();
+    expect(summary.withCapacity).toBe(0);
+    expect(summary.entriesLeft).toBeNull();
+  });
+
+  it('sums entries left across capped events, ignoring uncapped ones', () => {
+    const summary = summariseEvents(
+      buildEventRows(
+        [capped('E1', 200), capped('E2', 100), event('E3')],
+        { E1: participation(0, 150), E2: participation(0, 10), E3: participation(0, 999) },
+        NOW,
+      ),
+    );
+    // 50 left of E1, 90 of E2. E3 declares no limit, so it contributes nothing
+    // rather than being treated as unlimited-and-therefore-zero.
+    expect(summary.withCapacity).toBe(2);
+    expect(summary.entriesLeft).toBe(140);
+  });
+
+  it('leaves the entries-left total null when one capped event is unreadable', () => {
+    const summary = summariseEvents(
+      buildEventRows(
+        [capped('E1', 200), capped('E2', 100)],
+        { E1: participation(0, 150), E2: participation(0) },
+        NOW,
+      ),
+    );
+    expect(summary.entriesLeft).toBeNull();
+  });
+
+  it('ranks the events at and near their limit, fullest first', () => {
+    const summary = summariseEvents(
+      buildEventRows(
+        [capped('Full', 100), capped('Filling', 100), capped('Quiet', 100)],
+        {
+          Full: participation(0, 100),
+          Filling: participation(0, 80),
+          Quiet: participation(0, 10),
+        },
+        NOW,
+      ),
+    );
+    expect(summary.atCapacity.map((row) => row.id)).toEqual(['Full']);
+    expect(summary.nearCapacity.map((row) => row.id)).toEqual(['Full', 'Filling']);
   });
 });
 

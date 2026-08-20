@@ -218,3 +218,49 @@ describe('publicEventsForCategory', () => {
     expect(publicEventsForCategory(records, 'sports').map((v) => v.id)).toEqual(['b']);
   });
 });
+
+describe('capacity and entry requirements on the view', () => {
+  const registration = writeEventRegistration({
+    capacity: 120,
+    entry: {
+      reportingTime: '30 minutes before your round',
+      idProof: 'Institute ID card',
+      allowedItems: ['Laptop', 'Charger'],
+      rules: ['Entry closes 10 minutes after the round begins.'],
+    },
+  });
+
+  it('carries both onto a backend event view', () => {
+    const view = backendEventView(makeEvent({ registration }));
+    expect(view!.capacity).toBe(120);
+    expect(view!.entry).toEqual({
+      reportingTime: '30 minutes before your round',
+      idProof: 'Institute ID card',
+      allowedItems: ['Laptop', 'Charger'],
+      rules: ['Entry closes 10 minutes after the round begins.'],
+    });
+  });
+
+  it('reaches the pre-login brochure too, since `registration` is a published field', () => {
+    const view = publicEventView(makePublicRecord({ registration }));
+    expect(view!.capacity).toBe(120);
+    expect(view!.entry.idProof).toBe('Institute ID card');
+  });
+
+  it('leaves capacity absent and the entry block empty when nothing is set', () => {
+    const view = backendEventView(makeEvent());
+    expect(view!.capacity).toBeUndefined();
+    expect(view!.entry).toEqual({
+      reportingTime: undefined,
+      idProof: undefined,
+      allowedItems: [],
+      rules: [],
+    });
+  });
+
+  it('does not let capacity displace the derived meta tiles', () => {
+    const view = backendEventView(makeEvent({ registration }));
+    // Capacity is its own field; the tiles are still derived from the columns.
+    expect(view!.meta).toContainEqual({ label: 'Team Size', value: '2 – 4' });
+  });
+});

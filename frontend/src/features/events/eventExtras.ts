@@ -3,12 +3,18 @@ import type { Event, RegistrationField } from '@/api/types';
 /**
  * Several things the published festival catalogue shows have no dedicated column
  * on the backend `Event` schema: the rulebook URL, the FAQ list, the choice list
- * for a `select` registration field, and the brochure's *display* strings.
+ * for a `select` registration field, the brochure's *display* strings, the
+ * event's capacity, and the entry requirements a participant needs before they
+ * reach the venue (reporting time, ID proof, allowed items, entry rules).
  *
  * The backend is frozen, so rather than change the schema they ride along in
  * `Event.registration` — a `Dict[str, str]` that the API stores and returns
  * verbatim, alongside its two known keys `start_time` and `end_time`. Extra
  * string keys pass through untouched.
+ *
+ * `registration` is also named in `PUBLIC_EVENT_FIELDS`, so every key below is
+ * returned by `GET /events/public` as well as the authenticated list — which is
+ * what lets one admin edit reach both the brochure and the in-app page.
  *
  * ## Why a display overlay exists
  *
@@ -45,10 +51,39 @@ const META_KEY = 'meta';
 const PRIZE_AMOUNTS_KEY = 'prize_amounts';
 /** Display round times, positionally aligned with `schedule`. */
 const ROUND_WHEN_KEY = 'round_when';
+/** How many entries the event admits, as a decimal string. */
+const CAPACITY_KEY = 'capacity';
+/** When to report at the venue, e.g. "30 minutes before your round". */
+const REPORTING_TIME_KEY = 'reporting_time';
+/** The ID a participant must carry, e.g. "Institute ID card". */
+const ID_PROOF_KEY = 'id_proof';
+/** What participants may bring in, as a JSON array of strings. */
+const ALLOWED_ITEMS_KEY = 'allowed_items';
+/** Gate rules, as a JSON array of strings. */
+const ENTRY_RULES_KEY = 'entry_rules';
 
 export interface EventFaq {
   q: string;
   a: string;
+}
+
+/**
+ * What a participant needs to know before turning up — Story 1.4. Grouped
+ * because the event page renders them as one block and hides the block entirely
+ * when an organiser has filled none of them in.
+ */
+export interface EventEntryInfo {
+  reportingTime?: string;
+  idProof?: string;
+  allowedItems: string[];
+  rules: string[];
+}
+
+/** Whether an organiser has filled in any entry requirement at all. */
+export function hasEntryInfo(entry: EventEntryInfo): boolean {
+  return Boolean(
+    entry.reportingTime || entry.idProof || entry.allowedItems.length || entry.rules.length,
+  );
 }
 
 /** One tile in the event page's meta grid, e.g. `Reg. Start` / `17 May`. */
@@ -74,6 +109,14 @@ export interface EventExtras {
    * means "format that round's start/end timestamps instead".
    */
   roundWhen: string[];
+  /**
+   * How many entries the event admits. Absent when the organiser has not set
+   * one — which is the honest default, since the backend has no capacity column
+   * and an unset limit must not read as a limit of zero.
+   */
+  capacity?: number;
+  /** Entry requirements, always present as an object; may be entirely empty. */
+  entry: EventEntryInfo;
 }
 
 /* ------------------------------------------------------------- reading --- */
@@ -86,6 +129,36 @@ function parseJsonArray(raw: string | undefined): unknown[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * A JSON array of free-text lines — entry rules, allowed items. Unlike
+ * `parseStringArray` this *drops* blanks rather than preserving their position,
+ * because nothing is aligned to these by index.
+ */
+function parseTextList(raw: string | undefined): string[] {
+  return parseJsonArray(raw)
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter(Boolean);
+}
+
+/**
+ * A positive whole number of seats, or `undefined`.
+ *
+ * Zero and negatives are rejected along with junk: the map is free-form, and a
+ * stored `"0"` is far more likely to be a half-finished edit than a deliberate
+ * "this event admits nobody". Reading it as absent keeps the page from
+ * announcing a capacity the organiser never meant to publish.
+ */
+function parseCapacity(raw: string | undefined): number | undefined {
+  if (!raw?.trim()) return undefined;
+  const value = Number(raw.trim());
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+/** Trimmed, or `undefined` when blank — never an empty string. */
+function readText(raw: string | undefined): string | undefined {
+  return raw?.trim() || undefined;
 }
 
 /** Pull our piggybacked fields out of an event's `registration` map. */
@@ -104,9 +177,7 @@ export function readEventExtras(registration: Event['registration'] | undefined)
   const fieldOptions: Record<string, string[]> = {};
   for (const [key, value] of Object.entries(map)) {
     if (!key.startsWith(OPTIONS_PREFIX)) continue;
-    const choices = parseJsonArray(value).filter(
-      (choice): choice is string => typeof choice === 'string' && choice.trim() !== '',
-    );
+    const choices = parseTextList(value);
     if (choices.length > 0) fieldOptions[key.slice(OPTIONS_PREFIX.length)] = choices;
   }
 
@@ -120,15 +191,20 @@ export function readEventExtras(registration: Event['registration'] | undefined)
     return trimmed ? [{ label: trimmed, value: value.trim() }] : [];
   });
 
-  const rulebook = map[RULEBOOK_KEY]?.trim();
-
   return {
-    rulebook: rulebook || undefined,
+    rulebook: readText(map[RULEBOOK_KEY]),
     faqs,
     fieldOptions,
     meta,
     prizeAmounts: parseStringArray(map[PRIZE_AMOUNTS_KEY]),
     roundWhen: parseStringArray(map[ROUND_WHEN_KEY]),
+    capacity: parseCapacity(map[CAPACITY_KEY]),
+    entry: {
+      reportingTime: readText(map[REPORTING_TIME_KEY]),
+      idProof: readText(map[ID_PROOF_KEY]),
+      allowedItems: parseTextList(map[ALLOWED_ITEMS_KEY]),
+      rules: parseTextList(map[ENTRY_RULES_KEY]),
+    },
   };
 }
 
@@ -162,6 +238,9 @@ export function writeEventRegistration(input: {
   meta?: EventMetaRow[];
   prizeAmounts?: string[];
   roundWhen?: string[];
+  /** Ignored unless it is a positive whole number; see `parseCapacity`. */
+  capacity?: number;
+  entry?: Partial<EventEntryInfo>;
 }): Record<string, string> {
   const map: Record<string, string> = {};
 
@@ -170,14 +249,27 @@ export function writeEventRegistration(input: {
 
   if (input.rulebook?.trim()) map[RULEBOOK_KEY] = input.rulebook.trim();
 
+  if (
+    typeof input.capacity === 'number' &&
+    Number.isInteger(input.capacity) &&
+    input.capacity > 0
+  ) {
+    map[CAPACITY_KEY] = String(input.capacity);
+  }
+
+  const entry = input.entry ?? {};
+  if (entry.reportingTime?.trim()) map[REPORTING_TIME_KEY] = entry.reportingTime.trim();
+  if (entry.idProof?.trim()) map[ID_PROOF_KEY] = entry.idProof.trim();
+  writeTextList(map, ALLOWED_ITEMS_KEY, entry.allowedItems);
+  writeTextList(map, ENTRY_RULES_KEY, entry.rules);
+
   const faqs = (input.faqs ?? []).filter((f) => f.q.trim() && f.a.trim());
   if (faqs.length > 0) {
     map[FAQS_KEY] = JSON.stringify(faqs.map((f) => ({ q: f.q.trim(), a: f.a.trim() })));
   }
 
   for (const [fieldId, choices] of Object.entries(input.fieldOptions ?? {})) {
-    const clean = choices.map((c) => c.trim()).filter(Boolean);
-    if (clean.length > 0) map[`${OPTIONS_PREFIX}${fieldId}`] = JSON.stringify(clean);
+    writeTextList(map, `${OPTIONS_PREFIX}${fieldId}`, choices);
   }
 
   const meta = (input.meta ?? []).filter((m) => m.label.trim());
@@ -191,6 +283,19 @@ export function writeEventRegistration(input: {
   writeAlignedList(map, ROUND_WHEN_KEY, input.roundWhen);
 
   return map;
+}
+
+/**
+ * Write a free-text list, blanks dropped. Nothing is aligned to these by index,
+ * so an empty row is just an empty row and is discarded rather than preserved.
+ */
+function writeTextList(
+  map: Record<string, string>,
+  key: string,
+  values: string[] | undefined,
+): void {
+  const clean = (values ?? []).map((v) => v.trim()).filter(Boolean);
+  if (clean.length > 0) map[key] = JSON.stringify(clean);
 }
 
 /**

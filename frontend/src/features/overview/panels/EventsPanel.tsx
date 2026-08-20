@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { DOMAIN_COLOR, RankedBars, Sparkline, SplitBar, StatusBadge } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { path, ROUTES } from '@/config/routes';
 import type { Event, EventParticipationResponse } from '@/api/types';
 import type { AuditFeeds, TierState } from '../useFestSnapshot';
@@ -18,7 +19,9 @@ import { orDash, orDashPercent } from '../format';
  * admin asks most often.
  *
  * Registration and attendance totals are `null` unless *every* event was read.
- * A partial sum here would look like a real figure and understate the fest.
+ * A partial sum here would look like a real figure and understate the fest. The
+ * same rule governs the entry-capacity block: it sums only events that publish a
+ * limit, and only when every one of them was readable.
  */
 export function EventsPanel({
   events,
@@ -162,6 +165,51 @@ export function EventsPanel({
           emptyText="No participation figures available"
         />
       </PanelBlock>
+
+      {/* Story 3.2 at fest scale. Shown only when at least one organiser has
+          published a capacity — a block reading "0 events near capacity" across
+          a fest where nobody declared one says nothing. */}
+      {summary.withCapacity > 0 && (
+        <PanelBlock title="Entry capacity">
+          <FigureRow>
+            <Figure
+              label="Entries left"
+              value={orDash(summary.entriesLeft)}
+              note={`across ${summary.withCapacity} event${summary.withCapacity === 1 ? '' : 's'} with a published limit`}
+            />
+            <Figure
+              label="At capacity"
+              value={summary.atCapacity.length}
+              tone={summary.atCapacity.length > 0 ? 'bad' : 'muted'}
+              note="today's scans have met the limit"
+            />
+          </FigureRow>
+          {summary.nearCapacity.length > 0 && (
+            <ul className="flex list-none flex-col gap-1 p-0">
+              {summary.nearCapacity.slice(0, 4).map((row) => (
+                <li key={row.id}>
+                  <Link
+                    to={path(ROUTES.eventParticipation, { eventId: row.id })}
+                    className="tap flex items-baseline justify-between gap-3 rounded-lg px-1 py-0.5 hover:bg-surface-2"
+                  >
+                    <span className="min-w-0 truncate text-xs font-medium text-ink">
+                      {row.name}
+                    </span>
+                    <span
+                      className={cn(
+                        'shrink-0 text-xs font-semibold tabular-nums',
+                        row.capacity?.atCapacity ? 'text-danger' : 'text-warning',
+                      )}
+                    >
+                      {row.capacity?.summary}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PanelBlock>
+      )}
 
       {summary.withoutRegistrations.length > 0 && (
         <p className="text-[11px] text-warning">

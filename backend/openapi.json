@@ -1362,6 +1362,52 @@
         ]
       }
     },
+    "/events/{event_id}/capacity": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Event Capacity",
+        "description": "How full this event is right now, as counts and nothing else \u2014 Story 3.3.\n\nThis is deliberately the only fullness figure a *participant* can read. Every\nother one is staff-gated because every other one returns identities:\n``participation`` needs ``get_current_staff`` and hands back the roster,\n``logs`` needs ``super_admin`` and hands back the scan rows. A participant\ndeciding whether to walk to a venue needs neither \u2014 they need two integers.\n\nSo this returns two integers. No ``participant_id``, no name, no email, no\nregistration data, for anybody. It is safe to expose precisely because there\nis nothing in it to leak.\n\n``registered`` is counted from the participants collection, which\n``deregister_event`` pulls from, so it falls when somebody cancels rather\nthan only ever rising.\n\n``attended_today`` counts distinct participants, not scan rows \u2014 see\n``_unique_attendance_today``.\n\nThe published capacity is **not** returned. It already rides in the event's\n``registration`` map, which both ``GET /events`` and ``GET /events/public``\nalready return in full, so the client that asks this question is holding it\nalready. Parsing it in a second place is how two places come to disagree.",
+        "operationId": "event_capacity_events__event_id__capacity_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events/{event_id}/participation": {
       "get": {
         "tags": [

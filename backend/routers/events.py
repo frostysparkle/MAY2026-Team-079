@@ -55,13 +55,19 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
 
 @router.get("")
 def list_events(current_user: dict = Depends(get_current_user)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id})
     # `created_by` holds the creating admin's raw ObjectId, which is not JSON
     # serialisable — leaving it in makes this endpoint 500 as soon as any event
     # has been created through POST /events. It is an internal reference with no
     # use to a client, so it is projected out rather than converted.
-    events = list(event_collection.find({}, {"_id": 0, "created_by": 0}))
+    #
+    # `logs` is projected out because it is the event's registration roster: one
+    # entry per registration, each carrying a `participant_id`. This endpoint is
+    # readable by any authenticated user, so returning it let any participant
+    # enumerate everybody registered for every event. Staff who need the roster
+    # have `GET /events/{event_id}/participation`, which is gated and returns it
+    # deliberately; a participant who needs to know how full an event is has
+    # `GET /events/{event_id}/capacity`, which returns counts and no identities.
+    events = list(event_collection.find({}, {"_id": 0, "created_by": 0, "logs": 0}))
     return events
 
 
@@ -235,6 +241,16 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_par
         {"_id": current_user["_id"]},
         {"$pull": {"events": {"event_id": event["_id"]}}}
     )
+    # The event's own `logs` array is the mirror of the participant-side roster,
+    # and registration pushes to it. Without the matching pull it only ever grew:
+    # a cancelled registration stayed counted for the rest of the fest, so the
+    # array's length overstated the real roll by every cancellation ever made.
+    # The *history* of the cancellation is not lost — it goes to the audit trail
+    # below, which is where history belongs; `logs` tracks current state.
+    event_collection.update_one(
+        {"_id": event["_id"]},
+        {"$pull": {"logs": {"action": "registration", "participant_id": current_user["participant_id"]}}}
+    )
     log_audit(current_user["participant_id"], "EVENT_DEREGISTER", event_id)
     return {"message": "Deregistered successfully"}
 
@@ -247,6 +263,67 @@ def my_registrations(current_user: dict = Depends(get_current_participant)):
         if "event_id" in ev and not isinstance(ev["event_id"], str):
             ev["event_id"] = str(ev["event_id"])
     return events
+
+def _unique_attendance_today(event: dict) -> int:
+    """
+    How many distinct participants have been scanned in today.
+
+    ``POST /events/{event_id}/scan`` dedupes on
+    ``(event, participant, scanner, day)`` — *including the scanner* — so that
+    each volunteer keeps an accurate tally of their own gate in
+    ``my_daily_scans``. The side effect is that one participant admitted by two
+    volunteers writes two rows, and simply counting rows reported a half-empty
+    venue as full.
+
+    Counting distinct ``participant_id`` values instead keeps both readings
+    correct: the per-scanner rows stay exactly as they were, so ``my_daily_scans``
+    and the ``logs`` audit trail are untouched, while every *attendance* figure
+    counts heads.
+    """
+    day_str = datetime.utcnow().strftime("%Y-%m-%d")
+    return len(event_logs_collection.distinct("participant_id", {
+        "event_id": str(event["_id"]),
+        "day": day_str
+    }))
+
+
+@router.get("/{event_id}/capacity")
+def event_capacity(event_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    How full this event is right now, as counts and nothing else — Story 3.3.
+
+    This is deliberately the only fullness figure a *participant* can read. Every
+    other one is staff-gated because every other one returns identities:
+    ``participation`` needs ``get_current_staff`` and hands back the roster,
+    ``logs`` needs ``super_admin`` and hands back the scan rows. A participant
+    deciding whether to walk to a venue needs neither — they need two integers.
+
+    So this returns two integers. No ``participant_id``, no name, no email, no
+    registration data, for anybody. It is safe to expose precisely because there
+    is nothing in it to leak.
+
+    ``registered`` is counted from the participants collection, which
+    ``deregister_event`` pulls from, so it falls when somebody cancels rather
+    than only ever rising.
+
+    ``attended_today`` counts distinct participants, not scan rows — see
+    ``_unique_attendance_today``.
+
+    The published capacity is **not** returned. It already rides in the event's
+    ``registration`` map, which both ``GET /events`` and ``GET /events/public``
+    already return in full, so the client that asks this question is holding it
+    already. Parsing it in a second place is how two places come to disagree.
+    """
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return {
+        "event_id": event_id,
+        "registered": participants_collection.count_documents({"events.event_id": event["_id"]}),
+        "attended_today": _unique_attendance_today(event)
+    }
+
 
 @router.get("/{event_id}/participation")
 def view_participation(event_id: str, current_user: dict = Depends(get_current_staff)):
@@ -324,12 +401,7 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
     }
     
     if not is_uhc:
-        day_str = datetime.utcnow().strftime("%Y-%m-%d")
-        total_scans_today = event_logs_collection.count_documents({
-            "event_id": str(event["_id"]),
-            "day": day_str
-        })
-        response_data["total_daily_scans"] = total_scans_today
+        response_data["total_daily_scans"] = _unique_attendance_today(event)
 
     return response_data
 

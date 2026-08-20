@@ -63,6 +63,10 @@ function eventSummary(over: Partial<EventSummary> = {}): EventSummary {
     topByRegistrations: [],
     liveNow: [],
     startingSoon: [],
+    withCapacity: 0,
+    entriesLeft: null,
+    atCapacity: [],
+    nearCapacity: [],
     ...over,
   };
 }

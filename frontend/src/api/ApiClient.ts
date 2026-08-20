@@ -40,6 +40,7 @@ import type {
   EventParticipationResponse,
   EventScanResponse,
   EventDailyScansResponse,
+  EventCapacityCountsResponse,
   EventLogsResponse,
   EventCreateRequest,
   EventUpdateRequest,
@@ -130,6 +131,8 @@ export interface ApiClient {
   ): Promise<MessageResponse>;
   scanEvent(eventId: string, body: ScanQRRequest): Promise<EventScanResponse>;
   myDailyEventScans(eventId: string): Promise<EventDailyScansResponse>;
+  /** How full one event is, as counts only. Readable by any signed-in user. */
+  eventCapacityCounts(eventId: string): Promise<EventCapacityCountsResponse>;
   /** Every attendance scan recorded for one event. Super Admins only. */
   eventLogs(eventId: string): Promise<EventLogsResponse>;
 

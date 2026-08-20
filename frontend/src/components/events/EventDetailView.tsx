@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { FileText, MapPin, Ticket } from 'lucide-react';
+import { Backpack, Clock, FileText, IdCard, ListChecks, MapPin, Ticket } from 'lucide-react';
 import type { EventView } from '@/features/events/eventView';
+import { hasEntryInfo, type EventEntryInfo } from '@/features/events/eventExtras';
 
 /**
  * The one renderer for an event detail page. Both the hardcoded festival
@@ -12,7 +13,20 @@ import type { EventView } from '@/features/events/eventView';
  * genuinely differs: catalogue events point at the app, backend events register
  * against the live API.
  */
-export function EventDetailView({ view, action }: { view: EventView; action?: ReactNode }) {
+export function EventDetailView({
+  view,
+  action,
+  crowd,
+}: {
+  view: EventView;
+  action?: ReactNode;
+  /**
+   * How busy the event is right now — Story 3.3. Optional because it needs a
+   * signed-in call: the pre-login brochure and the admin preview both render
+   * this same component without one.
+   */
+  crowd?: ReactNode;
+}) {
   const { category } = view;
 
   return (
@@ -55,6 +69,8 @@ export function EventDetailView({ view, action }: { view: EventView; action?: Re
 
           <MetaGrid view={view} />
 
+          {crowd}
+
           {action}
 
           <p className="text-xs italic text-muted">Schedule is tentative and subject to change.</p>
@@ -64,6 +80,12 @@ export function EventDetailView({ view, action }: { view: EventView; action?: Re
       {view.description && (
         <Section title="Event Detail">
           <p className="whitespace-pre-line leading-relaxed text-ink/90">{view.description}</p>
+        </Section>
+      )}
+
+      {hasEntryInfo(view.entry) && (
+        <Section title="Before You Go">
+          <EntryRequirements entry={view.entry} accent={category.accent} />
         </Section>
       )}
 
@@ -125,13 +147,16 @@ export function EventDetailView({ view, action }: { view: EventView; action?: Re
         </Section>
       )}
 
-      {!view.description && view.timeline.length === 0 && view.prizes.length === 0 && (
-        <div className="rounded-2xl bg-surface p-6 text-center shadow-card ring-1 ring-black/[0.04]">
-          <p className="text-sm text-muted">
-            Full details for this event are coming soon. Sign in to register and get your pass.
-          </p>
-        </div>
-      )}
+      {!view.description &&
+        view.timeline.length === 0 &&
+        view.prizes.length === 0 &&
+        !hasEntryInfo(view.entry) && (
+          <div className="rounded-2xl bg-surface p-6 text-center shadow-card ring-1 ring-black/[0.04]">
+            <p className="text-sm text-muted">
+              Full details for this event are coming soon. Sign in to register and get your pass.
+            </p>
+          </div>
+        )}
     </div>
   );
 }
@@ -139,7 +164,16 @@ export function EventDetailView({ view, action }: { view: EventView; action?: Re
 /* --------------------------------------------------------------- helpers --- */
 
 function MetaGrid({ view }: { view: EventView }) {
-  if (!view.rulebook && view.meta.length === 0) return null;
+  // Capacity is a structured field an admin edits, but it renders as one more
+  // tile. Skipped when the author's curated list already labels one, so the
+  // grid never shows "Capacity" twice — nor repeats a React key.
+  const authored = view.meta.some((m) => m.label.trim().toLowerCase() === 'capacity');
+  const tiles =
+    view.capacity && !authored
+      ? [...view.meta, { label: 'Capacity', value: view.capacity.toLocaleString('en-IN') }]
+      : view.meta;
+
+  if (!view.rulebook && tiles.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -153,9 +187,9 @@ function MetaGrid({ view }: { view: EventView }) {
           <FileText size={14} /> Rulebook
         </a>
       )}
-      {view.meta.length > 0 && (
+      {tiles.length > 0 && (
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {view.meta.map((it) => (
+          {tiles.map((it) => (
             <div
               key={it.label}
               className="rounded-xl bg-surface px-3 py-2 shadow-card ring-1 ring-black/[0.04]"
@@ -168,6 +202,121 @@ function MetaGrid({ view }: { view: EventView }) {
           ))}
         </dl>
       )}
+    </div>
+  );
+}
+
+/**
+ * What to bring and when to turn up — the gate-side half of an event page.
+ *
+ * Every part is independently optional, because organisers fill these in at
+ * different times: a reporting time may be known weeks before anyone has
+ * decided what participants may carry in.
+ */
+function EntryRequirements({ entry, accent }: { entry: EventEntryInfo; accent: string }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {(entry.reportingTime || entry.idProof) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {entry.reportingTime && (
+            <EntryFact
+              icon={<Clock size={14} strokeWidth={2.5} />}
+              label="Reporting time"
+              value={entry.reportingTime}
+              accent={accent}
+            />
+          )}
+          {entry.idProof && (
+            <EntryFact
+              icon={<IdCard size={14} strokeWidth={2.5} />}
+              label="ID proof required"
+              value={entry.idProof}
+              accent={accent}
+            />
+          )}
+        </div>
+      )}
+
+      {entry.allowedItems.length > 0 && (
+        <EntryPanel icon={<Backpack size={12} className="shrink-0" />} label="Allowed items">
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {entry.allowedItems.map((item, i) => (
+              <li
+                key={`${item}-${i}`}
+                className="rounded-full bg-surface-2 px-3 py-1 text-xs font-semibold text-ink"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </EntryPanel>
+      )}
+
+      {entry.rules.length > 0 && (
+        <EntryPanel icon={<ListChecks size={12} className="shrink-0" />} label="Entry rules">
+          <ul className="mt-2 flex flex-col gap-2">
+            {entry.rules.map((rule, i) => (
+              <li key={`${rule}-${i}`} className="flex gap-2 text-sm leading-relaxed text-ink/85">
+                <span
+                  aria-hidden
+                  className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: accent }}
+                />
+                {rule}
+              </li>
+            ))}
+          </ul>
+        </EntryPanel>
+      )}
+    </div>
+  );
+}
+
+/** One short labelled fact, badged in the category colour. */
+function EntryFact({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.04]">
+      <span
+        aria-hidden
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
+        style={{ backgroundColor: accent }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+        <p className="text-sm font-bold text-ink">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+/** A titled card holding a list — allowed items, entry rules. */
+function EntryPanel({
+  icon,
+  label,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.04]">
+      <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        {icon} {label}
+      </p>
+      {children}
     </div>
   );
 }

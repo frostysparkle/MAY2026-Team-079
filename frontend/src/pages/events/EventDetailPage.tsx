@@ -3,12 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, MyEventRegistration } from '@/api/types';
+import { readEventExtras } from '@/features/events/eventExtras';
 import { ROUTES } from '@/config/routes';
 import { Button, ErrorState, ResultBanner, Skeleton, StatusBadge } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { EventDetailView } from '@/components/events/EventDetailView';
 import { fullEventView } from '@/features/events/eventView';
 import { EventRegistrationForm } from '@/features/events/EventRegistrationForm';
+import { EventCrowdCard } from '@/features/events/EventCrowdCard';
+import { useEventCrowd } from '@/features/events/useEventCrowd';
 
 /**
  * An event as the participant sees it — the very same `EventDetailView` the public
@@ -24,6 +27,10 @@ import { EventRegistrationForm } from '@/features/events/EventRegistrationForm';
  * Uses `fullEventView` rather than the public normaliser: a participant may hold a
  * registration for an `event_type: 'others'` event, which has no public category,
  * and that must still open.
+ *
+ * Story 3.3 sits between the meta tiles and the registration action: how busy the
+ * event is right now, refreshed after the participant registers or cancels so the
+ * count they are looking at includes what they just did.
  */
 export default function EventDetailPage() {
   const { eventId = '' } = useParams();
@@ -33,6 +40,10 @@ export default function EventDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The published capacity is read from the event the page already holds, so the
+  // parsing rule lives in one place — see `eventExtras.parseCapacity`.
+  const capacity = event ? readEventExtras(event.registration).capacity : undefined;
+  const { counts, reload: reloadCrowd } = useEventCrowd(eventId);
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -54,12 +65,25 @@ export default function EventDetailPage() {
   }
   useEffect(load, [eventId]);
 
+  /**
+   * Re-read the event *and* the crowd counts.
+   *
+   * Used by the two actions that change what those counts say — registering and
+   * cancelling — so the participant sees a figure that includes what they just
+   * did. The mount read is not here: `useEventCrowd` does its own, and folding
+   * it into `load` would make the mount effect depend on the hook's callback.
+   */
+  function refresh() {
+    load();
+    void reloadCrowd();
+  }
+
   async function cancel() {
     setActionError(null);
     setBusy(true);
     try {
       await api.cancelEventRegistration(eventId);
-      load();
+      refresh();
     } catch (e) {
       setActionError(
         e instanceof ApiClientError ? e.message : 'Could not cancel your registration.',
@@ -115,6 +139,7 @@ export default function EventDetailPage() {
 
       <EventDetailView
         view={view}
+        crowd={counts && <EventCrowdCard counts={counts} capacity={capacity} />}
         action={
           registration ? (
             <div className="flex flex-col gap-3">
@@ -136,7 +161,7 @@ export default function EventDetailPage() {
           ) : (
             // Handles the closed case, the team rule, and the admin-configured
             // fields — the same form the public event page submits.
-            <EventRegistrationForm event={event} onRegistered={load} />
+            <EventRegistrationForm event={event} onRegistered={refresh} />
           )
         }
       />

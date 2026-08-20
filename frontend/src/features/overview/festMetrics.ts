@@ -26,6 +26,8 @@ import type {
   Mess,
 } from '@/api/types';
 import { share } from '@/features/occupancy';
+import { readEventCapacity, type EventCapacityReadout } from '@/features/events/eventCapacity';
+import { readEventExtras } from '@/features/events/eventExtras';
 
 /* ---------------------------------------------------------------- events --- */
 
@@ -75,6 +77,14 @@ export interface EventRow {
   /** The round running right now, if any. */
   liveRound: string | null;
   teamSize: number;
+  /**
+   * Entries left against the organiser's published capacity — story 3.2.
+   *
+   * `null` for the many events that publish no capacity, which is a different
+   * state from "no entries left" and must not be summed as zero. See
+   * `features/events/eventCapacity`.
+   */
+  capacity: EventCapacityReadout | null;
 }
 
 /**
@@ -161,6 +171,10 @@ export function buildEventRows(
       startsAt: nextStart(event, now),
       liveRound: liveRoundName(event, now),
       teamSize: event.event_team?.length ?? 0,
+      capacity: readEventCapacity(
+        readEventExtras(event.registration).capacity,
+        stat && typeof stat.total_daily_scans === 'number' ? stat.total_daily_scans : null,
+      ),
     };
   });
 }
@@ -187,6 +201,18 @@ export interface EventSummary {
   liveNow: EventRow[];
   /** Starting within `withinHours`, soonest first. */
   startingSoon: EventRow[];
+  /** How many events have published an entry capacity at all. */
+  withCapacity: number;
+  /**
+   * Σ entries left across events that publish a capacity, or `null` unless every
+   * one of them was readable. Events with no published capacity contribute
+   * nothing — they are not "full", they are unlimited as far as the fest knows.
+   */
+  entriesLeft: number | null;
+  /** Publishing a capacity and already at or past it. Fullest first. */
+  atCapacity: EventRow[];
+  /** Publishing a capacity and 75% or more of the way through it. Fullest first. */
+  nearCapacity: EventRow[];
 }
 
 export function summariseEvents(
@@ -214,6 +240,13 @@ export function summariseEvents(
   // horizon would leak into `startingSoon`.
   const horizon = now.getTime() + withinHours * 3_600_000;
 
+  // Only events that actually declare a limit take part in the capacity figures.
+  const capped = rows.filter((row) => row.capacity !== null);
+  const cappedRead = capped.filter((row) => row.capacity?.remaining !== null);
+  // Fullest first, so the rows an admin has to act on lead both lists.
+  const byFullest = (a: EventRow, b: EventRow) =>
+    (b.capacity?.percent ?? 0) - (a.capacity?.percent ?? 0);
+
   return {
     total: rows.length,
     open: rows.filter((row) => row.open).length,
@@ -239,6 +272,15 @@ export function summariseEvents(
           row.phase === 'upcoming' && row.startsAt !== null && row.startsAt.getTime() <= horizon,
       )
       .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0)),
+    withCapacity: capped.length,
+    entriesLeft:
+      capped.length > 0 && cappedRead.length === capped.length
+        ? cappedRead.reduce((sum, row) => sum + (row.capacity?.remaining ?? 0), 0)
+        : null,
+    atCapacity: capped.filter((row) => row.capacity?.atCapacity).sort(byFullest),
+    nearCapacity: capped
+      .filter((row) => row.capacity?.status === 'filling' || row.capacity?.status === 'full')
+      .sort(byFullest),
   };
 }
 

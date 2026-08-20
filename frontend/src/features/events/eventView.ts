@@ -1,5 +1,10 @@
 import type { Event, PublicEventRecord } from '@/api/types';
-import { readEventExtras, readRegistrationWindow, type EventFaq } from './eventExtras';
+import {
+  readEventExtras,
+  readRegistrationWindow,
+  type EventEntryInfo,
+  type EventFaq,
+} from './eventExtras';
 import {
   getPublicEventCategory,
   type PublicEventCategory,
@@ -60,6 +65,13 @@ export interface EventView {
   faqs: EventFaq[];
   rulebook?: string;
   /**
+   * Entries the event admits, when the organiser has published a limit. Absent
+   * on the many events that have never set one.
+   */
+  capacity?: number;
+  /** What to bring and when to turn up. Always present; often entirely empty. */
+  entry: EventEntryInfo;
+  /**
    * Where the record came from:
    *  - `public`   the pre-login brochure projection — no registration fields,
    *               so the page links into the app to register.
@@ -109,8 +121,14 @@ export function categorySlugForEventType(eventType: string): PublicEventCategory
  */
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
 
-/** `2026-06-13T14:00` → `13 Jun, 02:00 pm`. Non-timestamps pass through. */
-function formatDateTime(value: string | undefined): string {
+/**
+ * `2026-06-13T14:00` → `13 Jun, 02:00 pm`. Non-timestamps pass through.
+ *
+ * Exported because the schedule-change alerts print the same round times, and
+ * the `new Date('1 Jun')` trap documented above is not worth re-deriving in a
+ * second place.
+ */
+export function formatDateTime(value: string | undefined): string {
   if (!value) return '';
   if (!ISO_DATE.test(value.trim())) return value;
   const date = new Date(value);
@@ -216,6 +234,8 @@ function buildEventView(
     })),
     faqs: extras.faqs,
     rulebook: extras.rulebook,
+    capacity: extras.capacity,
+    entry: extras.entry,
     source: live ? 'backend' : 'public',
     event: live,
   };

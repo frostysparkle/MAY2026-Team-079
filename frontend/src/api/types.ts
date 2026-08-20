@@ -390,6 +390,26 @@ export interface EventDailyScansResponse {
 }
 
 /**
+ * How full one event is — `GET /events/{id}/capacity`.
+ *
+ * The only fullness figure a *participant* may read, and readable precisely
+ * because it carries no identities: two integers and the event's own id. Every
+ * other count is staff-gated because every other one returns the roster.
+ *
+ * The published capacity is not part of this response. It rides in the event's
+ * `registration` map, which the caller already holds from `GET /events` or
+ * `GET /events/public`; parsing it in a second place is how two places come to
+ * disagree.
+ */
+export interface EventCapacityCountsResponse {
+  event_id: string;
+  /** Current registrations. Falls when somebody cancels. */
+  registered: number;
+  /** Distinct participants scanned in today — heads, not scan rows. */
+  attended_today: number;
+}
+
+/**
  * A row of the `event_logs` collection — `GET /events/{id}/logs`.
  *
  * One attendance scan, deduped per participant/scanner/day. `day` is what the

@@ -151,6 +151,7 @@ export const realApi: ApiClient = {
   scanEvent: (eventId, body: ScanQRRequest) =>
     request(`/events/${eventId}/scan`, { method: 'POST', body: JSON.stringify(body) }),
   myDailyEventScans: (eventId) => request(`/events/${eventId}/my_daily_scans`),
+  eventCapacityCounts: (eventId) => request(`/events/${eventId}/capacity`),
   eventLogs: (eventId) => request(`/events/${eventId}/logs`),
 
   // ---- workshops ----
