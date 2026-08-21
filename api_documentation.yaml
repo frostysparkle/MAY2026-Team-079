@@ -290,6 +290,27 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /workshops/public:
+    get:
+      tags:
+      - Workshops
+      summary: List Public Workshops
+      description: 'The workshop programme, readable without signing in.
+
+        Deliberately unauthenticated: this is the pre-login workshops catalogue the
+        landing page and /workshops render, and it must work for a visitor with no
+        account. Only the published fields above are returned — never
+        `workshop_team` (which carries staff identities) or internal bookkeeping.
+
+        Mirrors GET /events/public. Declared before any `/{workshop_id}` route so
+        the literal path is not captured as a workshop id.'
+      operationId: list_public_workshops_workshops_public_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /workshops/{workshop_id}:
     put:
       tags:
@@ -544,6 +565,110 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ScanQRRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workshops/{workshop_id}/participation:
+    get:
+      tags:
+      - Workshops
+      summary: Workshop Participation
+      description: "Who booked this workshop, who turned up, and what level they are at.\n\nThe counterpart of `GET /events/{event_id}/participation`, and gated the same\nway: a Super Admin, **or** a member of this workshop's own `workshop_team`.\nAny other staff account gets 403 \u2014 being staff somewhere is not being staff\nhere. Participants have no route to this at all; the fullness figures they may\nread are the counts already on `GET /workshops`.\n\nA team member is authorised whether or not their `attendance` flag is on: that\nflag gates *scanning*, and a volunteer stood down from the door still needs to\nread the room's own roster.\n\n`course_stage` and `academic_level` are the reason this returns more than the\nlog ever could. They are the participant's real academic standing, written by\n`PATCH /profile/complete` and by the student dataset, and they are what makes\nan \"interest by level\" breakdown a count rather than an inference from a roll\nnumber. Everything here is a projection\
+        \ of fields that already exist \u2014 no\nfield is computed, stored, or derived."
+      operationId: workshop_participation_workshops__workshop_id__participation_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: workshop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workshop Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workshops/{workshop_id}/participants/{participant_id}:
+    patch:
+      tags:
+      - Workshops
+      summary: Update Workshop Participant
+      description: "Correct one participant's record for this workshop \u2014 attendance, or how the\nseat was taken.\n\nWhy this exists: attendance could only ever be set by a successful RSA-OAEP\nscan, so a flat battery, a cracked screen, or a QR that expired in the queue\nleft a student who was visibly in the room marked absent, with no way back.\nThis is the authorised correction, and it is deliberately narrow.\n\nAuthorisation is stricter than the roster above: a Super Admin, or a team\nmember **whose `attendance` flag is on**. Writing attendance is the same\nprivilege as scanning it, so somebody stood down from the door cannot set by\nhand what they are not allowed to scan.\n\nBookkeeping:\n  * `participant_count` follows the change, and only on a real transition, so\n    repeating the same correction cannot inflate the count.\n  * `registration_count` is left alone. The seat was already counted when the\n    booking was made; flipping `booking_type` re-labels that seat, it does not\n\
+        \    take another one.\n\nEvery call writes a `workshop_logs` row and an audit entry naming the actor \u2014\na hand-set attendance is exactly the kind of record that must not be\nindistinguishable from a scan."
+      operationId: update_workshop_participant_workshops__workshop_id__participants__participant_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: workshop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workshop Id
+      - name: participant_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Participant Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkshopParticipantUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workshops/{workshop_id}/volunteers/{user_id}:
+    delete:
+      tags:
+      - Workshops
+      summary: Remove Workshop Volunteer
+      description: "Take somebody off this workshop's team.\n\nThe missing half of `POST /workshops/{id}/volunteers`: until now a volunteer\nassigned by mistake, or one who has finished for the fest, could only have\ntheir scanning switched off and stayed on the team's roster forever.\n\nSuper Admin only, matching assignment \u2014 who staffs a workshop is an\norganiser's decision, and a volunteer removing a colleague is not.\n\nRemoval is by `workshop_team.user_id` and touches nothing else: the scans that\nperson already made stay in `workshop_logs`, with their id on them, because an\nattendance record must not disappear when a shift ends."
+      operationId: remove_workshop_volunteer_workshops__workshop_id__volunteers__user_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: workshop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workshop Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
       responses:
         '200':
           description: Successful Response
@@ -1087,6 +1212,52 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /mess/{mess_id}/menu:
+    put:
+      tags:
+      - Mess
+      summary: Update Mess Menu
+      description: 'Publish this hall''s own menu — the six fest days, the three sittings
+        each runs, the window each is served in, and the dishes on it.
+
+        Stored on the hall document as `menu`, so `GET /mess` returns it to every
+        participant allotted there rather than it living on the browser that typed
+        it. The scanner reads the same record, so a hall that moves its own
+        breakfast has that move honoured when a swipe is counted.
+
+        Writable by a Super Admin **or any member of that hall''s `mess_team`** —
+        wider than the rest of this file on purpose: a menu is the hall''s own
+        operational detail, and the same membership test `POST /mess/{mess_id}/scan`
+        already makes is what authorises it. 404 if the hall does not exist, 403 if
+        the caller is neither.'
+      operationId: update_mess_menu_mess__mess_id__menu_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: mess_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Mess Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessMenuRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /mess/{mess_id}/team:
     post:
       tags:
@@ -1614,6 +1785,474 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /issues:
+    post:
+      tags:
+      - Issues
+      summary: Report Issue
+      description: >-
+        File a hostel or mess fault — Story 5.4. Participants only, and only
+        against the facility they are actually placed in: a hostel report
+        requires accommodation.hostel_id to match, a mess report requires
+        mess.mess_id to match, otherwise 403. The facility must exist (404
+        otherwise) and the category must be one the facility type has (400
+        otherwise). A participant may hold at most 10 unresolved reports per
+        facility; resolving one frees a slot. Status starts at open. Audited as
+        ISSUE_REPORT against the facility id.
+      operationId: report_issue_issues_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+    get:
+      tags:
+      - Issues
+      summary: List Issues
+      description: >-
+        The reports this staff member is answerable for. A Super Admin sees every
+        report in the fest; everybody else sees exactly the blocks and halls
+        whose hostel_team or mess_team names them — the same membership test
+        /hostels/{id}/scan and /mess/{id}/scan make, but deliberately not gated
+        on the logging flag, since seeing a fault on your own block is not the
+        same permission as working its turnstile. A staffer on no team gets an
+        empty list, not a 403. Each row carries a reporter object with the
+        participant's id, name, phone and room, so the team can call them back —
+        the same profile fields /hostels/{id}/statistics and
+        /mess/{id}/statistics already hand to staff. status, facility_type and
+        facility_id narrow the list; an unrecognised status is a 400 rather than
+        a filter that silently matches nothing.
+      operationId: list_issues_issues_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: facility_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Facility Type
+      - name: facility_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Facility Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /issues/mine:
+    get:
+      tags:
+      - Issues
+      summary: My Issues
+      description: >-
+        Every report this participant has filed, newest first, each with the
+        status history that makes the story trackable rather than a write-only
+        suggestion box. Returns {count, issues}. An update's note is included;
+        which volunteer wrote it is not — that is staff bookkeeping and the audit
+        trail keeps it. No other reporter's details appear here. Declared before
+        /issues/{issue_id} so the literal path is not captured as an id.
+      operationId: my_issues_issues_mine_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /issues/{issue_id}:
+    patch:
+      tags:
+      - Issues
+      summary: Update Issue
+      description: >-
+        Move a report along and say something the reporter will read. Scoped
+        identically to GET /issues — only a Super Admin or somebody on that
+        facility's own team may answer for it, so the reporter cannot resolve
+        their own report. Every call appends to updates rather than overwriting,
+        so the participant sees the history rather than only the latest word. A
+        note with no status change is valid; an empty body is a 400, as is a
+        status outside open | in_progress | resolved. Audited as ISSUE_UPDATE
+        against the facility id.
+      operationId: update_issue_issues__issue_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueUpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /participants:
+    get:
+      tags:
+      - Participants
+      summary: List Participants
+      description: >-
+        The fest-wide participant roster — Story 7.3's read half. Super Admins
+        only, matching every other roster in the API; a non-super-admin staff
+        token is a 403 and a participant token is a 403. Kept separate from
+        /participants/statistics on purpose: that endpoint stays roster-free so a
+        dashboard showing fest-wide totals is never the thing that leaks a list
+        of names. The projection is an allow-list, so password_hash and
+        qr_secrets cannot leave here and a field added to the schema later stays
+        private until it is named; photo and embedding are excluded for size.
+        events and workshops come back as event_count and workshop_count — the
+        per-entity roster endpoints already answer "which ones". q matches a
+        participant id, email, or full name, case-insensitively, so one search
+        box finds a person however the admin knows them. Returns
+        {count, participants}.
+      operationId: list_participants_participants_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: house
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: House
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 200
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /participants/{participant_id}:
+    patch:
+      tags:
+      - Participants
+      summary: Update Participant
+      description: >-
+        Edit another person's record — Story 7.3's write half, and the only route
+        in the API that writes to a participant document other than that
+        participant's own PATCH /profile/complete. Super Admins only. Deliberately
+        narrow: only profile fields are writable. email and participant_id are
+        identity — participant_id is derived from the email and is the key every
+        roster, log row, and QR payload joins on. password_hash and qr_secrets are
+        credentials. mess, accommodation, events and workshops belong to the
+        allocation and registration routes, which enforce capacity and scan state;
+        an admin writing them directly could seat somebody in a full hall or mark
+        them inside a block the scanner thinks they left. Unknown keys are ignored
+        rather than rejected, and only the fields a request carries are written, so
+        a form that fixes a phone number cannot blank an address. An empty body is
+        a 400 and an unknown participant a 404. Audited as UPDATE_PARTICIPANT
+        against the participant id, naming the fields changed. Returns
+        {message, profile}.
+      operationId: update_participant_participants__participant_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: participant_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Participant Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParticipantAdminUpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /queries:
+    post:
+      tags:
+      - Queries
+      summary: Raise Query
+      description: >-
+        Raise a query — Story 6.1. Participants only; a staff token is a 403. The
+        category decides who will be able to answer it: hostel | mess | event |
+        workshop route to that entity's own team, general routes to the Super
+        Admins. Every category but general must name a target_id, and that entity
+        must exist — validated at write time, because a query accepted but routed
+        to nobody would sit unanswered looking exactly like one nobody has got to
+        yet. A general query's target_id is dropped rather than stored, so no
+        team's scope filter can match it. The stored row carries the author's
+        participant_id, name, and house, and deliberately no email or phone: the
+        reply thread is the channel back, and a block's team cannot otherwise read
+        contact details. Status starts at open. Audited as RAISE_QUERY against the
+        new query id. Returns {message, query_id, query}.
+      operationId: raise_query_queries_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+    get:
+      tags:
+      - Queries
+      summary: List Queries
+      description: >-
+        The staff queue — Story 6.3, and the source the operational dashboard's
+        open-queries panel reads (Story 9.1). Scoped to the caller: a Super Admin
+        sees every query including general ones, and everybody else sees only the
+        blocks, halls, events, and workshops whose team names them — the same
+        membership test the scanners already make — plus anything assigned to them
+        by name, which is what stops a reassignment losing the thread. A staff
+        member on no team gets an empty list rather than a 403, because an empty
+        queue is a real state. A participant token is a 403. status and category
+        filter server-side, for the same reason /audit-logs does: limit applies
+        before any client-side filter could. An unrecognised status is a 400.
+      operationId: list_queries_queries_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /queries/mine:
+    get:
+      tags:
+      - Queries
+      summary: My Queries
+      description: >-
+        Track your own queries — Story 6.2. Newest first, replies included, so the
+        participant sees the status and what was said about it rather than only
+        that somebody has it. Returns a bare list; an author with none gets an
+        empty one. Declared before /queries/{query_id} so the literal path is not
+        captured as an id.
+      operationId: my_queries_queries_mine_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /queries/{query_id}:
+    patch:
+      tags:
+      - Queries
+      summary: Update Query
+      description: >-
+        Set status and assignment — Story 6.3. Scoped identically to GET /queries:
+        a Super Admin, somebody on the owning entity's team, or the current
+        assignee. Only the fields a request carries are written, so a screen that
+        reassigns a query cannot blank its status on the way past. Naming an
+        assigned_to implies status assigned, and an explicit status in the same
+        request still wins, so resolve-and-assign works. resolved_at is stamped
+        server-side when status becomes resolved and cleared when it is reopened.
+        An empty body is a 400, a status outside open | assigned | resolved is a
+        400, and an unknown query is a 404. Audited as UPDATE_QUERY. Returns
+        {message, query}.
+      operationId: update_query_queries__query_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: query_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Query Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryUpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /queries/{query_id}/replies:
+    post:
+      tags:
+      - Queries
+      summary: Reply To Query
+      description: >-
+        The conversation — Story 6.4, and the half of 6.2 that makes a status
+        useful. Takes either token type: the participant who raised the query and
+        the staff member handling it write to the same thread. Nobody else can,
+        and the check is per-role rather than per-token-type, so a staff member
+        outside the owning team is refused even though their token is valid, and
+        another participant gets "Not your query". Replies append in order and
+        carry author_type participant | staff with a display name. Audited as
+        REPLY_QUERY. Returns {message, reply}.
+      operationId: reply_to_query_queries__query_id__replies_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: query_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Query Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryReplyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     BackendTeamCreateRequest:
@@ -1932,6 +2571,71 @@ components:
       - gender
       - coordinator
       title: HostelCreateRequest
+    IssueCreateRequest:
+      properties:
+        facility_type:
+          type: string
+          title: Facility Type
+          description: hostel | mess
+        facility_id:
+          type: string
+          title: Facility Id
+          description: >-
+            A readable hostel_id or mess_id, never an ObjectId. Must be the
+            facility this participant is actually placed in.
+        category:
+          type: string
+          title: Category
+          description: >-
+            For a hostel — water | electricity | cleanliness | furniture |
+            internet | safety | noise | other. For a mess — food_quality |
+            hygiene | service | timing | dietary | other. Validated, because the
+            answering team's console groups and labels by it.
+        subject:
+          type: string
+          maxLength: 120
+          minLength: 3
+          title: Subject
+        body:
+          type: string
+          maxLength: 2000
+          minLength: 3
+          title: Body
+        room:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Room
+          description: >-
+            Where the fault is. Defaults to the room the participant is allotted,
+            so the common case needs no typing.
+      type: object
+      required:
+      - facility_type
+      - facility_id
+      - category
+      - subject
+      - body
+      title: IssueCreateRequest
+    IssueUpdateRequest:
+      properties:
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          description: open | in_progress | resolved
+        note:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Note
+          description: >-
+            A line the reporter will read. Valid on its own, with no status
+            change — "we have ordered the part" is worth saying.
+      type: object
+      title: IssueUpdateRequest
     LoginRequest:
       properties:
         email:
@@ -2005,6 +2709,152 @@ components:
       - capacity
       - preference
       title: MessCreateRequest
+    MessMenuSlot:
+      properties:
+        slot:
+          type: string
+          title: Slot
+          description: >-
+            breakfast | lunch | dinner. The same three values POST
+            /mess/{mess_id}/scan takes, so a sitting this hall serves is a sitting
+            a swipe can be counted against. There is no fourth value, so snacks
+            cannot be published here.
+        start_time:
+          type: string
+          title: Start Time
+          description: '24-hour HH:MM. The scanner reads these windows to work out
+            which meal a swipe is logging, so changing one changes what a swipe
+            counts as.'
+        end_time:
+          type: string
+          title: End Time
+          description: 24-hour HH:MM. Must come after start_time; a window that ends
+            at or before it matches nothing rather than running all night.
+        dishes:
+          type: array
+          items:
+            type: string
+          title: Dishes
+          default: []
+          description: What is served at this sitting, in the order it should read.
+      type: object
+      required:
+      - slot
+      - start_time
+      - end_time
+      title: MessMenuSlot
+    MessMenuDay:
+      properties:
+        day:
+          type: integer
+          title: Day
+          description: >-
+            1-based fest day. The menu covers six; note that participants.mess.entries
+            — the swipe grid — is seeded with five, so a day-6 scan has no slot to
+            mark.
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessMenuSlot'
+          title: Slots
+          default: []
+      type: object
+      required:
+      - day
+      title: MessMenuDay
+    MessMenuRequest:
+      properties:
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessMenuDay'
+          title: Days
+          default: []
+          description: >-
+            The whole menu, not a diff. `menu` on the hall document should be
+            readable on its own by anything that fetches the hall, rather than a
+            patch that only means something beside a copy of the published campus
+            sheet. Sending an empty list withdraws the hall's menu and puts it back
+            on the published sheet for everyone allotted there.
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+          description: A free line every participant eating at this hall reads.
+      type: object
+      title: MessMenuRequest
+    ParticipantAdminUpdateRequest:
+      properties:
+        full_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Full Name
+        house:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: House
+        gender:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gender
+          description: male | female | other
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        mess_preference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mess Preference
+        country:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Country
+        state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+        city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: City
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+        program:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Program
+          description: DS | ES | AE | MS
+        course_stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Course Stage
+          description: foundational | diploma | degree
+        emergency_contact:
+          anyOf:
+          - $ref: '#/components/schemas/EmergencyContact'
+          - type: 'null'
+      type: object
+      title: ParticipantAdminUpdateRequest
+      description: >-
+        Every field is optional and only the ones a request carries are written.
+        Deliberately holds no email, participant_id, password, QR key, mess,
+        accommodation, event or workshop field — see
+        PATCH /participants/{participant_id}.
     PrizeMoney:
       properties:
         position:
@@ -2087,6 +2937,74 @@ components:
       - program
       - course_stage
       title: ProfileCompleteRequest
+    QueryCreateRequest:
+      properties:
+        category:
+          type: string
+          title: Category
+          description: >-
+            hostel | mess | event | workshop | general. This is what routes the
+            query to a team, so it is validated rather than free text.
+        subject:
+          type: string
+          minLength: 1
+          title: Subject
+        body:
+          type: string
+          minLength: 1
+          title: Body
+        target_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Id
+          description: >-
+            The readable hostel_id, mess_id, event_id, or workshop_id the query is
+            about — never an ObjectId. Required for every category but general,
+            where it is dropped rather than stored.
+      type: object
+      required:
+      - category
+      - subject
+      - body
+      title: QueryCreateRequest
+    QueryReplyRequest:
+      properties:
+        body:
+          type: string
+          minLength: 1
+          title: Body
+      type: object
+      required:
+      - body
+      title: QueryReplyRequest
+    QueryUpdateRequest:
+      properties:
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          description: open | assigned | resolved
+        assigned_team:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned Team
+          description: >-
+            A label for the humans reading the thread, e.g. "Ganga Block desk".
+            Routing is derived from category and target_id, so this grants nothing.
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
+          description: >-
+            The paradox_id of the staff member who owns it. Setting it implies
+            status assigned, and keeps the query readable by that person even if
+            they are later taken off the team it came from.
+      type: object
+      title: QueryUpdateRequest
     RegisterRequest:
       properties:
         email:
@@ -2326,6 +3244,21 @@ components:
           title: Instructions
       type: object
       title: WorkshopUpdateRequest
+    WorkshopParticipantUpdateRequest:
+      properties:
+        attended:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Attended
+        booking_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Type
+      type: object
+      title: WorkshopParticipantUpdateRequest
+      description: "An authorised correction to one participant's record *for one workshop*.\n\nBoth fields are optional so a caller sends only what changes; an empty body is\nrejected by the route rather than silently doing nothing.\n\nDeliberately scoped to the two fields the workshop owns on\n``participants.workshops[]`` \u2014 whether they turned up, and whether the seat was\nbooked ahead or taken at the door. Identity fields (name, email, phone, house,\nacademic record) are *not* editable here: they belong to the participant, they\nare read by every other screen in the fest, and a workshop volunteer is not who\nshould be rewriting them."
   securitySchemes:
     HTTPBearer:
       type: http

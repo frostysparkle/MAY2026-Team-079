@@ -941,6 +941,172 @@
         }
       }
     },
+    "/workshops/{workshop_id}/participation": {
+      "get": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "Workshop Participation",
+        "description": "Who booked this workshop, who turned up, and what level they are at.\n\nThe counterpart of `GET /events/{event_id}/participation`, and gated the same\nway: a Super Admin, **or** a member of this workshop's own `workshop_team`.\nAny other staff account gets 403 \u2014 being staff somewhere is not being staff\nhere. Participants have no route to this at all; the fullness figures they may\nread are the counts already on `GET /workshops`.\n\nA team member is authorised whether or not their `attendance` flag is on: that\nflag gates *scanning*, and a volunteer stood down from the door still needs to\nread the room's own roster.\n\n`course_stage` and `academic_level` are the reason this returns more than the\nlog ever could. They are the participant's real academic standing, written by\n`PATCH /profile/complete` and by the student dataset, and they are what makes\nan \"interest by level\" breakdown a count rather than an inference from a roll\nnumber. Everything here is a projection of fields that already exist \u2014 no\nfield is computed, stored, or derived.",
+        "operationId": "workshop_participation_workshops__workshop_id__participation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workshop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workshop Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workshops/{workshop_id}/participants/{participant_id}": {
+      "patch": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "Update Workshop Participant",
+        "description": "Correct one participant's record for this workshop \u2014 attendance, or how the\nseat was taken.\n\nWhy this exists: attendance could only ever be set by a successful RSA-OAEP\nscan, so a flat battery, a cracked screen, or a QR that expired in the queue\nleft a student who was visibly in the room marked absent, with no way back.\nThis is the authorised correction, and it is deliberately narrow.\n\nAuthorisation is stricter than the roster above: a Super Admin, or a team\nmember **whose `attendance` flag is on**. Writing attendance is the same\nprivilege as scanning it, so somebody stood down from the door cannot set by\nhand what they are not allowed to scan.\n\nBookkeeping:\n  * `participant_count` follows the change, and only on a real transition, so\n    repeating the same correction cannot inflate the count.\n  * `registration_count` is left alone. The seat was already counted when the\n    booking was made; flipping `booking_type` re-labels that seat, it does not\n    take another one.\n\nEvery call writes a `workshop_logs` row and an audit entry naming the actor \u2014\na hand-set attendance is exactly the kind of record that must not be\nindistinguishable from a scan.",
+        "operationId": "update_workshop_participant_workshops__workshop_id__participants__participant_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workshop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workshop Id"
+            }
+          },
+          {
+            "name": "participant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Participant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopParticipantUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workshops/{workshop_id}/volunteers/{user_id}": {
+      "delete": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "Remove Workshop Volunteer",
+        "description": "Take somebody off this workshop's team.\n\nThe missing half of `POST /workshops/{id}/volunteers`: until now a volunteer\nassigned by mistake, or one who has finished for the fest, could only have\ntheir scanning switched off and stayed on the team's roster forever.\n\nSuper Admin only, matching assignment \u2014 who staffs a workshop is an\norganiser's decision, and a volunteer removing a colleague is not.\n\nRemoval is by `workshop_team.user_id` and touches nothing else: the scans that\nperson already made stay in `workshop_logs`, with their id on them, because an\nattendance record must not disappear when a shift ends.",
+        "operationId": "remove_workshop_volunteer_workshops__workshop_id__volunteers__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workshop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workshop Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "tags": [
@@ -1774,6 +1940,61 @@
         ]
       }
     },
+    "/mess/{mess_id}/menu": {
+      "put": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Update Mess Menu",
+        "operationId": "update_mess_menu_mess__mess_id__menu_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mess_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mess Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessMenuRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/mess/{mess_id}/team": {
       "post": {
         "tags": [
@@ -2551,6 +2772,141 @@
         ]
       }
     },
+    "/participants": {
+      "get": {
+        "tags": [
+          "Participants"
+        ],
+        "summary": "List Participants",
+        "description": "The fest-wide participant roster \u2014 Story 7.3's missing read half.\n\nSuper Admins only, matching every other roster in the API. ``/statistics``\nabove stays deliberately roster-free: a dashboard that shows totals to\nwhoever can see the dashboard must not be the thing that leaks a list of\nnames, so the two are separate endpoints rather than one endpoint with a\nflag.\n\nProjection is an allow-list. ``password_hash`` and ``qr_secrets`` are the two\nfields that must never leave this collection, and an inclusion projection\nmeans a field added to the schema later stays private until it is named here.\n``photo`` and ``embedding`` are excluded for size, not secrecy \u2014 a roster of\n200 base64 photographs is a response nobody wants.\n\n``q`` matches a name, email, or participant id, case-insensitively, so one\nsearch box finds a person however the admin knows them.",
+        "operationId": "list_participants_participants_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "house",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "House"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/participants/{participant_id}": {
+      "patch": {
+        "tags": [
+          "Participants"
+        ],
+        "summary": "Update Participant",
+        "description": "Edit another person's record \u2014 Story 7.3's missing write half.\n\nSuper Admins only. Until this existed there was no endpoint anywhere that\nwrote to a participant document other than the participant's own\n``PATCH /profile/complete``, so an admin who spotted a misspelled name on a\nhostel roster could do nothing about it.\n\nDeliberately narrow. Only ``profile`` fields are writable:\n\n* ``email`` and ``participant_id`` are identity \u2014 ``participant_id`` is\n  derived from the email by ``generate_participant_id`` and is the key every\n  roster, log row, and QR payload joins on.\n* ``password_hash`` and ``qr_secrets`` are credentials.\n* ``mess`` / ``accommodation`` / ``events`` / ``workshops`` are owned by the\n  allocation and registration routes, which enforce capacity and state. An\n  admin writing them directly would put a participant in a hall with no seat\n  left, or mark them inside a block the scanner thinks they left.\n\nEvery field is optional and only the ones present are written, so a form that\nfixes a phone number cannot blank an address.",
+        "operationId": "update_participant_participants__participant_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "participant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Participant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParticipantAdminUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/embeddings": {
       "post": {
         "tags": [
@@ -2594,6 +2950,484 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/queries": {
+      "post": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "Raise Query",
+        "description": "Raise a query \u2014 Story 6.1, and the durable record Story 5.4 needs.\n\nThe target entity is validated at write time rather than at read time: a\nquery naming a block that does not exist would otherwise be accepted, routed\nto nobody, and sit unanswered looking exactly like a query nobody has got to\nyet.",
+        "operationId": "raise_query_queries_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "List Queries",
+        "description": "The staff queue \u2014 Story 6.3, and the source for the operational dashboard's\nopen-queries and hostel-issues panels (Story 9.1).\n\nScoped to the caller: a Super Admin sees every query including ``general``\nones; anybody else sees only the blocks, halls, events, and workshops they\nare named on a team for, plus anything handed to them by name. A staff member\non no team gets an empty list rather than a 403 \u2014 an empty queue is a real\nstate, not an authorisation failure.\n\n``status`` and ``category`` filter server-side for the same reason\n``/audit-logs`` does: ``limit`` applies before any client-side filter could.",
+        "operationId": "list_queries_queries_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/queries/mine": {
+      "get": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "My Queries",
+        "description": "Track your own queries \u2014 Story 6.2. Newest first, replies included, so the\nparticipant sees the status *and* what was said about it.\n\nDeclared before ``/{query_id}`` so the literal path is not captured as an id.",
+        "operationId": "my_queries_queries_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/queries/{query_id}": {
+      "patch": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "Update Query",
+        "description": "Set status and assignment \u2014 Story 6.3.\n\nOnly the fields a request carries are written, so a screen that reassigns a\nquery cannot blank its status on the way past.",
+        "operationId": "update_query_queries__query_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/queries/{query_id}/replies": {
+      "post": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "Reply To Query",
+        "description": "The conversation \u2014 Story 6.4, and the half of 6.2 that makes a status useful.\n\nTakes either token type: the participant who raised it and the staff member\nhandling it write to the same thread. Nobody else can read or write it, which\nis checked per-role rather than per-token, so a staff member who is not on\nthe owning team is refused even though their token is valid.",
+        "operationId": "reply_to_query_queries__query_id__replies_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryReplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues": {
+      "post": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "Report Issue",
+        "description": "File a hostel or mess fault \u2014 Story 5.4. Participants only, and only against\nthe facility they are actually placed in: a hostel report requires\naccommodation.hostel_id to match, a mess report requires mess.mess_id to\nmatch, otherwise 403. The facility must exist (404 otherwise) and the\ncategory must be one the facility type has (400 otherwise). A participant may\nhold at most 10 unresolved reports per facility; resolving one frees a slot.\nStatus starts at open. Audited as ISSUE_REPORT against the facility id.\n\nDeclared before `/{issue_id}` routes so nothing literal is captured as an id.",
+        "operationId": "report_issue_issues_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "List Issues",
+        "description": "The reports this staff member is answerable for.\n\nA Super Admin sees every report in the fest; everybody else sees exactly the\nblocks and halls whose hostel_team or mess_team names them \u2014 the same\nmembership test /hostels/{id}/scan and /mess/{id}/scan make, but deliberately\nnot gated on the logging flag, since seeing a fault on your own block is not\nthe same permission as working its turnstile. A staffer on no team gets an\nempty list, not a 403 \u2014 having no duty is not an authorization failure, and a\nconsole that errors at a volunteer between postings reads as a bug.\n\nEach row carries a reporter object with the participant's id, name, phone and\nroom, so the team can call them back. status, facility_type and facility_id\nnarrow the list; an unrecognised status is a 400 rather than a filter that\nsilently matches nothing.",
+        "operationId": "list_issues_issues_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "facility_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Facility Type"
+            }
+          },
+          {
+            "name": "facility_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Facility Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues/mine": {
+      "get": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "My Issues",
+        "description": "Every report this participant has filed, newest first, each with the status\nhistory that makes the story trackable rather than a write-only suggestion\nbox. Returns {count, issues}. An update's note is included; which volunteer\nwrote it is not \u2014 that is staff bookkeeping and the audit trail keeps it. No\nother reporter's details appear here.\n\nDeclared before `/{issue_id}` so the literal path is not captured as an id.",
+        "operationId": "my_issues_issues_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/issues/{issue_id}": {
+      "patch": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "Update Issue",
+        "description": "Move a report along, and say something the reporter will read.\n\nScoped identically to GET /issues \u2014 only a Super Admin or somebody on that\nfacility's own team may answer for it, so the reporter cannot resolve their\nown report. Every call appends to `updates` rather than overwriting, so a\nparticipant sees the history rather than only the latest word. A note with no\nstatus change is valid; an empty body is a 400, as is a status outside\nopen | in_progress | resolved. Audited as ISSUE_UPDATE against the facility\nid.",
+        "operationId": "update_issue_issues__issue_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Issue Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -3122,6 +3956,89 @@
         ],
         "title": "HostelCreateRequest"
       },
+      "IssueCreateRequest": {
+        "properties": {
+          "facility_type": {
+            "type": "string",
+            "title": "Facility Type",
+            "description": "hostel | mess"
+          },
+          "facility_id": {
+            "type": "string",
+            "title": "Facility Id",
+            "description": "A readable hostel_id or mess_id, never an ObjectId. Must be the facility this participant is actually placed in."
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "For a hostel \u2014 water | electricity | cleanliness | furniture | internet | safety | noise | other. For a mess \u2014 food_quality | hygiene | service | timing | dietary | other. Validated, because the answering team's console groups and labels by it."
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Body"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room",
+            "description": "Where the fault is. Defaults to the room the participant is allotted, so the common case needs no typing."
+          }
+        },
+        "type": "object",
+        "required": [
+          "facility_type",
+          "facility_id",
+          "category",
+          "subject",
+          "body"
+        ],
+        "title": "IssueCreateRequest"
+      },
+      "IssueUpdateRequest": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "open | in_progress | resolved"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "A line the reporter will read. Valid on its own, with no status change \u2014 \"we have ordered the part\" is worth saying."
+          }
+        },
+        "type": "object",
+        "title": "IssueUpdateRequest"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -3222,6 +4139,220 @@
           "preference"
         ],
         "title": "MessCreateRequest"
+      },
+      "MessMenuDay": {
+        "properties": {
+          "day": {
+            "type": "integer",
+            "title": "Day"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/MessMenuSlot"
+            },
+            "type": "array",
+            "title": "Slots",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "day"
+        ],
+        "title": "MessMenuDay"
+      },
+      "MessMenuRequest": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/MessMenuDay"
+            },
+            "type": "array",
+            "title": "Days",
+            "default": []
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "MessMenuRequest"
+      },
+      "MessMenuSlot": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "start_time": {
+            "type": "string",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "title": "End Time"
+          },
+          "dishes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dishes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot",
+          "start_time",
+          "end_time"
+        ],
+        "title": "MessMenuSlot"
+      },
+      "ParticipantAdminUpdateRequest": {
+        "properties": {
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "house": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "House"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "mess_preference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mess Preference"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "program": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program"
+          },
+          "course_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Stage"
+          },
+          "emergency_contact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmergencyContact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ParticipantAdminUpdateRequest"
       },
       "PrizeMoney": {
         "properties": {
@@ -3347,6 +4478,95 @@
           "course_stage"
         ],
         "title": "ProfileCompleteRequest"
+      },
+      "QueryCreateRequest": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "subject",
+          "body"
+        ],
+        "title": "QueryCreateRequest"
+      },
+      "QueryReplyRequest": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "QueryReplyRequest"
+      },
+      "QueryUpdateRequest": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "assigned_team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Team"
+          },
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          }
+        },
+        "type": "object",
+        "title": "QueryUpdateRequest"
       },
       "RegisterRequest": {
         "properties": {
@@ -3654,6 +4874,35 @@
           "instructions"
         ],
         "title": "WorkshopCreateRequest"
+      },
+      "WorkshopParticipantUpdateRequest": {
+        "properties": {
+          "attended": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attended"
+          },
+          "booking_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking Type"
+          }
+        },
+        "type": "object",
+        "title": "WorkshopParticipantUpdateRequest",
+        "description": "An authorised correction to one participant's record *for one workshop*.\n\nBoth fields are optional so a caller sends only what changes; an empty body is\nrejected by the route rather than silently doing nothing.\n\nDeliberately scoped to the two fields the workshop owns on\n``participants.workshops[]`` \u2014 whether they turned up, and whether the seat was\nbooked ahead or taken at the door. Identity fields (name, email, phone, house,\nacademic record) are *not* editable here: they belong to the participant, they\nare read by every other screen in the fest, and a workshop volunteer is not who\nshould be rewriting them."
       },
       "WorkshopUpdateRequest": {
         "properties": {
