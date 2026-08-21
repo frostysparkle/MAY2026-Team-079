@@ -143,21 +143,43 @@ def allocate_messes(current_user: dict = Depends(get_current_staff)):
     for m in messes:
         pref_groups.setdefault(m.get("preference"), []).append(m)
         
-    # Only allocate those who have mess.mess_id as None or missing
-    participants = list(participants_collection.find({"$or": [{"mess.mess_id": None}, {"mess.mess_id": {"$exists": False}}]}))
+    # Opting in is what makes somebody allocatable, exactly as
+    # `POST /hostels/allocate` treats `accommodation.registered`. Without this
+    # filter the route seated anybody who merely lacked a `mess.mess_id` — which
+    # is every participant who never asked for a meal plan — and
+    # `/participants/statistics` then reported `mess_allotted` above
+    # `mess_registered`, a total that cannot happen and that the dashboard
+    # pipeline rendered as more people fed than signed up.
+    participants = list(participants_collection.find({
+        "mess.registered": True,
+        "$or": [{"mess.mess_id": None}, {"mess.mess_id": {"$exists": False}}],
+    }))
     allocated = 0
-    
+
+    # Seat counts are tracked here rather than re-queried per participant: the
+    # old `count_documents` inside the inner loop ran once per candidate per hall,
+    # so a fest-sized queue turned one request into thousands of round trips.
+    # Seeding from the current occupancy keeps the capacity ceiling honest.
+    seated = {
+        m["_id"]: participants_collection.count_documents({"mess.mess_id": m["_id"]})
+        for m in messes
+    }
+
     for p in participants:
-        pref = p.get("profile", {}).get("mess_preference", "veg")
+        # `.get(key, default)` does not fire when the key exists holding None, and
+        # a profile that never chose a preference stores exactly that. Treating
+        # both the missing and the null case as the default is what stops a
+        # genuine registrant being skipped silently on every run.
+        pref = (p.get("profile") or {}).get("mess_preference") or "veg"
         available_messes = pref_groups.get(pref, [])
         assigned = False
         for chosen_mess in available_messes:
-            current_count = participants_collection.count_documents({"mess.mess_id": chosen_mess["_id"]})
-            if current_count < chosen_mess.get("capacity", 0):
+            if seated[chosen_mess["_id"]] < chosen_mess.get("capacity", 0):
                 participants_collection.update_one(
                     {"_id": p["_id"]},
                     {"$set": {"mess.mess_id": chosen_mess["_id"]}}
                 )
+                seated[chosen_mess["_id"]] += 1
                 allocated += 1
                 assigned = True
                 break
