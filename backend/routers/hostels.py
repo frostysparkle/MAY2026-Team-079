@@ -53,7 +53,16 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
-    logging = True if request.role == "other" else False
+    # Both roles a block team can hold scan on assignment, matching
+    # `assign_mess_team`. This used to be `role == "other"` only, which meant a
+    # member created as a `volunteer` -- the role story 5.2 names -- landed with
+    # scanning off and could not log a single check-in until an admin switched
+    # them on.
+    #
+    # Still a whitelist rather than a default-true: `role` is a free string, so an
+    # unrecognised value gets no scanning instead of inheriting it by accident.
+    # Revoking afterwards is unchanged -- see `toggle_hostel_scan`.
+    logging = request.role in ("volunteer", "other")
     team_member = {
         "user_id": request.user_id,
         "role": request.role,
