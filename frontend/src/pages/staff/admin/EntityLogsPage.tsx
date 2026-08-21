@@ -81,10 +81,13 @@ function EntityLogs({
   entityId: string;
   onBack: () => void;
 }) {
-  const logs = useEntityLogs(domain, entityId);
   const [name, setName] = useState<string | null>(null);
+  // The name is passed through so rows read "Mess hall 2" rather than the raw id.
+  // It arrives after the first render and reloads the rows once; that is the trade
+  // for never blocking the log on a title lookup.
+  const logs = useEntityLogs(domain, entityId, name);
 
-  // Only for the title — never block the log on it.
+  // For the title and the rows — never block the log on it.
   useEffect(() => {
     const lookup =
       domain === 'events'
@@ -126,7 +129,9 @@ function EntityLogs({
         if (!filters.matches('kind', entry.kind)) return false;
         if (!filters.matches('action', entry.action)) return false;
         if (!filters.needle) return true;
-        return `${entry.action} ${entry.label} ${entry.actorId ?? ''} ${entry.participantId ?? ''}`
+        // `sentence` carries the names, so searching for a person finds their rows;
+        // the ids stay in the haystack so searching for one still works.
+        return `${entry.action} ${entry.sentence} ${entry.actorId ?? ''} ${entry.participantId ?? ''}`
           .toLowerCase()
           .includes(filters.needle);
       }),
@@ -184,7 +189,12 @@ function EntityLogs({
                     timestamp: entry.timestamp,
                     action: entry.action,
                     kind: entry.kind,
+                    // The sentence first, so the sheet reads without cross-
+                    // referencing ids. Same columns as the fest-wide export.
+                    summary: entry.sentence,
+                    actor_name: entry.actorName ?? '',
                     actor_id: entry.actorId ?? '',
+                    participant_name: entry.participantName ?? '',
                     participant_id: entry.participantId ?? '',
                     // Flattened so one row stays one line in the export.
                     details: entry.facts.map((f) => `${f.label}: ${f.value}`).join('; '),
@@ -194,7 +204,10 @@ function EntityLogs({
                     'timestamp',
                     'action',
                     'kind',
+                    'summary',
+                    'actor_name',
                     'actor_id',
+                    'participant_name',
                     'participant_id',
                     'details',
                     'source',

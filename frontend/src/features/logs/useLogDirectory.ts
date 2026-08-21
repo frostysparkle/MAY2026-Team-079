@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiClientError } from '@/api';
-import type { AuditLogEntry } from '@/api/types';
-import { domainOfAction, LOG_DOMAINS, type LogDomain } from './logModel';
+import type { AuditLogEntry, AuditLogSummary } from '@/api/types';
+import {
+  domainOfAction,
+  LOG_DOMAINS,
+  peopleNamesFrom,
+  type EntityNames,
+  type LogDomain,
+  type LogNames,
+} from './logModel';
 
 /**
  * The directory behind the entity browser: every event, workshop, mess hall, and
@@ -17,8 +24,15 @@ import { domainOfAction, LOG_DOMAINS, type LogDomain } from './logModel';
  * anything happened?" signal for navigation, and the detail view is authoritative.
  */
 
-/** High enough to cover the whole trail for a festival-sized dataset. */
-const TRAIL_LIMIT = 1000;
+/**
+ * How many rows to pull for the table and the per-entity activity signal.
+ *
+ * A cap on *rows shown*, not on the figures beside them. Every count this hook
+ * publishes as a total now comes from `GET /audit-logs/summary`, which counts
+ * server-side over the whole trail — so a fest with more history than this limit
+ * no longer reports the limit as its total.
+ */
+export const TRAIL_LIMIT = 1000;
 
 export interface LogDirectoryEntity {
   id: string;
@@ -26,7 +40,14 @@ export interface LogDirectoryEntity {
   domain: LogDomain;
   /** One line of context, e.g. an event's type or a hall's capacity. */
   meta: string;
-  /** Audit entries recorded against this entity. */
+  /**
+   * Audit entries recorded against this entity, within the fetched window.
+   *
+   * A floor, not a total — it is counted from the `TRAIL_LIMIT` rows this hook
+   * holds. Exact per-entity counts would need one aggregation per entity, and this
+   * figure exists to answer "has anything happened here?" for navigation. Check
+   * `truncated` before presenting it as a count.
+   */
   auditCount: number;
   /** Timestamp of the most recent audit entry, or null when there is none. */
   lastActivity: string | null;
@@ -34,6 +55,7 @@ export interface LogDirectoryEntity {
 
 export function useLogDirectory() {
   const [trail, setTrail] = useState<AuditLogEntry[] | null>(null);
+  const [summary, setSummary] = useState<AuditLogSummary | null>(null);
   const [entities, setEntities] = useState<LogDirectoryEntity[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,12 +63,16 @@ export function useLogDirectory() {
     () =>
       Promise.all([
         api.auditLogs(TRAIL_LIMIT),
+        // Exact counts over the whole trail. Non-fatal on its own: losing it drops
+        // the figures back to counting the fetched page, which is what they used
+        // to do, rather than failing the screen.
+        api.auditLogSummary({}).catch(() => null),
         api.listEvents(),
         api.listWorkshops(),
         api.listMess(),
         api.listHostels(),
       ])
-        .then(([logs, events, workshops, mess, hostels]) => {
+        .then(([logs, trailSummary, events, workshops, mess, hostels]) => {
           const byTarget = new Map<string, { count: number; last: string }>();
           for (const log of logs) {
             if (!log.target_id) continue;
@@ -107,6 +133,7 @@ export function useLogDirectory() {
             ),
           ]);
           setTrail(logs);
+          setSummary(trailSummary);
           setError(null);
         })
         .catch((e) =>
@@ -120,20 +147,65 @@ export function useLogDirectory() {
     void load();
   }, [load]);
 
-  /** Recorded actions per domain, for the summary figures. */
+  /**
+   * The names a log row needs, from what this hook already fetched.
+   *
+   * The entity lists are here for the browser below; reusing them to name a row's
+   * target costs nothing and is the difference between a row reading "Mess hall 2"
+   * and `MESS_PROBE2_413179`. People's names ride along on the trail itself.
+   */
+  const names = useMemo<LogNames>(() => {
+    const byId: Record<string, string> = {};
+    for (const entity of entities ?? []) byId[entity.id] = entity.name;
+    return { entities: byId as EntityNames, people: peopleNamesFrom(trail ?? []) };
+  }, [trail, entities]);
+
+  /**
+   * Recorded actions per domain.
+   *
+   * Derived from the summary's `by_action`, which is counted server-side over the
+   * whole trail, so these are totals. The previous pass over `trail` could only
+   * ever count the fetched page, which made every one of these cards report a
+   * share of the newest 1,000 rows under a label that read like a fest total.
+   *
+   * Falls back to that pass when the summary is unavailable — the figures then
+   * become floors again, which `exact` below reports so the UI can say so.
+   */
   const perDomain = useMemo(() => {
     const counts: Record<LogDomain, number> = { events: 0, workshops: 0, mess: 0, hostels: 0 };
-    for (const log of trail ?? []) {
-      const domain = domainOfAction(log.action);
-      if (domain) counts[domain] += 1;
+
+    if (summary) {
+      for (const [action, count] of Object.entries(summary.by_action)) {
+        const domain = domainOfAction(action);
+        if (domain) counts[domain] += count;
+      }
+    } else {
+      for (const log of trail ?? []) {
+        const domain = domainOfAction(log.action);
+        if (domain) counts[domain] += 1;
+      }
     }
+
     return LOG_DOMAINS.map((domain) => ({ domain, count: counts[domain] }));
-  }, [trail]);
+  }, [summary, trail]);
 
   return {
     trail,
     entities,
+    /** Pass to `fromAuditLogs` so rows name people and places, not ids. */
+    names,
     perDomain,
+    /** Exact counts over the whole trail, or `null` if that call failed. */
+    summary,
+    /**
+     * Recorded actions across the whole trail. Exact when the summary loaded;
+     * otherwise the size of the fetched page, which is a floor.
+     */
+    total: summary?.total ?? trail?.length ?? 0,
+    /** Whether `total` and `perDomain` are fest-wide totals rather than floors. */
+    exact: summary !== null,
+    /** The table is showing a capped slice of a longer trail. */
+    truncated: (trail?.length ?? 0) >= TRAIL_LIMIT,
     error,
     loading: entities === null,
     load,
