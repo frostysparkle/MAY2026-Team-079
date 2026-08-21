@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
-import { ROUTES } from '@/config/routes';
+import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
+import { ROUTES, supportPath, type SupportTab } from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
 import { StaffShell } from '@/components/layout/StaffShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -22,6 +22,8 @@ import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import MyQrPage from '@/pages/MyQrPage';
 import AccommodationPage from '@/pages/stay/AccommodationPage';
 import StayPaymentPage from '@/pages/stay/StayPaymentPage';
+import AnnouncementsPage from '@/pages/AnnouncementsPage';
+import SupportPage from '@/pages/support/SupportPage';
 
 import EventsListPage from '@/pages/events/EventsListPage';
 import EventDetailPage from '@/pages/events/EventDetailPage';
@@ -31,11 +33,15 @@ import WorkshopsListPage from '@/pages/workshops/WorkshopsListPage';
 import WorkshopDetailPage from '@/pages/workshops/WorkshopDetailPage';
 
 import MessScannerPage from '@/pages/scan/MessScannerPage';
+import MessMenuPage from '@/pages/staff/MessMenuPage';
+import FacilityIssuesPage from '@/pages/staff/FacilityIssuesPage';
+import QueryConsolePage from '@/pages/staff/QueryConsolePage';
 import HostelScannerPage from '@/pages/scan/HostelScannerPage';
 import EventScannerPage from '@/pages/scan/EventScannerPage';
 import WorkshopScannerPage from '@/pages/scan/WorkshopScannerPage';
 
 import StaffHomePage from '@/pages/staff/StaffHomePage';
+import WorkshopManagePage from '@/pages/staff/WorkshopManagePage';
 import EventParticipationPage from '@/pages/staff/EventParticipationPage';
 import EventTeamsPage from '@/pages/staff/EventTeamsPage';
 
@@ -48,6 +54,8 @@ import AdminWorkshopEditorPage from '@/pages/staff/admin/AdminWorkshopEditorPage
 import AdminMessPage from '@/pages/staff/admin/AdminMessPage';
 import AdminHostelsPage from '@/pages/staff/admin/AdminHostelsPage';
 import AdminBackendTeamsPage from '@/pages/staff/admin/AdminBackendTeamsPage';
+import AdminParticipantsPage from '@/pages/staff/admin/AdminParticipantsPage';
+import AdminAnnouncementsPage from '@/pages/staff/admin/AdminAnnouncementsPage';
 import AuditLogsPage from '@/pages/staff/admin/AuditLogsPage';
 import EntityLogsPage from '@/pages/staff/admin/EntityLogsPage';
 
@@ -67,6 +75,26 @@ const PublicWorkshopsPage = lazy(() => import('@/pages/public/PublicWorkshopsPag
 const PublicWorkshopDetailPage = lazy(() => import('@/pages/public/PublicWorkshopDetailPage'));
 const PublicSponsorsPage = lazy(() => import('@/pages/public/PublicSponsorsPage'));
 
+/**
+ * `/app/help`, `/app/report-issue` and `/app/queries` → the tab of
+ * `/app/support` that now carries each of them.
+ *
+ * Declared as child paths of the participant block, so they stay inside the same
+ * `ProtectedRoute` guard the originals were behind: a signed-out visitor
+ * following an old bookmark is sent to sign in, exactly as before, rather than
+ * being redirected to a route that then bounces them.
+ */
+const SUPPORT_REDIRECTS: RouteObject[] = (
+  [
+    ['help', 'contacts'],
+    ['report-issue', 'report'],
+    ['queries', 'ask'],
+  ] as const satisfies readonly (readonly [string, SupportTab])[]
+).map(([from, tab]) => ({
+  path: from,
+  element: <Navigate to={supportPath(tab)} replace />,
+}));
+
 function Lazy({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
@@ -85,8 +113,12 @@ function Lazy({ children }: { children: React.ReactNode }) {
  * Route table. Guards protect UI only — the backend enforces RBAC server-side.
  * Coarse gates (token type, super_admin) use ProtectedRoute; entity-scoped
  * permissions (event_head, team membership) are checked per-page after fetch.
+ *
+ * Exported separately from `router` so a test can mount the real table in a
+ * memory router at any path — the browser router below is a singleton that
+ * captures the document's location when this module first loads.
  */
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   { path: ROUTES.splash, element: <LandingPage />, errorElement: <ErrorPage /> },
   { path: ROUTES.login, element: <LoginPage />, errorElement: <ErrorPage /> },
   { path: ROUTES.register, element: <RegisterPage />, errorElement: <ErrorPage /> },
@@ -125,48 +157,83 @@ export const router = createBrowserRouter([
     ),
   },
 
-  // Participant area — any authenticated participant, rendered inside the nav shell.
+  // Participant area — any authenticated participant.
+  //
+  // The guard is a pathless layout so that the index can sit *outside* `AppShell`:
+  // `/app` is the participant's Landing Page, the same full-viewport PARADOX
+  // portal a visitor gets, and it owns its own header. Every section below it
+  // renders in the shell exactly as before.
   {
     path: ROUTES.home,
     errorElement: <ErrorPage />,
     element: (
       <ProtectedRoute requireTokenType="participant" requireCompleteProfile>
-        <AppShell />
+        <Outlet />
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'profile', element: <ProfilePage /> },
-      { path: 'profile/change-password', element: <ChangePasswordPage /> },
-      { path: 'qr', element: <MyQrPage /> },
-      { path: 'events', element: <EventsListPage /> },
-      { path: 'events/mine', element: <MyRegistrationsPage /> },
-      { path: 'events/:eventId', element: <EventDetailPage /> },
-      { path: 'schedule', element: <FestSchedulePage /> },
-      { path: 'workshops', element: <WorkshopsListPage /> },
-      { path: 'workshops/:workshopId', element: <WorkshopDetailPage /> },
-      { path: 'accommodation', element: <AccommodationPage /> },
-      { path: 'accommodation/payment', element: <StayPaymentPage /> },
+      { index: true, element: <LandingPage /> },
+      {
+        element: <AppShell />,
+        children: [
+          { path: 'dashboard', element: <DashboardPage /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'profile/change-password', element: <ChangePasswordPage /> },
+          { path: 'qr', element: <MyQrPage /> },
+          { path: 'events', element: <EventsListPage /> },
+          { path: 'events/mine', element: <MyRegistrationsPage /> },
+          { path: 'events/:eventId', element: <EventDetailPage /> },
+          { path: 'schedule', element: <FestSchedulePage /> },
+          { path: 'workshops', element: <WorkshopsListPage /> },
+          { path: 'workshops/:workshopId', element: <WorkshopDetailPage /> },
+          { path: 'accommodation', element: <AccommodationPage /> },
+          { path: 'accommodation/payment', element: <StayPaymentPage /> },
+          { path: 'announcements', element: <AnnouncementsPage /> },
+          { path: 'support', element: <SupportPage /> },
+          // The three routes Help & Support was consolidated out of. Kept as
+          // redirects rather than deleted: they are on students' bookmarks and in
+          // `AccommodationPage`, and a 404 on "Report a problem" is exactly the
+          // impression this restructure set out to remove. `replace` so the back
+          // button returns to wherever the old link was followed from rather than
+          // bouncing through the redirect again.
+          ...SUPPORT_REDIRECTS,
+        ],
+      },
     ],
   },
 
-  // Staff area — one shell, one sticky header; pages publish their own titles.
+  // Staff area — the mirror of the participant block: `/staff` is the staff
+  // Landing Page outside the shell, everything else inside it, one sticky
+  // header, pages publish their own titles.
   {
     errorElement: <ErrorPage />,
     element: (
       <ProtectedRoute requireTokenType="staff">
-        <StaffShell />
+        <Outlet />
       </ProtectedRoute>
     ),
     children: [
-      { path: ROUTES.staffHome, element: <StaffHomePage /> },
-      { path: ROUTES.staffChangePassword, element: <ChangePasswordPage /> },
-      { path: ROUTES.scanMess, element: <MessScannerPage /> },
-      { path: ROUTES.scanHostel, element: <HostelScannerPage /> },
-      { path: ROUTES.scanEvent, element: <EventScannerPage /> },
-      { path: ROUTES.scanWorkshop, element: <WorkshopScannerPage /> },
-      { path: ROUTES.eventParticipation, element: <EventParticipationPage /> },
-      { path: ROUTES.eventTeams, element: <EventTeamsPage /> },
+      { path: ROUTES.staffHome, element: <LandingPage /> },
+      {
+        element: <StaffShell />,
+        children: [
+          { path: ROUTES.staffDuties, element: <StaffHomePage /> },
+          { path: ROUTES.staffChangePassword, element: <ChangePasswordPage /> },
+          { path: ROUTES.scanMess, element: <MessScannerPage /> },
+          { path: ROUTES.messMenu, element: <MessMenuPage /> },
+          { path: ROUTES.facilityIssues, element: <FacilityIssuesPage /> },
+          { path: ROUTES.queryConsole, element: <QueryConsolePage /> },
+          { path: ROUTES.scanHostel, element: <HostelScannerPage /> },
+          { path: ROUTES.scanEvent, element: <EventScannerPage /> },
+          { path: ROUTES.scanWorkshop, element: <WorkshopScannerPage /> },
+          // The on-spot desk is the same screen with its mode fixed by the path,
+          // so a volunteer can be sent straight to the scanner they are staffing.
+          { path: ROUTES.scanWorkshopOnSpot, element: <WorkshopScannerPage /> },
+          { path: ROUTES.workshopManage, element: <WorkshopManagePage /> },
+          { path: ROUTES.eventParticipation, element: <EventParticipationPage /> },
+          { path: ROUTES.eventTeams, element: <EventTeamsPage /> },
+        ],
+      },
     ],
   },
 
@@ -191,10 +258,14 @@ export const router = createBrowserRouter([
       { path: ROUTES.adminMess, element: <AdminMessPage /> },
       { path: ROUTES.adminHostels, element: <AdminHostelsPage /> },
       { path: ROUTES.adminBackendTeams, element: <AdminBackendTeamsPage /> },
+      { path: ROUTES.adminParticipants, element: <AdminParticipantsPage /> },
+      { path: ROUTES.adminAnnouncements, element: <AdminAnnouncementsPage /> },
       { path: ROUTES.adminAuditLogs, element: <AuditLogsPage /> },
       { path: ROUTES.adminEntityLogs, element: <EntityLogsPage /> },
     ],
   },
 
   { path: '*', element: <NotFoundPage />, errorElement: <ErrorPage /> },
-]);
+];
+
+export const router = createBrowserRouter(routes);

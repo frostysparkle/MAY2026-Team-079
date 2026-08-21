@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Compass } from 'lucide-react';
-import { ROUTES } from '@/config/routes';
+import { homeRoute } from '@/features/landing/roleSections';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, IconTile } from '@/components/ui';
 
@@ -8,7 +8,7 @@ import { Button, IconTile } from '@/components/ui';
 export default function NotFoundPage() {
   const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
-  const home = session?.token_type === 'staff' ? ROUTES.staffHome : ROUTES.home;
+  const home = homeRoute(session);
 
   return (
     <main className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
@@ -19,7 +19,7 @@ export default function NotFoundPage() {
           That link doesn&apos;t point anywhere in Paradox Connect.
         </p>
       </div>
-      <Button onClick={() => navigate(session ? home : ROUTES.splash, { replace: true })}>
+      <Button onClick={() => navigate(home, { replace: true })}>
         {session ? 'Go to Home' : 'Go to Start'}
       </Button>
     </main>

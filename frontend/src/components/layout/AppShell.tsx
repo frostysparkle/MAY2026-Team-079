@@ -10,16 +10,41 @@ import { cn } from '@/lib/cn';
  * a horizontal scroller under the header below that — same links, same order, one
  * source of truth.
  *
- * Deliberately the same list shape as `StaffShell`'s: Dashboard first, then one
- * entry per section. There is no separate phone list, because a link that only
- * exists on one viewport is a link the other one can never be told about.
+ * Home comes first and leads out of this shell, back to the Landing Page at
+ * `/app` — the PARADOX portal with the participant's sections around it. That is
+ * the way back for every screen in here, so a section is always one tap from the
+ * landing that opened it.
+ *
+ * The section entries after it repeat `landingSections`' participant list in its
+ * order, so the rail and the landing name the same things in the same sequence;
+ * My QR and Profile follow, because the portal's top bar carries those instead of
+ * listing them around the wordmark. There is no separate phone list, because a
+ * link that only exists on one viewport is a link the other one can never be told
+ * about.
+ *
+ * That claim used to be untrue. This rail carried thirteen entries while the
+ * landing carried seven, and the four it had that the portal did not —
+ * Announcements, Help, Report, Queries — were reachable *only* from here, which
+ * meant a student who went straight from signing in to a section never learned
+ * they existed. Three of those four are now one Help & Support entry, and both
+ * lists name it.
  */
 const NAV: { to: string; label: string }[] = [
-  { to: ROUTES.home, label: 'Dashboard' },
+  { to: ROUTES.home, label: 'Home' },
   { to: ROUTES.events, label: 'Events' },
   { to: ROUTES.workshops, label: 'Workshops' },
   { to: ROUTES.schedule, label: 'Schedule' },
   { to: ROUTES.accommodation, label: 'Stay' },
+  { to: ROUTES.sponsors, label: 'Sponsors' },
+  { to: ROUTES.dashboard, label: 'Dashboard' },
+  { to: ROUTES.announcements, label: 'Announcements' },
+  // One entry where Help, Report, and Queries used to be three. They answered a
+  // single need — I want somebody to deal with this — split by what the
+  // participant wanted back: an answer, a repair, or a phone number. Splitting the
+  // *navigation* on that meant a student had to know which of the three they
+  // needed before they could ask for any of it. They are tabs now; see
+  // `pages/support/SupportPage.tsx`.
+  { to: ROUTES.support, label: 'Help & Support' },
   { to: ROUTES.myQr, label: 'My QR' },
   { to: ROUTES.profile, label: 'Profile' },
 ];
@@ -71,7 +96,7 @@ export function AppShell() {
       <aside className="sticky top-0 z-20 hidden h-[100dvh] w-60 shrink-0 flex-col px-4 py-5 lg:flex xl:w-64">
         {/* Drops the first nav item to roughly the baseline the public rail sits
             at (it starts `top-16` under the brochure header). */}
-        <Link to={ROUTES.splash} className="tap mb-24 flex items-center gap-2">
+        <Link to={ROUTES.home} className="tap mb-24 flex items-center gap-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent text-base font-black text-white shadow-fab">
             P
           </span>
@@ -80,12 +105,15 @@ export function AppShell() {
           </span>
         </Link>
 
-        <nav aria-label="Participant sections" className="flex flex-col items-start gap-5">
+        <nav
+          aria-label="Participant sections"
+          className="flex min-h-0 flex-col items-start gap-5 overflow-y-auto"
+        >
           {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              // Only the dashboard needs it: it is the parent path of every other
+              // Only Home needs it: `/app` is the parent path of every other
               // link, so without `end` it would stay lit on all of them.
               end={item.to === ROUTES.home}
               className={({ isActive }) => cn(NAV_BASE, isActive ? NAV_ACTIVE : NAV_IDLE)}

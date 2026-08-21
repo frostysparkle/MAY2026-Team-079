@@ -10,7 +10,12 @@ import { cn } from '@/lib/cn';
  * horizontal scroller under the header below that — same links, same order, one
  * source of truth.
  *
- * `staffHome` is marked `hideForSuperAdmin` rather than removed. It is a
+ * Home comes first for everyone and leads out of this shell, back to the Landing
+ * Page at `/staff` — the PARADOX portal with this staffer's sections around it.
+ * That is the way back from every screen in here, so the rail and the landing
+ * offer the same sections in the same order.
+ *
+ * `staffDuties` is marked `hideForSuperAdmin` rather than removed. It is a
  * *personal* duty list — the halls, blocks, and events whose teams name you — so
  * for a volunteer or an event head it is the only page that matters, and four
  * scanner screens link back to it. A Super Admin is on none of those teams, which
@@ -18,7 +23,7 @@ import { cn } from '@/lib/cn';
  * every event linking to its participation report. That is already reachable
  * three other ways: the Events panel on this board, the row menu on Admin Events,
  * and each event's own detail screen. So the route stays and the entry goes, and
- * Overview — the fest-wide board — becomes their first link instead.
+ * Overview — the fest-wide board — becomes their first section instead.
  */
 const NAV: {
   to: string;
@@ -27,13 +32,27 @@ const NAV: {
   /** Present for other staff, redundant for a Super Admin. */
   hideForSuperAdmin?: boolean;
 }[] = [
-  { to: ROUTES.staffHome, label: 'Dashboard', hideForSuperAdmin: true },
+  { to: ROUTES.staffHome, label: 'Home' },
+  { to: ROUTES.staffDuties, label: 'Duties', hideForSuperAdmin: true },
+  // Story 5.4, and deliberately unflagged: `GET /issues` scopes itself to the
+  // caller's own block and hall teams, and hands a Super Admin the whole fest. So
+  // this is one screen both roles want, unlike the admin sections below it.
+  { to: ROUTES.facilityIssues, label: 'Issues' },
+  // Stories 6.3/6.4, unflagged for the same reason Issues is: `GET /queries`
+  // scopes itself to the caller's own event, workshop, block and hall teams, and
+  // hands a Super Admin the fest. It is beside Issues because the two are the
+  // same shift — one queue of faults, one of questions.
+  { to: ROUTES.queryConsole, label: 'Queries' },
   { to: ROUTES.adminOverview, label: 'Overview', superAdmin: true },
   { to: ROUTES.adminEvents, label: 'Events', superAdmin: true },
   { to: ROUTES.adminWorkshops, label: 'Workshops', superAdmin: true },
   { to: ROUTES.adminMess, label: 'Mess', superAdmin: true },
   { to: ROUTES.adminHostels, label: 'Hostels', superAdmin: true },
   { to: ROUTES.adminBackendTeams, label: 'Staff', superAdmin: true },
+  // Story 7.3. Admin-flagged unlike Queries and Issues, because both routes
+  // behind it are Super Admin only — a volunteer opening it would get a 403.
+  { to: ROUTES.adminParticipants, label: 'Participants', superAdmin: true },
+  { to: ROUTES.adminAnnouncements, label: 'Announcements', superAdmin: true },
   { to: ROUTES.adminAuditLogs, label: 'Audit Logs', superAdmin: true },
 ];
 
@@ -79,7 +98,7 @@ export function StaffShell() {
       <aside className="sticky top-0 z-20 hidden h-[100dvh] w-60 shrink-0 flex-col px-4 py-5 lg:flex xl:w-64">
         {/* Drops the first nav item to roughly the baseline the public rail sits
             at (it starts `top-16` under the brochure header). */}
-        <Link to={ROUTES.splash} className="tap mb-24 flex items-center gap-2">
+        <Link to={ROUTES.staffHome} className="tap mb-24 flex items-center gap-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent text-base font-black text-white shadow-fab">
             P
           </span>
@@ -88,7 +107,10 @@ export function StaffShell() {
           </span>
         </Link>
 
-        <nav aria-label="Staff sections" className="flex flex-col items-start gap-5">
+        <nav
+          aria-label="Staff sections"
+          className="flex min-h-0 flex-col items-start gap-5 overflow-y-auto"
+        >
           {links.map((item) => (
             <NavLink
               key={item.to}

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ShieldX } from 'lucide-react';
-import { ROUTES } from '@/config/routes';
+import { homeRoute } from '@/features/landing/roleSections';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, IconTile } from '@/components/ui';
 
@@ -12,7 +12,7 @@ import { Button, IconTile } from '@/components/ui';
 export default function AccessDeniedPage() {
   const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
-  const home = session?.token_type === 'staff' ? ROUTES.staffHome : ROUTES.home;
+  const home = homeRoute(session);
   return (
     <main className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
       <IconTile icon={ShieldX} tone="danger" size="lg" />
