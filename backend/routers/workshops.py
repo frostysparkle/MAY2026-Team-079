@@ -373,11 +373,47 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
             raise HTTPException(status_code=400, detail="Max on-spot capacity (10%) reached")
             
         if existing_ws:
+             # Which bookings this pull is about to destroy, before it destroys
+             # them. The pull matches on `slot_id`, so what it removes is not
+             # necessarily a booking on *this* workshop — a participant walking
+             # into workshop B while pre-registered for A in the same slot has
+             # their A booking deleted here.
+             #
+             # Every one of those seats has already been charged to some
+             # workshop's `registration_count`, and nothing used to give them
+             # back. Two ways that drifted:
+             #
+             #   * released from another workshop: A kept charging for a seat
+             #     nobody holds, so A read fuller than it was, forever;
+             #   * released from this workshop: the pre-registration was deleted
+             #     and then re-added as an on-spot booking, while the increment
+             #     below charged a second seat for the same person — one human,
+             #     two seats.
+             #
+             # Releasing them first makes the increment below correct in both
+             # cases, and leaves the same-workshop case a net zero.
+             released = [
+                 booking.get("workshop_id")
+                 for booking in user_workshops
+                 if booking.get("slot_id") == workshop.get("slot_id")
+             ]
+
              participants_collection.update_one(
                  {"_id": target_user["_id"]},
                  {"$pull": {"workshops": {"slot_id": workshop.get("slot_id")}}}
              )
-             
+
+             for released_id in released:
+                 if released_id is None:
+                     continue
+                 # Guarded rather than floored afterwards: `$gt: 0` makes the
+                 # decrement a no-op on a counter that is already zero, so data
+                 # predating this route cannot be driven negative.
+                 workshops_collection.update_one(
+                     {"_id": released_id, "registration_count": {"$gt": 0}},
+                     {"$inc": {"registration_count": -1}}
+                 )
+
         on_spot_entry = {
             "slot_id": workshop.get("slot_id"),
             "booking_type": "on-spot",
