@@ -356,12 +356,23 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
         raise HTTPException(status_code=400, detail="Email already registered in backend teams")
         
     # Look up the participant document that corresponds to this email (the admin_id link per schema)
-    participant_doc = participants_collection.find_one({"email": request.email}, {"_id": 1})
+    participant_doc = participants_collection.find_one(
+        {"email": request.email}, {"_id": 1, "profile.full_name": 1}
+    )
     admin_id_ref = participant_doc["_id"] if participant_doc else None
+
+    # A staff account had no name field at all, which is why the audit trail could
+    # only ever show `BT…` ids for the people who took the actions. `admin_id`
+    # already links to the participant document for staff who are also
+    # registered, so their real name is available here without asking for it
+    # again; an explicit `name` on the request wins over it.
+    linked_name = (participant_doc or {}).get("profile", {}).get("full_name")
+    resolved_name = (request.name or "").strip() or linked_name or None
 
     new_team = {
         "paradox_id": f"BT{int(datetime.utcnow().timestamp())}",
         "email": request.email,
+        "name": resolved_name,
         "password_hash": get_password_hash(request.password),
         "role": request.role,
         "department": request.department,

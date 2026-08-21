@@ -40,7 +40,7 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
         "created_at": datetime.utcnow()
     }
     hostel_collection.insert_one(hostel_doc)
-    log_audit(user_id, "CREATE_HOSTEL", request.hostel_id, {"capacity": request.capacity})
+    log_audit(current_user, "CREATE_HOSTEL", request.hostel_id, {"capacity": request.capacity})
     return {"message": "Hostel created"}
 
 @router.get("")
@@ -65,7 +65,7 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
     if existing and request.user_id:
         raise HTTPException(status_code=409, detail="Team member already assigned to this hostel")
     hostel_collection.update_one({"hostel_id": hostel_id}, {"$push": {"hostel_team": team_member}})
-    log_audit(user_id, "ASSIGN_HOSTEL_TEAM", hostel_id, {"team_user_id": request.user_id, "role": request.role})
+    log_audit(current_user, "ASSIGN_HOSTEL_TEAM", hostel_id, {"team_user_id": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
 
 @router.put("/{hostel_id}/team/{team_user_id}/toggle_scan")
@@ -122,7 +122,7 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
                 allocated += 1
                 break
             
-    log_audit(user_id, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
+    log_audit(current_user, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to hostels"}
 
 @router.post("/register")
@@ -148,7 +148,7 @@ def register_for_accommodation(current_user: dict = Depends(get_current_particip
         {"_id": current_user["_id"]},
         {"$set": {"accommodation.registered": True}}
     )
-    log_audit(current_user["participant_id"], "ACCOMMODATION_REGISTER", None)
+    log_audit(current_user, "ACCOMMODATION_REGISTER", None)
     return {"message": "Accommodation requested"}
 
 
@@ -170,7 +170,7 @@ def cancel_accommodation_request(current_user: dict = Depends(get_current_partic
         {"_id": current_user["_id"]},
         {"$set": {"accommodation.registered": False}}
     )
-    log_audit(current_user["participant_id"], "ACCOMMODATION_CANCEL", None)
+    log_audit(current_user, "ACCOMMODATION_CANCEL", None)
     return {"message": "Accommodation request withdrawn"}
 
 
@@ -240,7 +240,7 @@ def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_use
         {"_id": target_user["_id"]},
         {"$set": {"accommodation.logged_in": new_status}}
     )
-    log_audit(user_id, f"HOSTEL_{action.upper()}", hostel_id, {"participant_id": target_user.get("participant_id")})
+    log_audit(current_user, f"HOSTEL_{action.upper()}", hostel_id, {"participant_id": target_user.get("participant_id")})
     return {"message": f"Scan successful, {action} allowed"}
 
 @router.get("/{hostel_id}/statistics")

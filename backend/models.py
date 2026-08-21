@@ -109,11 +109,16 @@ class BackendTeamCreateRequest(BaseModel):
     role: str # super_admin | admin | Other | volunteer
     department: str # technicals | sports | culturals | UpperHouseCouncil
     designation: str
+    # Optional because staff accounts predate this field and are created in bulk
+    # from a roster of emails. When it is omitted the account still gets a name:
+    # see `create_backend_team`, which falls back to the linked participant.
+    name: Optional[str] = None
 
 class BackendTeamUpdateRequest(BaseModel):
     role: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
+    name: Optional[str] = None
 
 # Workshop models
 class WorkshopCreateRequest(BaseModel):

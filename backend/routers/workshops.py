@@ -37,7 +37,7 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "updated_at": datetime.utcnow()
     }
     workshops_collection.insert_one(new_workshop)
-    log_audit(user_id, "CREATE_WORKSHOP", request.workshop_id, {"capacity": request.capacity})
+    log_audit(current_user, "CREATE_WORKSHOP", request.workshop_id, {"capacity": request.capacity})
     return {"message": "Workshop created"}
 
 @router.get("")
@@ -152,7 +152,7 @@ def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_us
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         workshops_collection.update_one({"workshop_id": workshop_id}, {"$set": update_data})
-    log_audit(user_id, "UPDATE_WORKSHOP", workshop_id)
+    log_audit(current_user, "UPDATE_WORKSHOP", workshop_id)
     return {"message": "Workshop updated"}
 
 @router.delete("/{workshop_id}")
@@ -170,7 +170,7 @@ def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_s
             {"$pull": {"workshops": {"workshop_id": ws_doc_id}}}
         )
         workshops_collection.delete_one({"workshop_id": workshop_id})
-    log_audit(user_id, "DELETE_WORKSHOP", workshop_id)
+    log_audit(current_user, "DELETE_WORKSHOP", workshop_id)
     return {"message": "Workshop deleted"}
 
 @router.post("/{workshop_id}/volunteers")
