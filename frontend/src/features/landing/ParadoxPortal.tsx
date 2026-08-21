@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { AuroraBackdrop } from '@/components/ui';
 import { ImpossibleTriangle } from '@/features/landing/ParadoxHeadline';
 import { PublicMenu } from '@/features/landing/PublicMenu';
@@ -11,8 +10,14 @@ import { cn } from '@/lib/cn';
  * links along the bottom. It replaces the traditional top navbar for the landing
  * experience while staying keyboard- and screen-reader-friendly.
  *
- * Signed-in students get the Events and Workshops catalogue rendered below this
- * hero by `LandingPage`; signed out, the hero is the whole page.
+ * The same hero is the home screen at every level of access — `/` for a visitor,
+ * `/app` for a participant, `/staff` for a staffer — because `LandingPage` mounts
+ * it at all three and only varies `nav`. This component therefore knows nothing
+ * about roles: it is handed a list of sections and lays them out around the
+ * title.
+ *
+ * It is also the whole of the landing: it occupies exactly one viewport and
+ * nothing follows it, so the hero is sized to fit rather than to scroll.
  */
 
 export type PortalNavItem = {
@@ -62,43 +67,30 @@ export function ParadoxPortal({
   nav: PortalNavItem[];
   onRegister: () => void;
   onSignIn: () => void;
-  /** When true, the top bar shows My Pass + Profile instead of Login/Register. */
+  /** When true, the top bar shows the session actions instead of Login/Register. */
   authenticated?: boolean;
+  /** Digital Pass — omit for a session that has no pass (staff). */
   onOpenPass?: () => void;
+  /** Profile — omit for a session that has no profile screen (staff). */
   onOpenProfile?: () => void;
   onSignOut?: () => void;
 }) {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
   // Split the perimeter links so they can wrap around the centred title.
   const left = nav.filter((_, i) => i % 2 === 0);
   const right = nav.filter((_, i) => i % 2 === 1);
 
   return (
-    <section
-      id="top"
-      className="relative flex min-h-[100dvh] flex-col overflow-x-hidden bg-canvas text-ink"
-    >
+    <section id="top" className="relative flex h-full flex-col overflow-hidden bg-canvas text-ink">
       <AuroraBackdrop />
       <ImpossibleTriangle className="pointer-events-none absolute left-1/2 top-10 h-24 w-24 -translate-x-1/2 opacity-20 sm:h-32 sm:w-32" />
 
-      {/* Top bar: brand + Register / Login */}
-      <header
-        className={cn(
-          'relative z-20 transition-all duration-300',
-          scrolled && 'glass border-b border-line/60',
-        )}
-      >
+      {/* Top bar: brand + Register / Login. The page cannot scroll, so this
+          never needs a scrolled/condensed state. */}
+      <header className="relative z-20 shrink-0">
         <div
           className={cn(
             'relative grid w-full items-center gap-x-3 gap-y-3 px-4 py-5 sm:px-6',
-            authenticated
+            authenticated && onOpenPass
               ? 'grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'
               : 'grid-cols-[minmax(0,1fr)_auto]',
           )}
@@ -112,8 +104,9 @@ export function ParadoxPortal({
             </span>
           </a>
 
-          {/* My Pass — pinned to the top-middle when signed in. */}
-          {authenticated && (
+          {/* My Pass — pinned to the top-middle when signed in and the session
+              actually has one. */}
+          {authenticated && onOpenPass && (
             <button
               type="button"
               onClick={onOpenPass}
@@ -125,13 +118,15 @@ export function ParadoxPortal({
 
           {authenticated ? (
             <div className="flex items-center justify-self-end gap-1">
-              <button
-                type="button"
-                onClick={onOpenProfile}
-                className="tap rounded-full bg-surface-2 px-5 py-2 text-sm font-semibold uppercase tracking-[0.15em] text-ink hover:bg-surface active:scale-95"
-              >
-                Profile
-              </button>
+              {onOpenProfile && (
+                <button
+                  type="button"
+                  onClick={onOpenProfile}
+                  className="tap rounded-full bg-surface-2 px-5 py-2 text-sm font-semibold uppercase tracking-[0.15em] text-ink hover:bg-surface active:scale-95"
+                >
+                  Profile
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onSignOut}
@@ -163,8 +158,13 @@ export function ParadoxPortal({
         </div>
       </header>
 
-      {/* Stage: perimeter nav wrapping a huge centred title */}
-      <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
+      {/* Stage: perimeter nav wrapping a huge centred title. `min-h-0` lets it
+          absorb whatever the header leaves rather than pushing the section
+          taller than the viewport. */}
+      <main
+        id="main"
+        className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 py-10 sm:px-6"
+      >
         {/* Official links — centred along the bottom edge (desktop) */}
         <SocialRow className="absolute bottom-10 left-1/2 hidden -translate-x-1/2 gap-4 lg:flex" />
 
@@ -203,7 +203,7 @@ export function ParadoxPortal({
 
         {/* Official links — inline row on small screens */}
         <SocialRow className="absolute bottom-10 left-1/2 -translate-x-1/2 gap-4 lg:hidden" />
-      </div>
+      </main>
     </section>
   );
 }

@@ -5,17 +5,23 @@ import { ROUTES } from '@/config/routes';
 import { AuroraBackdrop } from '@/components/ui';
 import { PublicMenu } from '@/features/landing/PublicMenu';
 import { SocialRow } from '@/features/landing/SocialRow';
+import { homeRoute, landingSections } from '@/features/landing/roleSections';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/cn';
 
 /**
- * Shared chrome for the public (pre-login) pages — the branded "aurora"
- * backdrop, the Paradox Connect header, a left perimeter nav on desktop that
- * collapses to a wrapped row on phones, the official social handles, and a
- * large gradient title. Page content renders as children in the centred column.
+ * Shared chrome for the brochure pages — the branded "aurora" backdrop, the
+ * Paradox Connect header, a left perimeter nav on desktop that collapses to a
+ * wrapped row on phones, the official social handles, and a large gradient
+ * title. Page content renders as children in the centred column.
  *
- * Keeps every public page (Events, Schedule, Workshops, Sponsors) visually
+ * Keeps every brochure page (Events, Schedule, Workshops, Sponsors) visually
  * consistent from one source of truth.
+ *
+ * Signing in does not change any of that. It only changes the rail, which is
+ * built from `landingSections` — so a signed-in reader sees their own sections
+ * and a Home entry that returns to their Landing Page, in the identical layout a
+ * visitor gets. The page itself is untouched by who is reading it.
  *
  * Adapted from the reference build: its "Digital Pass" modal is not ported
  * because that app issues rotating TOTP codes, whereas this one uses the
@@ -66,7 +72,13 @@ const MAX_W: Record<NonNullable<PublicPageChromeProps['width']>, string> = {
   xl: 'max-w-7xl',
 };
 
-export type PublicNavLabel = 'Home' | 'Events' | 'Schedule' | 'Sponsors' | 'Workshops' | 'Staff';
+/**
+ * Which rail entry is the current page. The rail is built from
+ * `landingSections`, so the set of labels depends on who is signed in — a plain
+ * string, matched by label, rather than a closed union that only describes the
+ * signed-out list.
+ */
+export type PublicNavLabel = string;
 
 export interface PublicPageChromeProps {
   /** Big gradient page title (e.g. "SCHEDULE"). Omit for a title-less layout
@@ -93,17 +105,12 @@ export function PublicPageChrome({
   const clear = useAuthStore((s) => s.clear);
   const authenticated = session !== null;
 
-  const navItems: NavItem[] = [
-    { label: 'Home', to: ROUTES.splash },
-    { label: 'Events', to: ROUTES.publicEvents },
-    { label: 'Schedule', to: ROUTES.publicSchedule },
-    { label: 'Workshops', to: ROUTES.publicWorkshops },
-    { label: 'Sponsors', to: ROUTES.sponsors },
-    { label: 'Staff', to: ROUTES.adminLogin },
-  ];
+  // The same section list the Landing Page wraps around the wordmark, so a
+  // signed-in visitor keeps their own sections here — and "Home" leads back to
+  // *their* landing rather than the public one.
+  const navItems: NavItem[] = landingSections(session);
 
-  /** Signed-in users go to whichever shell their token type allows. */
-  const appHome = session?.token_type === 'staff' ? ROUTES.staffHome : ROUTES.home;
+  const appHome = homeRoute(session);
 
   return (
     <div className="relative min-h-full overflow-hidden bg-canvas text-ink">
@@ -112,7 +119,7 @@ export function PublicPageChrome({
       <div className="safe-top safe-bottom relative z-10 flex min-h-full flex-col">
         <header className="relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-4 py-5 sm:px-6">
           <Link
-            to={ROUTES.splash}
+            to={appHome}
             className="tap flex min-w-0 items-center gap-2"
             aria-label="Paradox Connect home"
           >
@@ -129,8 +136,8 @@ export function PublicPageChrome({
               <button
                 type="button"
                 onClick={() => navigate(appHome)}
-                aria-label="Open the app"
-                title="Open the app"
+                aria-label="Home"
+                title="Home"
                 className="tap flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-ink shadow-card ring-1 ring-line hover:bg-surface active:scale-95"
               >
                 <User size={18} strokeWidth={2} />
