@@ -3,11 +3,21 @@ from logger import log_audit
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
-import random
 
 from database import mess_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from models import ScanQRRequest
+
+class MessIDGenerator:
+    def __init__(self):
+        self.current_id = 111
+
+    def next_id(self):
+        event_id = "MESS" + str(self.current_id)
+        self.current_id += 1
+        return event_id
+
+generator = MessIDGenerator()
 
 router = APIRouter(prefix="/mess", tags=["Mess"])
 
@@ -54,7 +64,7 @@ def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=403, detail="Not authorized")
         
     mess_doc = {
-        "mess_id": request.mess_id,
+        "mess_id": generator.next_id(),
         "name": request.name,
         "capacity": request.capacity,
         "preference": request.preference,
