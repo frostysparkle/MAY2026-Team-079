@@ -33,6 +33,20 @@ class MessSlotRequest(BaseModel):
     start_time: str
     end_time: str
 
+class MessMenuSlot(BaseModel):
+    slot: str            # breakfast | lunch | dinner
+    start_time: str      # "HH:MM"
+    end_time: str
+    dishes: List[str] = []
+
+class MessMenuDay(BaseModel):
+    day: int             # 1-based fest day
+    slots: List[MessMenuSlot] = []
+
+class MessMenuRequest(BaseModel):
+    days: List[MessMenuDay] = []
+    note: Optional[str] = None
+
 @router.post("")
 def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
@@ -55,6 +69,27 @@ def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_cur
 @router.get("")
 def list_messes(current_user: dict = Depends(get_current_user)):
     return list(mess_collection.find({}, {"_id": 0}))
+
+@router.put("/{mess_id}/menu")
+def update_mess_menu(mess_id: str, request: MessMenuRequest, current_user: dict = Depends(get_current_staff)):
+    user_id = current_user.get("paradox_id")
+    mess = mess_collection.find_one({"mess_id": mess_id})
+    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
+
+    is_super = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
+    on_team = any(m.get("user_id") == user_id for m in mess.get("mess_team", []))
+    if not (is_super or on_team):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this menu")
+
+    menu = {
+        "days": [d.model_dump() for d in request.days],
+        "note": request.note,
+        "updated_at": datetime.utcnow(),
+        "updated_by": user_id,
+    }
+    mess_collection.update_one({"mess_id": mess_id}, {"$set": {"menu": menu}})
+    log_audit(current_user, "UPDATE_MESS_MENU", mess_id, {"days": len(request.days)})
+    return {"message": "Menu updated"}
 
 @router.post("/{mess_id}/team")
 def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user: dict = Depends(get_current_staff)):
