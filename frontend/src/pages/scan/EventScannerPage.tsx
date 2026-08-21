@@ -7,6 +7,7 @@ import { ROUTES } from '@/config/routes';
 import { ADMITTED_NOTE, readEventCapacity } from '@/features/events/eventCapacity';
 import { readEventExtras } from '@/features/events/eventExtras';
 import { useQrScanner } from '@/features/scan/useQrScanner';
+import { ScannerViewfinder } from '@/features/scan/ScannerViewfinder';
 import {
   Button,
   ErrorState,
@@ -28,6 +29,8 @@ export default function EventScannerPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
+  /** A code has been read and the log is in flight — the camera is already down. */
+  const [pending, setPending] = useState(false);
   const [dailyScans, setDailyScans] = useState<number | null>(null);
   /** Distinct participants scanned in today, across every volunteer — story 3.2. */
   const [admitted, setAdmitted] = useState<number | null>(null);
@@ -67,6 +70,7 @@ export default function EventScannerPage() {
   );
 
   async function handleScan(qr: ScanQRRequest) {
+    setPending(true);
     try {
       const res = await api.scanEvent(eventId, qr);
       setOutcome({ kind: 'result', data: res });
@@ -82,10 +86,12 @@ export default function EventScannerPage() {
         kind: 'error',
         message: e instanceof ApiClientError ? e.message : 'Scan failed.',
       });
+    } finally {
+      setPending(false);
     }
   }
 
-  const { readerId, cameraError, retry } = useQrScanner(handleScan);
+  const scanner = useQrScanner(handleScan);
 
   const back = { label: 'Duties', onClick: () => navigate(ROUTES.staffDuties) };
 
@@ -171,19 +177,7 @@ export default function EventScannerPage() {
       )}
 
       {!outcome && (
-        <>
-          <div id={readerId} className="overflow-hidden rounded-2xl bg-black/5" />
-          {cameraError && (
-            <div className="flex flex-col items-center gap-3">
-              <p role="alert" className="text-sm text-danger">
-                {cameraError}
-              </p>
-              <Button variant="secondary" onClick={retry}>
-                Retry camera
-              </Button>
-            </div>
-          )}
-        </>
+        <ScannerViewfinder scanner={scanner} busy={pending} busyLabel="Checking registration…" />
       )}
 
       {outcome?.kind === 'result' && (
@@ -200,7 +194,7 @@ export default function EventScannerPage() {
             fullWidth
             onClick={() => {
               setOutcome(null);
-              retry();
+              scanner.retry();
             }}
           >
             Scan Next Participant
@@ -215,7 +209,7 @@ export default function EventScannerPage() {
             fullWidth
             onClick={() => {
               setOutcome(null);
-              retry();
+              scanner.retry();
             }}
           >
             Scan Next Participant

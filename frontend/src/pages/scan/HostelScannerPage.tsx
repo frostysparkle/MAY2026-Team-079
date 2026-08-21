@@ -5,6 +5,7 @@ import type { Hostel, ScanQRRequest } from '@/api/types';
 import { currentStaff } from '@/stores/authStore';
 import { ROUTES } from '@/config/routes';
 import { useQrScanner } from '@/features/scan/useQrScanner';
+import { ScannerViewfinder } from '@/features/scan/ScannerViewfinder';
 import { Button, ErrorState, ResultBanner, Spinner } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { cn } from '@/lib/cn';
@@ -20,6 +21,8 @@ export default function HostelScannerPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [action, setAction] = useState<'entry' | 'exit'>('entry');
   const [outcome, setOutcome] = useState<Outcome>(null);
+  /** A code has been read and the log is in flight — the camera is already down. */
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     api
@@ -33,6 +36,7 @@ export default function HostelScannerPage() {
   const membership = hostel?.hostel_team?.find((t) => t.user_id === staff?.id);
 
   async function handleScan(qr: ScanQRRequest) {
+    setPending(true);
     try {
       const res = await api.scanHostel(hostelId, action, qr);
       setOutcome({ kind: 'success', message: res.message, action });
@@ -41,12 +45,14 @@ export default function HostelScannerPage() {
         kind: 'error',
         message: e instanceof ApiClientError ? e.message : 'Scan failed.',
       });
+    } finally {
+      setPending(false);
     }
   }
 
-  const { readerId, cameraError, retry } = useQrScanner(handleScan);
+  const scanner = useQrScanner(handleScan);
 
-  const back = { label: 'Dashboard', onClick: () => navigate(ROUTES.staffHome) };
+  const back = { label: 'Duties', onClick: () => navigate(ROUTES.staffDuties) };
 
   if (loadError) {
     return (
@@ -104,19 +110,11 @@ export default function HostelScannerPage() {
       </div>
 
       {!outcome && (
-        <>
-          <div id={readerId} className="overflow-hidden rounded-2xl bg-black/5" />
-          {cameraError && (
-            <div className="flex flex-col items-center gap-3">
-              <p role="alert" className="text-sm text-danger">
-                {cameraError}
-              </p>
-              <Button variant="secondary" onClick={retry}>
-                Retry camera
-              </Button>
-            </div>
-          )}
-        </>
+        <ScannerViewfinder
+          scanner={scanner}
+          busy={pending}
+          busyLabel={action === 'entry' ? 'Logging entry…' : 'Logging exit…'}
+        />
       )}
 
       {outcome && (
@@ -137,7 +135,7 @@ export default function HostelScannerPage() {
             fullWidth
             onClick={() => {
               setOutcome(null);
-              retry();
+              scanner.retry();
             }}
           >
             Scan Next Participant
