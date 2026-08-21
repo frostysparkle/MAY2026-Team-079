@@ -15,6 +15,17 @@ from database import workshops_collection, participants_collection, backend_team
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
 
+class WorkshopIDGenerator:
+    def __init__(self):
+        self.current_id = 111
+
+    def next_id(self):
+        event_id = "WKSP" + str(self.current_id)
+        self.current_id += 1
+        return event_id
+
+generator = WorkshopIDGenerator()
+
 router = APIRouter(prefix="/workshops", tags=["Workshops"])
 
 @router.post("")
@@ -25,7 +36,7 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         raise HTTPException(status_code=403, detail="Only Super Admins can create workshops")
         
     new_workshop = {
-        "workshop_id": request.workshop_id,
+        "workshop_id": generator.next_id(),
         "slot_id": request.slot_id,
         "name": request.name,
         "description": request.description,
