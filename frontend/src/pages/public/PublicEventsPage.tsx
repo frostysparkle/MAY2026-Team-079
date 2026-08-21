@@ -40,7 +40,6 @@ export default function PublicEventsPage() {
               ← All categories
             </Link>
           </div>
-          <p className="mt-4 text-center text-sm leading-6 text-muted">{category.blurb}</p>
           <CategorySection category={category} />
         </>
       ) : (

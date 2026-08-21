@@ -1,22 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ticket } from 'lucide-react';
+import { CalendarX2, Ticket } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, MyEventRegistration, MyWorkshopRegistration } from '@/api/types';
 import { parseSlotId, shiftLabel, workshopDayLabel } from '@/features/workshops/workshopSlot';
 import { WORKSHOP_COVER, workshopPosterPaths } from '@/features/workshops/workshopView';
 import { path, ROUTES } from '@/config/routes';
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  SectionHeading,
-  Skeleton,
-  StatusBadge,
-} from '@/components/ui';
+import { Button, EmptyState, ErrorState, SectionBlock, StatusBadge } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { fullEventView } from '@/features/events/eventView';
-import { EVENT_GRID_CLASS, EventPosterCard } from '@/features/events/EventPosterCard';
+import {
+  EVENT_GRID_CLASS,
+  EventGridSkeleton,
+  EventPosterCard,
+} from '@/features/events/EventPosterCard';
+import { EventChangeAlerts } from '@/features/events/EventChangeAlerts';
+import {
+  dismissAllEventChanges,
+  dismissEventChange,
+  syncEventChanges,
+  type EventChange,
+} from '@/features/events/eventChanges';
+import { currentParticipant } from '@/stores/authStore';
 
 /**
  * Everything this participant is registered for, as the same poster grid the
@@ -40,6 +45,9 @@ export default function MyRegistrationsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workshops, setWorkshops] = useState<MyWorkshopRegistration[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [changes, setChanges] = useState<EventChange[]>([]);
+
+  const participantId = currentParticipant()?.id ?? '';
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -50,6 +58,10 @@ export default function MyRegistrationsPage() {
         setEvents(all);
         setWorkshops(mineWorkshops);
         setLoadError(null);
+        // Story 1.2. Shares the dismissal record with the dashboard, so an alert
+        // dismissed on either screen is gone from both. The id is read here
+        // rather than closed over so this stays a mount-only effect.
+        setChanges(syncEventChanges(currentParticipant()?.id ?? '', all, mine));
       })
       .catch((e) =>
         setLoadError(e instanceof ApiClientError ? e.message : 'Could not load registrations.'),
@@ -109,15 +121,14 @@ export default function MyRegistrationsPage() {
       }
       back={backToEvents}
     >
+      <EventChangeAlerts
+        changes={changes}
+        onDismiss={(id) => setChanges(dismissEventChange(participantId, id))}
+        onDismissAll={() => setChanges(dismissAllEventChanges(participantId))}
+      />
+
       {registrations === null ? (
-        <ul className={EVENT_GRID_CLASS} aria-busy="true">
-          {Array.from({ length: 4 }, (_, i) => (
-            <li key={i} className="flex flex-col gap-2">
-              <Skeleton className="aspect-[4/5] w-full rounded-2xl" />
-              <Skeleton className="h-4 w-3/4" />
-            </li>
-          ))}
-        </ul>
+        <EventGridSkeleton count={4} />
       ) : entries.length === 0 && bookedWorkshops.length === 0 ? (
         <EmptyState
           title="No registrations yet"
@@ -141,12 +152,7 @@ function Group({ title, entries }: { title: string; entries: Entry[] }) {
   if (entries.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-4">
-      <SectionHeading
-        title={title}
-        meta={`${entries.length} event${entries.length === 1 ? '' : 's'}`}
-      />
-
+    <SectionBlock title={title} meta={`${entries.length} event${entries.length === 1 ? '' : 's'}`}>
       <ul className={EVENT_GRID_CLASS}>
         {entries.map(({ registration, event }) => {
           const view = fullEventView(event);
@@ -174,7 +180,7 @@ function Group({ title, entries }: { title: string; entries: Entry[] }) {
           );
         })}
       </ul>
-    </section>
+    </SectionBlock>
   );
 }
 
@@ -190,12 +196,10 @@ function WorkshopGroup({ registrations }: { registrations: MyWorkshopRegistratio
   if (registrations.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-4">
-      <SectionHeading
-        title="Workshops"
-        meta={`${registrations.length} workshop${registrations.length === 1 ? '' : 's'}`}
-      />
-
+    <SectionBlock
+      title="Workshops"
+      meta={`${registrations.length} workshop${registrations.length === 1 ? '' : 's'}`}
+    >
       <ul className={EVENT_GRID_CLASS}>
         {registrations.map((registration) => {
           const slot = parseSlotId(registration.slot_id);
@@ -205,14 +209,25 @@ function WorkshopGroup({ registrations }: { registrations: MyWorkshopRegistratio
 
           // A workshop deleted after booking keeps its slot but has no id to
           // link to and no name to show; it still belongs on this list.
+          //
+          // Shaped like the poster tiles it sits among rather than as a short text
+          // card: this is a cell of a grid whose other cells are all a 4:5 tile
+          // over a title and a meta line, and a card two lines tall dropped into
+          // that row left the tiles beside it standing over a gap. The tile is a
+          // muted placeholder, the title and meta line sit exactly where a
+          // poster's do, and the row stays level.
           if (!registration.workshop_id) {
             return (
-              <li
-                key={registration.slot_id}
-                className="flex flex-col gap-2 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-line"
-              >
-                <p className="font-semibold text-ink">Workshop no longer available</p>
-                <p className="text-xs text-muted">{when}</p>
+              <li key={registration.slot_id} className="flex flex-col">
+                <div className="overflow-hidden rounded-2xl shadow-card ring-1 ring-line/70">
+                  <div className="flex aspect-[4/5] w-full items-center justify-center rounded-2xl bg-surface-2">
+                    <CalendarX2 size={40} strokeWidth={1.5} aria-hidden className="text-muted" />
+                  </div>
+                </div>
+                <p className="mt-2.5 text-sm font-semibold leading-5 text-ink lg:text-base lg:leading-6">
+                  Workshop no longer available
+                </p>
+                <p className="mt-0.5 text-xs font-medium text-muted lg:text-sm">{when}</p>
               </li>
             );
           }
@@ -238,6 +253,6 @@ function WorkshopGroup({ registrations }: { registrations: MyWorkshopRegistratio
           );
         })}
       </ul>
-    </section>
+    </SectionBlock>
   );
 }

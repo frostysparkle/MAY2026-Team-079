@@ -6,10 +6,11 @@ import type { Event, MyEventRegistration } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
   EmptyState,
   ErrorState,
-  SectionHeading,
-  Skeleton,
+  SectionBlock,
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
@@ -18,7 +19,11 @@ import {
   type PublicEventCategorySlug,
 } from '@/features/events/publicEvents';
 import { categorySlugForEventType, UNLISTED_CATEGORY } from '@/features/events/eventView';
-import { EVENT_GRID_CLASS, EventPosterCard } from '@/features/events/EventPosterCard';
+import {
+  EVENT_GRID_CLASS,
+  EventGridSkeleton,
+  EventPosterCard,
+} from '@/features/events/EventPosterCard';
 
 /**
  * The in-app event catalogue, dressed as the festival programme — the same poster
@@ -97,8 +102,18 @@ export default function EventsListPage() {
     return grouped.filter((section) => section.events.length > 0);
   }, [events]);
 
+  // Inside the screen, not instead of it. Returned bare, an `ErrorState` renders
+  // with no page column at all: no title, no eyebrow, no `max-w-7xl` centring and
+  // no horizontal padding, so a failed fetch dropped the participant onto a
+  // full-bleed message that did not look like part of the app — and gave them no
+  // indication of which section had failed. `MyRegistrationsPage` and
+  // `EventDetailPage` already wrapped theirs; the three list screens did not.
   if (loadError) {
-    return <ErrorState title="Could not load events" description={loadError} onRetry={load} />;
+    return (
+      <FestivalScreen title="Events" eyebrow="Programme">
+        <ErrorState title="Could not load events" description={loadError} onRetry={load} />
+      </FestivalScreen>
+    );
   }
 
   const openCount = events?.filter((e) => e.open).length ?? 0;
@@ -114,24 +129,17 @@ export default function EventsListPage() {
       }
       actions={
         <>
-          <Button onClick={() => navigate(ROUTES.myRegistrations)} className="gap-1.5">
-            <Ticket size={15} strokeWidth={2.5} /> My registrations
+          <Button onClick={() => navigate(ROUTES.myRegistrations)}>
+            <Ticket size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> My registrations
           </Button>
-          <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)} className="gap-1.5">
-            <CalendarDays size={14} /> Schedule
+          <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)}>
+            <CalendarDays size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Schedule
           </Button>
         </>
       }
     >
       {events === null ? (
-        <ul className={EVENT_GRID_CLASS} aria-busy="true">
-          {Array.from({ length: 8 }, (_, i) => (
-            <li key={i} className="flex flex-col gap-2">
-              <Skeleton className="aspect-[4/5] w-full rounded-2xl" />
-              <Skeleton className="h-4 w-3/4" />
-            </li>
-          ))}
-        </ul>
+        <EventGridSkeleton />
       ) : events.length === 0 ? (
         <EmptyState
           title="No events yet"
@@ -140,13 +148,12 @@ export default function EventsListPage() {
         />
       ) : (
         sections.map((section) => (
-          <section key={section.key} className="flex flex-col gap-4">
-            <SectionHeading
-              title={section.label}
-              accentColor={section.accent}
-              meta={`${section.events.length} event${section.events.length === 1 ? '' : 's'}`}
-            />
-
+          <SectionBlock
+            key={section.key}
+            title={section.label}
+            accentColor={section.accent}
+            meta={`${section.events.length} event${section.events.length === 1 ? '' : 's'}`}
+          >
             <ul className={EVENT_GRID_CLASS}>
               {section.events.map((event) => (
                 <EventPosterCard
@@ -172,7 +179,7 @@ export default function EventsListPage() {
                 />
               ))}
             </ul>
-          </section>
+          </SectionBlock>
         ))
       )}
     </FestivalScreen>

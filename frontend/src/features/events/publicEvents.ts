@@ -17,8 +17,6 @@ export type PublicEventCategorySlug = 'sports' | 'culturals' | 'technicals';
 export interface PublicEventCategory {
   slug: PublicEventCategorySlug;
   label: string;
-  /** Short tagline shown under the category name. */
-  blurb: string;
   icon: string;
   /** Tailwind gradient tint used as an accent. */
   tint: string;
@@ -40,7 +38,6 @@ export const PUBLIC_EVENT_CATEGORIES: PublicEventCategory[] = [
   {
     slug: 'sports',
     label: 'Sports',
-    blurb: 'Turf, court, and arena showdowns.',
     icon: '🏅',
     tint: 'from-emerald-400/25 to-emerald-400/5',
     accent: '#9E2A2B',
@@ -51,7 +48,6 @@ export const PUBLIC_EVENT_CATEGORIES: PublicEventCategory[] = [
   {
     slug: 'culturals',
     label: 'Culturals',
-    blurb: 'Music, dance, drama, and the arts.',
     icon: '🎭',
     tint: 'from-violet-400/25 to-violet-400/5',
     accent: '#6D28D9',
@@ -62,7 +58,6 @@ export const PUBLIC_EVENT_CATEGORIES: PublicEventCategory[] = [
   {
     slug: 'technicals',
     label: 'Technicals',
-    blurb: 'Code, circuits, robots, and startups.',
     icon: '⚙️',
     tint: 'from-sky-400/25 to-sky-400/5',
     accent: '#C2410C',

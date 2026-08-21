@@ -5,7 +5,14 @@ import { api, ApiClientError } from '@/api';
 import type { Event, MyEventRegistration } from '@/api/types';
 import { readEventExtras } from '@/features/events/eventExtras';
 import { ROUTES } from '@/config/routes';
-import { Button, ErrorState, ResultBanner, Skeleton, StatusBadge } from '@/components/ui';
+import {
+  Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
+  ErrorState,
+  ResultBanner,
+  Skeleton,
+} from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { EventDetailView } from '@/components/events/EventDetailView';
 import { fullEventView } from '@/features/events/eventView';
@@ -106,7 +113,10 @@ export default function EventDetailPage() {
   if (!event) {
     return (
       <FestivalScreen title="Event" eyebrow="Programme" back={backToEvents}>
-        <Skeleton className="h-96" />
+        {/* `rounded-2xl`, so the placeholder has the corner of the panel that
+            replaces it. `Skeleton` defaults to `rounded-lg`, which is the radius
+            of an input, not of a card. */}
+        <Skeleton className="h-96 rounded-2xl" />
       </FestivalScreen>
     );
   }
@@ -120,8 +130,8 @@ export default function EventDetailPage() {
       subtitle={event.open ? 'Registration is open' : 'Registration is closed'}
       back={backToEvents}
       actions={
-        <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)} className="gap-1.5">
-          <CalendarDays size={14} /> Fest schedule
+        <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)}>
+          <CalendarDays size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Fest schedule
         </Button>
       }
     >
@@ -131,12 +141,13 @@ export default function EventDetailPage() {
         </ResultBanner>
       )}
 
-      {!event.open && !registration && (
-        <div>
-          <StatusBadge tone="neutral">Closed for registration</StatusBadge>
-        </div>
-      )}
-
+      {/* The loose "Closed for registration" pill that used to sit here is gone.
+          It was a top-level block holding one badge, so it took a full 20px of the
+          screen's gap above and below to say what the subtitle two lines up
+          already says in words ("Registration is closed") — and the registration
+          form below it says a third time. A stray chip on its own line is also the
+          one thing on these screens that is neither a panel nor a banner, which is
+          what made this page's rhythm read as broken. */}
       <EventDetailView
         view={view}
         crowd={counts && <EventCrowdCard counts={counts} capacity={capacity} />}

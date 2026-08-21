@@ -27,9 +27,14 @@ import {
  * the same shape the hardcoded festival catalogue uses, so a new event renders
  * identically to a hardcoded one.
  *
- * Every field maps onto the frozen backend `Event` schema. The three the schema
- * has no column for — rulebook, FAQs, and per-field dropdown choices — ride in
- * the open `registration` map; see `features/events/eventExtras.ts`.
+ * Every field maps onto the frozen backend `Event` schema. The ones the schema
+ * has no column for — rulebook, FAQs, per-field dropdown choices, capacity, and
+ * the entry requirements — ride in the open `registration` map; see
+ * `features/events/eventExtras.ts`.
+ *
+ * `save()` rebuilds that map from scratch on every write, so any key the form
+ * does not read here would be dropped on the next edit. Adding a piggybacked
+ * field means teaching both `hydrate()` and `save()` about it.
  */
 
 const EVENT_TYPES = [
@@ -93,6 +98,13 @@ export default function AdminEventEditorPage() {
   const [regStart, setRegStart] = useState('');
   const [regEnd, setRegEnd] = useState('');
   const [rulebook, setRulebook] = useState('');
+  /** Held as text so the box can be genuinely empty; parsed on save. */
+  const [capacity, setCapacity] = useState('');
+
+  // Entry requirements
+  const [reportingTime, setReportingTime] = useState('');
+  const [idProof, setIdProof] = useState('');
+  const [allowedItems, setAllowedItems] = useState('');
 
   // Repeatable sections
   const [prizes, setPrizes] = useState<PrizeDraft[]>([]);
@@ -100,6 +112,18 @@ export default function AdminEventEditorPage() {
   const [fields, setFields] = useState<FieldDraft[]>([]);
   const [faqs, setFaqs] = useState<EventFaq[]>([]);
   const [meta, setMeta] = useState<EventMetaRow[]>([]);
+  const [entryRules, setEntryRules] = useState<string[]>([]);
+
+  /**
+   * The event's announcements, carried through untouched.
+   *
+   * This form has no announcements field and should not grow one — notices are
+   * composed on the Announcements screen. But `save()` rebuilds the whole
+   * `registration` map from scratch, so any key this form does not hold is a key
+   * it deletes. Holding the blob opaquely means editing an event's capacity does
+   * not un-send its notices.
+   */
+  const [announcementsRaw, setAnnouncementsRaw] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!eventId) return;
@@ -134,6 +158,12 @@ export default function AdminEventEditorPage() {
       setRegStart(window.startTime ?? '');
       setRegEnd(window.endTime ?? '');
       setRulebook(extras.rulebook ?? '');
+      setAnnouncementsRaw(extras.announcementsRaw);
+      setCapacity(extras.capacity ? String(extras.capacity) : '');
+      setReportingTime(extras.entry.reportingTime ?? '');
+      setIdProof(extras.entry.idProof ?? '');
+      setAllowedItems(extras.entry.allowedItems.join(', '));
+      setEntryRules(extras.entry.rules);
       setPrizes(
         (event.prize_money ?? []).map((p, i) => ({ ...p, display: extras.prizeAmounts[i] ?? '' })),
       );
@@ -178,6 +208,18 @@ export default function AdminEventEditorPage() {
       meta,
       prizeAmounts: keptPrizes.map((p) => p.display),
       roundWhen: keptRounds.map((r) => r.when),
+      // Not editable here; carried so this form does not delete it. See the
+      // state declaration above.
+      announcementsRaw,
+      // A blank, zero, or non-numeric box means "no published limit" — the
+      // writer drops anything that is not a positive whole number.
+      capacity: Number(capacity),
+      entry: {
+        reportingTime,
+        idProof,
+        allowedItems: allowedItems.split(',').map((item) => item.trim()),
+        rules: entryRules,
+      },
     });
 
     const payload = {
@@ -331,7 +373,7 @@ export default function AdminEventEditorPage() {
               />
             </Section>
 
-            <Section title="Registration window">
+            <Section title="Registration">
               <div className="grid grid-cols-2 gap-3">
                 <TextInput
                   label="Opens"
@@ -346,9 +388,61 @@ export default function AdminEventEditorPage() {
                   onChange={(e) => setRegEnd(e.target.value)}
                 />
               </div>
+              <TextInput
+                label="Capacity"
+                type="number"
+                min={1}
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                placeholder="e.g. 120"
+                hint="Entries this event admits. Leave blank if there is no published limit."
+              />
+            </Section>
+
+            <Section
+              title="Entry requirements"
+              description="Shown together on the event page under “Before You Go”."
+            >
+              <TextInput
+                label="Reporting time"
+                value={reportingTime}
+                onChange={(e) => setReportingTime(e.target.value)}
+                placeholder="e.g. 30 minutes before your round"
+              />
+              <TextInput
+                label="ID proof required"
+                value={idProof}
+                onChange={(e) => setIdProof(e.target.value)}
+                placeholder="e.g. Institute ID card"
+              />
+              <TextInput
+                label="Allowed items"
+                value={allowedItems}
+                onChange={(e) => setAllowedItems(e.target.value)}
+                placeholder="Laptop, charger, water bottle"
+                hint="Comma-separated."
+              />
             </Section>
           </div>
         </div>
+
+        <Repeatable
+          title="Entry rules"
+          description="One rule per line, listed at the gate section of the event page."
+          items={entryRules}
+          onAdd={() => setEntryRules([...entryRules, ''])}
+          onRemove={(i) => setEntryRules(entryRules.filter((_, idx) => idx !== i))}
+          render={(rule, i) => (
+            <TextInput
+              label={`Rule ${i + 1}`}
+              value={rule}
+              onChange={(e) =>
+                setEntryRules(entryRules.map((r, idx) => (idx === i ? e.target.value : r)))
+              }
+              placeholder="e.g. Entry closes 10 minutes after the round begins."
+            />
+          )}
+        />
 
         <Repeatable
           title="Prizes"

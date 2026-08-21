@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Ticket } from 'lucide-react';
+import { Skeleton } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 /**
@@ -110,3 +111,24 @@ export function EventPosterCard({
  */
 export const EVENT_GRID_CLASS =
   'grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 lg:gap-6 xl:gap-8';
+
+/**
+ * The poster grid's loading state — a tile-shaped placeholder per card, on the
+ * same grid so the layout does not reflow when the real posters land.
+ *
+ * Lives beside the card rather than in the three screens that show it (the event
+ * catalogue, the workshop programme, and My Registrations), which had each copied
+ * the same `aspect-[4/5]` block and could each have got the aspect ratio wrong.
+ */
+export function EventGridSkeleton({ count = 8 }: { count?: number }) {
+  return (
+    <ul className={EVENT_GRID_CLASS} aria-busy="true">
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i} className="flex flex-col gap-2">
+          <Skeleton className="aspect-[4/5] w-full rounded-2xl" />
+          <Skeleton className="h-4 w-3/4" />
+        </li>
+      ))}
+    </ul>
+  );
+}
