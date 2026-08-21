@@ -2,13 +2,33 @@ from fastapi import APIRouter, HTTPException, Depends
 from logger import log_audit
 from typing import Optional, List
 from datetime import datetime
-from bson import ObjectId
 import random
 
 from models import EventCreateRequest, EventUpdateRequest, EventRegistrationInput, ScanQRRequest
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
+
+class EventIDGenerator:
+    def __init__(self):
+        self.current_event_id = 1111
+        self.current_round_id = 11111
+
+    def next_event_id(self, type : str):
+        if type in ["technical", "culturals", "sports", "others"]:
+            blob = "EV" + type[:3].upper()
+        event_id = blob + str(self.current_event_id)
+        self.current_event_id += 1
+        return event_id
+
+    def next_round_id(self, type : str):
+        if type in ["technical", "culturals", "sports", "others"]:
+            blob = "RND" + type[:3].upper()
+        round_id = blob + str(self.current_round_id)
+        self.current_round_id += 1
+        return round_id
+
+generator = EventIDGenerator()
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -22,7 +42,7 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
     schedule_data = []
     for r_idx, rnd in enumerate(request.schedule):
         schedule_data.append({
-            "round_id": rnd.round_id or f"RND{r_idx + 1}",
+            "round_id": generator.next_round_id(request.event_type),
             "name": rnd.name,
             "description": rnd.description,
             "start_time": rnd.start_time,
@@ -31,7 +51,7 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
         })
 
     new_event = {
-        "event_id": request.event_id,
+        "event_id": generator.next_event_id(request.event_type),
         "event_type": request.event_type,
         "name": request.name,
         "description": request.description,
@@ -50,7 +70,7 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
         "logs": []
     }
     event_collection.insert_one(new_event)
-    log_audit(current_user, "CREATE_EVENT", request.event_id)
+    log_audit(current_user, "CREATE_EVENT", new_event["event_id"], {"event_name": new_event["name"]})
     return {"message": "Event created"}
 
 @router.get("")
