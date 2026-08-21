@@ -5,15 +5,17 @@ import type { Event } from '@/api/types';
 import { currentParticipant } from '@/stores/authStore';
 import {
   ANY,
+  DetailPanel,
   EmptyState,
   ErrorState,
   ListToolbar,
   Skeleton,
   StatCard,
+  StatGrid,
   useListFilters,
   type FilterSpec,
 } from '@/components/ui';
-import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { FestivalScreen, ScreenNote } from '@/components/layout/FestivalScreen';
 import { useTick } from '@/features/overview/board/useTick';
 import { DayRail } from '@/features/schedule/DayRail';
 import { NowPanel } from '@/features/schedule/NowPanel';
@@ -168,8 +170,14 @@ export default function FestSchedulePage() {
 
   /* ------------------------------------------------------------- render --- */
 
+  // Inside the screen rather than instead of it — see `EventsListPage` for why a
+  // bare `ErrorState` is a full-bleed message with no section title on it.
   if (loadError) {
-    return <ErrorState title="Could not load schedule" description={loadError} onRetry={load} />;
+    return (
+      <FestivalScreen title="Schedule" eyebrow={participant?.house ?? 'Programme'}>
+        <ErrorState title="Could not load schedule" description={loadError} onRetry={load} />
+      </FestivalScreen>
+    );
   }
 
   const loading = events === null;
@@ -194,63 +202,57 @@ export default function FestSchedulePage() {
           : `${rows.length} round${rows.length === 1 ? '' : 's'} across ${days.length} day${days.length === 1 ? '' : 's'}`
       }
     >
-      {/* 1 — The pulse row: the four figures worth reading before anything else. */}
-      {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={CalendarDays}
-            tone="brand"
-            label="Fest Days"
-            value={days.length}
-            footnote={
-              days.length === 0
-                ? 'Nothing published yet'
-                : `${days[0].label} – ${days[days.length - 1].label}`
-            }
-          />
-          <StatCard
-            icon={Clock}
-            tone="info"
-            label="Total Rounds"
-            value={rows.length}
-            footnote={
-              nextUp === null
-                ? 'Nothing still ahead'
-                : `Next ${relativeLabel(nextUp.start, now)} · ${nextUp.eventName}`
-            }
-          />
-          <StatCard
-            icon={Radio}
-            tone="success"
-            label="Live Now"
-            value={liveCount}
-            footnote={
-              soonCount > 0
-                ? `${soonCount} starting within 6 hours`
-                : liveCount > 0
-                  ? 'Running right now'
-                  : 'Nothing running'
-            }
-          />
-          <StatCard
-            icon={UserCheck}
-            tone="accent"
-            label="My Rounds"
-            value={mine.length}
-            footnote={
-              mine.length === 0
-                ? 'Register to see yours here'
-                : `${mineAhead.length} still ahead of you`
-            }
-          />
-        </div>
-      )}
+      {/* 1 — The pulse row: the four figures worth reading before anything else.
+             Same `StatGrid` as the dashboard's, so the two rows of figures are
+             one row of figures in two places. */}
+      <StatGrid loading={loading}>
+        <StatCard
+          icon={CalendarDays}
+          tone="brand"
+          label="Fest Days"
+          value={days.length}
+          footnote={
+            days.length === 0
+              ? 'Nothing published yet'
+              : `${days[0].label} – ${days[days.length - 1].label}`
+          }
+        />
+        <StatCard
+          icon={Clock}
+          tone="info"
+          label="Total Rounds"
+          value={rows.length}
+          footnote={
+            nextUp === null
+              ? 'Nothing still ahead'
+              : `Next ${relativeLabel(nextUp.start, now)} · ${nextUp.eventName}`
+          }
+        />
+        <StatCard
+          icon={Radio}
+          tone="success"
+          label="Live Now"
+          value={liveCount}
+          footnote={
+            soonCount > 0
+              ? `${soonCount} starting within 6 hours`
+              : liveCount > 0
+                ? 'Running right now'
+                : 'Nothing running'
+          }
+        />
+        <StatCard
+          icon={UserCheck}
+          tone="accent"
+          label="My Rounds"
+          value={mine.length}
+          footnote={
+            mine.length === 0
+              ? 'Register to see yours here'
+              : `${mineAhead.length} still ahead of you`
+          }
+        />
+      </StatGrid>
 
       {/* 2 — The command row: what is running, beside what the viewer has next. */}
       <NowPanel rows={rows} now={now} loading={loading} registeredCount={mine.length} />
@@ -258,16 +260,20 @@ export default function FestSchedulePage() {
       {/* 3 — The programme itself: the rail picks the day, the toolbar narrows
              it, the timeline draws it. One panel, so the controls read as acting
              on the thing directly below them. */}
-      <section
-        aria-label="Programme"
-        className="glass-panel flex flex-col gap-4 rounded-3xl p-4 sm:p-5"
-      >
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span aria-hidden className="h-5 w-1.5 shrink-0 rounded-full bg-brand" />
-            <h2 className="text-lg font-black uppercase tracking-[0.12em] text-ink">Programme</h2>
-          </div>
-          {todayHasRounds && (
+      {/* 3 — `DetailPanel`, not a bespoke surface.
+             This block used to hand-roll three things the shared panel already
+             owns: `glass-panel` (the admin control board's translucent surface,
+             which nothing else on a participant screen uses), `rounded-3xl` (a
+             28px corner where every other card in the app has 20px), and a header
+             whose accent bar and uppercase `h2` were a character-for-character
+             copy of `SectionHeading`. Sitting directly under the pulse row and the
+             Now panel, both of them opaque 20px cards, the difference read as this
+             panel belonging to a different screen. `trailing` is exactly the slot
+             "Jump to now" wanted. */}
+      <DetailPanel
+        title="Programme"
+        trailing={
+          todayHasRounds && (
             <button
               type="button"
               onClick={jumpToNow}
@@ -276,9 +282,9 @@ export default function FestSchedulePage() {
               <LocateFixed size={14} strokeWidth={2.25} aria-hidden />
               Jump to now
             </button>
-          )}
-        </header>
-
+          )
+        }
+      >
         {loading ? (
           <div className="flex flex-col gap-3" aria-busy="true">
             <Skeleton className="h-24 rounded-2xl" />
@@ -329,11 +335,11 @@ export default function FestSchedulePage() {
             )}
           </>
         )}
-      </section>
+      </DetailPanel>
 
-      <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted">
-        <MapPin size={12} /> Timings are tentative — each event&apos;s page carries the latest.
-      </p>
+      <ScreenNote icon={MapPin}>
+        Timings are tentative — each event&apos;s page carries the latest.
+      </ScreenNote>
     </FestivalScreen>
   );
 }

@@ -14,6 +14,7 @@ import { QR_REFRESH_SECONDS, useLiveQr } from '@/features/qr/useLiveQr';
 import { EntryQrCard } from '@/features/qr/EntryQrCard';
 import { DetailPanel, Fact, FactList, IconTile, ProgressBar, StatusBadge } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { PanelMasonry } from '@/components/layout/PanelMasonry';
 
 /**
  * My QR ID. One RSA-OAEP-encrypted QR works at every checkpoint — no
@@ -47,7 +48,9 @@ export default function MyQrPage() {
           takes a fixed column and *sticks*, so the guidance beside it scrolls
           past a pass that stays readable — the same treatment the
           complete-profile rail uses. Sticking is also what makes the height
-          difference between the two columns deliberate rather than a gap. */}
+          difference between the two columns deliberate rather than a gap.
+          Both columns are `minmax(0,…)` so a long value wraps inside its column
+          instead of widening it. */}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
         <DetailPanel
           className="lg:sticky lg:top-4"
@@ -81,7 +84,17 @@ export default function MyQrPage() {
           <EntryQrCard qr={qr} />
         </DetailPanel>
 
-        <div className="grid items-start gap-5 xl:grid-cols-2">
+        {/* Masonry, not a grid.
+
+            These three panels are 4, 3 and 3 rows deep, and as a two-column grid
+            that showed: the 4-row panel set the height of the row, the 3-row one
+            beside it ended short of it, and "At The Checkpoint" — spanning both
+            columns to get a full-width line for its numbered steps — began below
+            the taller of the two, leaving a block of empty canvas under the
+            shorter one. That hole is the uneven spacing on this screen. Columns
+            pack by height, so they end level, nothing is stretched to match a
+            neighbour, and the span is no longer needed to fill anything. */}
+        <PanelMasonry columns={2}>
           <DetailPanel
             title="Where It Works"
             meta="4 checkpoints"
@@ -111,7 +124,15 @@ export default function MyQrPage() {
             </FactList>
           </DetailPanel>
 
-          <DetailPanel title="How It Stays Safe">
+          {/* `meta` and `footer` on all three, as on the panel above: a count
+              beside the title and a hairline note under the rows are what make a
+              panel on this screen recognisable as the same object as a panel on
+              Profile or Stay. Two of the three were missing both. */}
+          <DetailPanel
+            title="How It Stays Safe"
+            meta="3 safeguards"
+            footer="None of this needs the network: the pass is built on your phone from a key it already holds."
+          >
             <FactList>
               <Fact
                 icon={ShieldCheck}
@@ -131,7 +152,11 @@ export default function MyQrPage() {
             </FactList>
           </DetailPanel>
 
-          <DetailPanel title="At The Checkpoint" className="xl:col-span-2">
+          <DetailPanel
+            title="At The Checkpoint"
+            meta="3 steps"
+            footer="A volunteer scans the code; you never type anything or hand your phone over."
+          >
             <ol className="flex flex-col">
               <Step icon={UserRound} n={1} text="Open this screen and turn your brightness up." />
               <Step icon={ScanLine} n={2} text="Hold the code steady under the scanner." />
@@ -142,7 +167,7 @@ export default function MyQrPage() {
               />
             </ol>
           </DetailPanel>
-        </div>
+        </PanelMasonry>
       </div>
     </FestivalScreen>
   );

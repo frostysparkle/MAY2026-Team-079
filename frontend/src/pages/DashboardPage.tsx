@@ -4,30 +4,50 @@ import {
   BedDouble,
   CalendarClock,
   CalendarDays,
-  ChevronRight,
+  LifeBuoy,
+  MessagesSquare,
+  Phone,
   QrCode,
   Ticket,
   User,
   Wrench,
 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Event, MyEventRegistration, Workshop } from '@/api/types';
-import { path, ROUTES } from '@/config/routes';
+import type { Event, Issue, MyEventRegistration, QueryRecord, Workshop } from '@/api/types';
+import { path, ROUTES, supportPath } from '@/config/routes';
 import { currentParticipant } from '@/stores/authStore';
 import {
   Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
   Card,
-  IconTile,
+  CardRow,
   ResultBanner,
-  SectionHeading,
+  SectionBlock,
   Skeleton,
   StatCard,
+  StatGrid,
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { PanelMasonry } from '@/components/layout/PanelMasonry';
 import { MessWidget } from '@/features/mess/MessWidget';
 import { HostelWidget } from '@/features/hostel/HostelWidget';
 import { useNow } from '@/features/schedule/useNow';
+import { EventChangeAlerts } from '@/features/events/EventChangeAlerts';
+import { AnnouncementFeed } from '@/features/announcements/AnnouncementFeed';
+import { useAnnouncementInbox } from '@/features/announcements/useAnnouncementInbox';
+import {
+  dismissAllEventChanges,
+  dismissEventChange,
+  syncEventChanges,
+  type EventChange,
+} from '@/features/events/eventChanges';
+import {
+  EMPTY_SUPPORT_COUNTS,
+  supportCounts,
+  type SupportCounts,
+} from '@/features/support/supportCounts';
 
 /**
  * Participant dashboard — the counterpart of `StaffHomePage`, built from the same
@@ -35,16 +55,17 @@ import { useNow } from '@/features/schedule/useNow';
  * flow into a CSS multi-column masonry on wide viewports and collapse to one
  * column below `md`.
  *
- * Section navigation is deliberately absent: `AppShell` renders the rail (and, on
- * a phone, the scrolling tab row) with the same links on every screen, and
- * `StudentHomePage` renders the section cards, so a panel of them here would be a
- * third copy that can only drift from the other two. What this page carries
- * instead is *state* — what the participant is registered for, what is next, and
- * where their mess and hostel stand.
+ * Section navigation is deliberately absent: the Landing Page at `ROUTES.home`
+ * lists the participant's sections around the wordmark, and `AppShell` repeats
+ * them on the rail (and, on a phone, the scrolling tab row) on every screen — so
+ * a panel of them here would be a third copy that can only drift from the other
+ * two. What this page carries instead is *state* — what the participant is
+ * registered for, what is next, and where their mess and hostel stand.
  *
  * It used to be the `/app` index, which meant signing in dropped a student onto a
- * figures screen. The hub at `ROUTES.home` is the index now and this lives at
- * `ROUTES.dashboard`, one nav entry away.
+ * figures screen instead of the landing they had been using all along. The
+ * Landing Page is the index now and this lives at `ROUTES.dashboard`, one
+ * section entry away.
  */
 
 /** One round of one event the participant is registered for. */
@@ -72,16 +93,45 @@ export default function DashboardPage() {
   const [registrations, setRegistrations] = useState<MyEventRegistration[] | null>(null);
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [changes, setChanges] = useState<EventChange[]>([]);
+  /**
+   * Announcements addressed to this participant. Self-fetching rather than fed
+   * from this page's loader, because the audience rules need the block and hall
+   * allocations that the dashboard does not otherwise read.
+   */
+  const inbox = useAnnouncementInbox();
+  /**
+   * How much of this participant's Help & Support is still open.
+   *
+   * Kept out of `load` and deliberately non-fatal on both halves: the panel below
+   * is a signpost, and a dashboard that failed to render because a support count
+   * could not be fetched would be a worse trade than a signpost reading zero.
+   */
+  const [support, setSupport] = useState<SupportCounts>(EMPTY_SUPPORT_COUNTS);
+
+  const participantId = participant?.id ?? '';
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
   function load() {
+    void Promise.all([
+      api.myQueries().catch(() => [] as QueryRecord[]),
+      api
+        .myIssues()
+        .then((r) => r.issues ?? [])
+        .catch(() => [] as Issue[]),
+    ]).then(([queries, issues]) => setSupport(supportCounts(queries, issues)));
+
     Promise.all([api.listEvents(), api.myEventRegistrations(), api.listWorkshops()])
       .then(([allEvents, myRegistrations, allWorkshops]) => {
         setEvents(allEvents);
         setRegistrations(myRegistrations);
         setWorkshops(allWorkshops);
         setLoadError(null);
+        // Story 1.2 — diffed against what this device last saw, on the data the
+        // page has just fetched, so no extra request is made for it. The id is
+        // read here rather than closed over so this stays a mount-only effect.
+        setChanges(syncEventChanges(currentParticipant()?.id ?? '', allEvents, myRegistrations));
       })
       .catch((e) =>
         setLoadError(e instanceof ApiClientError ? e.message : 'Could not load your fest.'),
@@ -131,11 +181,11 @@ export default function DashboardPage() {
       subtitle={firstName ? `Hi ${firstName} · ${participant?.email}` : participant?.email}
       actions={
         <>
-          <Button onClick={() => navigate(ROUTES.myQr)} className="gap-1.5">
-            <QrCode size={15} strokeWidth={2.5} /> My digital ID
+          <Button onClick={() => navigate(ROUTES.myQr)}>
+            <QrCode size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> My digital ID
           </Button>
-          <Button variant="secondary" onClick={() => navigate(ROUTES.events)} className="gap-1.5">
-            <Ticket size={14} /> Browse events
+          <Button variant="secondary" onClick={() => navigate(ROUTES.events)}>
+            <Ticket size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Browse events
           </Button>
         </>
       }
@@ -148,61 +198,80 @@ export default function DashboardPage() {
         </ResultBanner>
       )}
 
-      {/* ---- headline figures ---- */}
-      {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={Ticket}
-            tone="brand"
-            // Not "My Events": that is the heading of the panel listing them
-            // below, and the same words twice on one screen read as one thing
-            // said badly rather than as a figure and the list behind it.
-            label="Events Registered"
-            value={myEvents.length}
-            footnote={
-              myEvents.length === 0
-                ? `${openCount} open to join`
-                : `of ${events.length} on the programme`
-            }
-          />
-          <StatCard
-            icon={CalendarClock}
-            tone="info"
-            label="Rounds Ahead"
-            value={upcoming.length}
-            footnote={
-              upcoming.length === 0 ? 'Nothing scheduled yet' : `Next ${timeFmt(upcoming[0].start)}`
-            }
-          />
-          <StatCard
-            icon={Wrench}
-            tone="accent"
-            label="Workshops"
-            value={workshops?.length ?? '—'}
-            footnote={
-              seatsLeft === null
-                ? 'Programme unavailable'
-                : `${seatsLeft.toLocaleString()} seats left`
-            }
-          />
-          <StatCard
-            icon={QrCode}
-            tone="success"
-            label="Digital ID"
-            value={participant ? 'Ready' : '—'}
-            footnote={participant ? participant.id : 'Sign in again to generate it'}
-          />
-        </div>
-      )}
+      {/* Above the figures on purpose: a venue change is only worth anything
+          before the participant has set off. */}
+      <EventChangeAlerts
+        changes={changes}
+        onDismiss={(id) => setChanges(dismissEventChange(participantId, id))}
+        onDismissAll={() => setChanges(dismissAllEventChanges(participantId))}
+      />
 
-      {/* Masonry: columns balance themselves, cards never split across them. */}
-      <div className="gap-5 md:columns-2 xl:columns-3 [&>*]:mb-5 [&>*]:break-inside-avoid">
+      {/* Official notices, same reasoning and the same place. Capped at three
+          with a link to the rest, so a busy noticeboard cannot push the figures
+          off the screen — Stories 8.1/8.2. */}
+      <AnnouncementFeed
+        announcements={inbox.announcements}
+        names={inbox.names}
+        onDismiss={inbox.dismiss}
+        onDismissAll={inbox.dismissAll}
+        limit={3}
+        moreTo={ROUTES.announcements}
+      />
+
+      {/* ---- headline figures ----
+          `StatGrid` owns both the grid and its placeholder row, so the loading
+          state cannot use a different one from the loaded state — which is what
+          the two hand-written copies here risked. */}
+      <StatGrid loading={loading}>
+        <StatCard
+          icon={Ticket}
+          tone="brand"
+          // Not "My Events": that is the heading of the panel listing them
+          // below, and the same words twice on one screen read as one thing
+          // said badly rather than as a figure and the list behind it.
+          label="Events Registered"
+          value={myEvents.length}
+          // `events` is non-null by the time this row is on screen, but JSX
+          // children are built eagerly, so `StatGrid`'s loading branch still
+          // evaluates this. Read it optionally rather than asserting.
+          footnote={
+            myEvents.length === 0
+              ? `${openCount} open to join`
+              : `of ${events?.length ?? 0} on the programme`
+          }
+        />
+        <StatCard
+          icon={CalendarClock}
+          tone="info"
+          label="Rounds Ahead"
+          value={upcoming.length}
+          footnote={
+            upcoming.length === 0 ? 'Nothing scheduled yet' : `Next ${timeFmt(upcoming[0].start)}`
+          }
+        />
+        <StatCard
+          icon={Wrench}
+          tone="accent"
+          label="Workshops"
+          value={workshops?.length ?? '—'}
+          footnote={
+            seatsLeft === null
+              ? 'Programme unavailable'
+              : `${seatsLeft.toLocaleString()} seats left`
+          }
+        />
+        <StatCard
+          icon={QrCode}
+          tone="success"
+          label="Digital ID"
+          value={participant ? 'Ready' : '—'}
+          footnote={participant ? participant.id : 'Sign in again to generate it'}
+        />
+      </StatGrid>
+
+      {/* Masonry: columns balance themselves, cards never split across them.
+          Shared with Profile and the staff home through `PanelMasonry`. */}
+      <PanelMasonry>
         <Panel title="My Events" meta={loading ? undefined : `${myEvents.length}`}>
           {loading ? (
             <Skeleton className="h-20 w-full rounded-2xl" />
@@ -213,8 +282,8 @@ export default function DashboardPage() {
                 have published.
               </p>
               <Link to={ROUTES.events} className="w-fit">
-                <Button variant="secondary" className="gap-1.5">
-                  <Ticket size={14} /> Browse events
+                <Button variant="secondary">
+                  <Ticket size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Browse events
                 </Button>
               </Link>
             </Card>
@@ -227,19 +296,17 @@ export default function DashboardPage() {
                     key={event.event_id}
                     to={path(ROUTES.eventDetail, { eventId: event.event_id })}
                   >
-                    <Card interactive className="flex items-center gap-3">
-                      <IconTile icon={Ticket} tone="success" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-ink">{event.name}</p>
-                        <p className="truncate text-xs text-muted">
-                          {registration?.team_id
-                            ? `Team ${registration.team_id} · ${registration.team_role}`
-                            : 'Solo entry'}
-                        </p>
-                      </div>
-                      {!event.open && <StatusBadge tone="neutral">Closed</StatusBadge>}
-                      <ChevronRight size={18} className="shrink-0 text-muted" />
-                    </Card>
+                    <CardRow
+                      icon={Ticket}
+                      tone="success"
+                      title={event.name}
+                      subtitle={
+                        registration?.team_id
+                          ? `Team ${registration.team_id} · ${registration.team_role}`
+                          : 'Solo entry'
+                      }
+                      trailing={!event.open && <StatusBadge tone="neutral">Closed</StatusBadge>}
+                    />
                   </Link>
                 );
               })}
@@ -259,21 +326,18 @@ export default function DashboardPage() {
                 key={`${round.eventId}-${round.roundName}-${i}`}
                 to={path(ROUTES.eventDetail, { eventId: round.eventId })}
               >
-                <Card interactive className="flex items-center gap-3">
-                  <IconTile icon={CalendarClock} tone="muted" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-ink">{round.eventName}</p>
-                    <p className="truncate text-xs text-muted">
-                      {round.roundName} · {timeFmt(round.start)}
-                    </p>
-                  </div>
-                  <ChevronRight size={18} className="shrink-0 text-muted" />
-                </Card>
+                <CardRow
+                  icon={CalendarClock}
+                  tone="muted"
+                  title={round.eventName}
+                  subtitle={`${round.roundName} · ${timeFmt(round.start)}`}
+                />
               </Link>
             ))}
             <Link to={ROUTES.schedule} className="w-fit">
-              <Button variant="ghost" size="sm" className="gap-1.5">
-                <CalendarDays size={14} /> Full schedule
+              <Button variant="ghost" size="sm">
+                <CalendarDays size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> Full
+                schedule
               </Button>
             </Link>
           </Panel>
@@ -285,40 +349,98 @@ export default function DashboardPage() {
           <Link to={ROUTES.accommodation} className="w-fit">
             {/* The panel heading now names the section, so the button says what
                 the tap does rather than repeating it. */}
-            <Button variant="ghost" size="sm" className="gap-1.5">
-              <BedDouble size={14} /> Manage my stay
+            <Button variant="ghost" size="sm">
+              <BedDouble size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> Manage my stay
+            </Button>
+          </Link>
+        </Panel>
+
+        {/* Help & Support had no presence on this screen at all while it was three
+            separate routes, which is part of why students reported it as missing:
+            the dashboard is where they look to find out what is going on with
+            their own fest, and "am I waiting on anybody" was not answerable here.
+            Each row opens the tab that answers it. */}
+        <Panel
+          title="Help & Support"
+          meta={
+            support.openQuestions + support.openReports > 0
+              ? `${support.openQuestions + support.openReports} open`
+              : undefined
+          }
+        >
+          <Link to={supportPath('ask')}>
+            <CardRow
+              icon={MessagesSquare}
+              tone="brand"
+              title="Ask a question"
+              subtitle={
+                support.openQuestions > 0
+                  ? `${support.openQuestions} open${support.awaitingReply > 0 ? ` · ${support.awaitingReply} awaiting a reply` : ''}`
+                  : 'About an event, a workshop, your block, or your hall'
+              }
+            />
+          </Link>
+          <Link to={supportPath('report')}>
+            <CardRow
+              icon={Wrench}
+              tone="warning"
+              title="Report a problem"
+              subtitle={
+                support.openReports > 0
+                  ? `${support.openReports} open with the duty team`
+                  : 'Something broken in your room or mess hall'
+              }
+            />
+          </Link>
+          <Link to={supportPath('contacts')}>
+            <CardRow
+              icon={Phone}
+              tone="muted"
+              title="Who to call"
+              subtitle="Coordinators on duty across the fest"
+            />
+          </Link>
+          <Link to={ROUTES.support} className="w-fit">
+            <Button variant="ghost" size="sm">
+              <LifeBuoy size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> All my questions
+              and reports
             </Button>
           </Link>
         </Panel>
 
         <Panel title="My Pass">
           <Link to={ROUTES.myQr}>
-            <Card interactive className="flex items-center gap-3">
-              <IconTile icon={QrCode} />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-ink">My Digital ID</p>
-                <p className="text-xs text-muted">Show your QR at any checkpoint</p>
-              </div>
-              <ChevronRight size={18} className="shrink-0 text-muted" />
-            </Card>
+            <CardRow
+              icon={QrCode}
+              title="My Digital ID"
+              subtitle="Show your QR at any checkpoint"
+            />
           </Link>
           <Link to={ROUTES.profile}>
-            <Card interactive className="flex items-center gap-3">
-              <IconTile icon={User} tone="muted" />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-ink">My Profile</p>
-                <p className="text-xs text-muted">View and edit your details</p>
-              </div>
-              <ChevronRight size={18} className="shrink-0 text-muted" />
-            </Card>
+            <CardRow
+              icon={User}
+              tone="muted"
+              title="My Profile"
+              subtitle="View and edit your details"
+            />
           </Link>
         </Panel>
-      </div>
+      </PanelMasonry>
     </FestivalScreen>
   );
 }
 
-/** One titled block of rows — the same wrapper `StaffHomePage` uses. */
+/**
+ * One titled block of rows.
+ *
+ * A thin wrapper over the shared `SectionBlock` rather than its own `<section>`,
+ * which is what this and `StaffHomePage` each had: both sat their rows 3 units
+ * under the heading and 2 apart, where every other headed block in the app —
+ * every `DetailPanel`, every poster grid — uses 4 and 3. On a masonry that can put
+ * a dashboard panel beside a `DetailPanel`, a half-step difference in heading gap
+ * is visible as misalignment. The rows keep a tighter gap than the heading, which
+ * is what makes them read as one list rather than as separate cards.
+ */
 function Panel({
   title,
   meta,
@@ -329,9 +451,8 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3">
-      <SectionHeading title={title} meta={meta} />
-      <div className="flex flex-col gap-2">{children}</div>
-    </section>
+    <SectionBlock title={title} meta={meta}>
+      <div className="flex flex-col gap-3">{children}</div>
+    </SectionBlock>
   );
 }
