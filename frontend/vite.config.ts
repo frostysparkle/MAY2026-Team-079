@@ -49,5 +49,21 @@ export default defineConfig({
     environmentOptions: { jsdom: { url: 'http://localhost/' } },
     setupFiles: './src/test/setup.ts',
     css: true,
+    /**
+     * Raised from vitest's 5s default.
+     *
+     * Nothing here is slow on its own — every file passes in well under a second
+     * when run alone. But the suite is 41 jsdom environments sharing 10 cores, and
+     * the heavier `userEvent` tests (the profile form, the route table, the
+     * announcement board, the mess menu desk) were intermittently crossing 5s
+     * waiting for a worker rather than for anything they assert. That produced
+     * failures that moved between files from run to run and vanished on retry,
+     * which is worse than a slow suite: it trains everyone to re-run instead of
+     * reading the result.
+     *
+     * This is a ceiling, not a delay — a passing test still finishes as fast as it
+     * always did.
+     */
+    testTimeout: 20000,
   },
 });
