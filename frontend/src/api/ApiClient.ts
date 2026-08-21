@@ -20,6 +20,7 @@ import type {
   ScanQRRequest,
   MealSlot,
   Mess,
+  MessMenuRequest,
   MyMessResponse,
   MessScanResponse,
   MessStatisticsResponse,
@@ -51,13 +52,36 @@ import type {
   WorkshopUpdateRequest,
   WorkshopAssignVolunteerRequest,
   WorkshopLogsResponse,
+  WorkshopParticipationResponse,
+  WorkshopParticipantUpdateRequest,
+  WorkshopParticipantUpdateResponse,
   BackendTeamMember,
   BackendTeamCreateRequest,
   BackendTeamCreateResponse,
   BackendTeamUpdateRequest,
   ParticipantStatisticsResponse,
+  ParticipantListResponse,
+  ParticipantFilter,
+  ParticipantAdminUpdateRequest,
+  ParticipantUpdateResponse,
+  QueryRecord,
+  QueryFilter,
+  QueryCreateRequest,
+  QueryCreateResponse,
+  QueryUpdateRequest,
+  QueryUpdateResponse,
+  QueryReplyRequest,
+  QueryReplyResponse,
+  IssueCreateRequest,
+  IssueCreateResponse,
+  IssueFilter,
+  IssueListResponse,
+  IssueUpdateRequest,
+  IssueUpdateResponse,
+  StaffIssueListResponse,
   AuditLogEntry,
   AuditLogFilter,
+  AuditLogSummary,
   MessageResponse,
 } from './types';
 
@@ -78,6 +102,12 @@ export interface ApiClient {
   createMess(req: MessCreateRequest): Promise<MessageResponse>;
   assignMessTeam(messId: string, req: MessAssignTeamRequest): Promise<MessageResponse>;
   toggleMessScan(messId: string, userId: string, logging: boolean): Promise<MessageResponse>;
+  /**
+   * Replace a hall's menu wholesale. Open to that hall's `mess_team` as well as
+   * to Super Admins — the same check `POST /mess/{id}/scan` makes, and wider than
+   * every other mess write.
+   */
+  updateMessMenu(messId: string, req: MessMenuRequest): Promise<MessageResponse>;
   allocateMess(): Promise<MessageResponse>;
   myMess(): Promise<MyMessResponse>;
   scanMess(
@@ -153,6 +183,23 @@ export interface ApiClient {
     attendance: boolean,
   ): Promise<MessageResponse>;
   workshopLogs(workshopId: string): Promise<WorkshopLogsResponse>;
+  /**
+   * This workshop's roster, with each registrant's academic level. Readable by a
+   * Super Admin or by a member of that workshop's own team — unlike
+   * `workshopLogs`, which is Super Admin-only.
+   */
+  workshopParticipation(workshopId: string): Promise<WorkshopParticipationResponse>;
+  /**
+   * Correct one participant's attendance or booking type for this workshop. Needs
+   * scanning permission on that workshop, or Super Admin.
+   */
+  updateWorkshopParticipant(
+    workshopId: string,
+    participantId: string,
+    req: WorkshopParticipantUpdateRequest,
+  ): Promise<WorkshopParticipantUpdateResponse>;
+  /** Take somebody off a workshop's team. Super Admins only. */
+  removeWorkshopVolunteer(workshopId: string, userId: string): Promise<MessageResponse>;
   registerForWorkshop(workshopId: string): Promise<MessageResponse>;
   myWorkshopRegistrations(): Promise<MyWorkshopRegistration[]>;
   workshopAttendance(
@@ -174,6 +221,58 @@ export interface ApiClient {
    * dashboard at all.
    */
   participantStatistics(): Promise<ParticipantStatisticsResponse>;
+  /**
+   * The fest-wide roster — story 7.3's read half. A separate endpoint from the
+   * statistics above rather than a flag on it, so a dashboard showing totals can
+   * never be the thing that hands out names.
+   */
+  listParticipants(filter?: ParticipantFilter, limit?: number): Promise<ParticipantListResponse>;
+  /**
+   * Edit somebody else's record — story 7.3's write half. Profile fields only:
+   * identity, credentials, and allocation state are owned by the routes that
+   * enforce their rules.
+   */
+  updateParticipant(
+    participantId: string,
+    req: ParticipantAdminUpdateRequest,
+  ): Promise<ParticipantUpdateResponse>;
+
+  // ---- queries (epic 6) ----
+  /** Raise a query. Participants only. */
+  raiseQuery(req: QueryCreateRequest): Promise<QueryCreateResponse>;
+  /** The author's own queries, newest first, replies included. */
+  myQueries(): Promise<QueryRecord[]>;
+  /**
+   * The staff queue, already scoped by the backend to the blocks, halls, events,
+   * and workshops the caller is named on a team for. A Super Admin gets the fest.
+   */
+  listQueries(filter?: QueryFilter, limit?: number): Promise<QueryRecord[]>;
+  /** Set status and assignment. Staff on the owning team, or a Super Admin. */
+  updateQuery(queryId: string, req: QueryUpdateRequest): Promise<QueryUpdateResponse>;
+  /** Add to the thread. Either the author or the staff member handling it. */
+  replyToQuery(queryId: string, req: QueryReplyRequest): Promise<QueryReplyResponse>;
+
+  // ---- issues (story 5.4) ----
+  /**
+   * File a hostel or mess fault. Participants only, and only against the
+   * facility they are actually placed in — the backend refuses anything else
+   * with a 403, so a screen must offer only the caller's own block and hall.
+   */
+  reportIssue(req: IssueCreateRequest): Promise<IssueCreateResponse>;
+  /** Every report this participant has filed, newest first, with its history. */
+  myIssues(): Promise<IssueListResponse>;
+  /**
+   * The reports this staff member is answerable for — their own blocks' and
+   * halls', or the whole fest for a Super Admin. A staffer on no team gets an
+   * empty list rather than an error.
+   */
+  listIssues(filter?: IssueFilter, limit?: number): Promise<StaffIssueListResponse>;
+  /**
+   * Move a report along, and say something the reporter will read. Appends to
+   * the history rather than overwriting it; a note with no status change is
+   * valid.
+   */
+  updateIssue(issueId: string, req: IssueUpdateRequest): Promise<IssueUpdateResponse>;
 
   // ---- audit ----
   /**
@@ -182,6 +281,16 @@ export interface ApiClient {
    * before any client-side filter could run.
    */
   auditLogs(limit?: number, filter?: AuditLogFilter): Promise<AuditLogEntry[]>;
+
+  /**
+   * Exact counts over the same trail, with no row limit.
+   *
+   * `auditLogs` above takes a `limit`, so `rows.length` off it is a floor, not a
+   * total — which is what made the dashboard label a capped page "Recorded
+   * Actions". Use this for any figure presented as a count, and `auditLogs` for
+   * the rows themselves.
+   */
+  auditLogSummary(filter?: AuditLogFilter): Promise<AuditLogSummary>;
 }
 
 /** Error thrown by any ApiClient implementation on a non-success response. */

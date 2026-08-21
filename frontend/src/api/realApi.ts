@@ -15,6 +15,7 @@ import type {
   ScanQRRequest,
   MessCreateRequest,
   MessAssignTeamRequest,
+  MessMenuRequest,
   HostelCreateRequest,
   HostelAssignTeamRequest,
   EventRegistrationInput,
@@ -22,9 +23,16 @@ import type {
   EventUpdateRequest,
   EventTeamAssignRequest,
   ParticipantTeamUpdateRequest,
+  IssueCreateRequest,
+  IssueUpdateRequest,
+  ParticipantAdminUpdateRequest,
+  QueryCreateRequest,
+  QueryUpdateRequest,
+  QueryReplyRequest,
   WorkshopCreateRequest,
   WorkshopUpdateRequest,
   WorkshopAssignVolunteerRequest,
+  WorkshopParticipantUpdateRequest,
   BackendTeamCreateRequest,
   BackendTeamUpdateRequest,
 } from './types';
@@ -94,6 +102,8 @@ export const realApi: ApiClient = {
     request(`/mess/${messId}/team`, { method: 'POST', body: JSON.stringify(req) }),
   toggleMessScan: (messId, userId, logging) =>
     request(`/mess/${messId}/team/${userId}/toggle_scan${qs({ logging })}`, { method: 'PUT' }),
+  updateMessMenu: (messId, req: MessMenuRequest) =>
+    request(`/mess/${messId}/menu`, { method: 'PUT', body: JSON.stringify(req) }),
   allocateMess: () => request('/mess/allocate', { method: 'POST' }),
   myMess: () => request('/mess/my_mess'),
   scanMess: (messId, slot, day, body: ScanQRRequest) =>
@@ -164,11 +174,31 @@ export const realApi: ApiClient = {
   deleteWorkshop: (workshopId) => request(`/workshops/${workshopId}`, { method: 'DELETE' }),
   assignWorkshopVolunteer: (workshopId, req: WorkshopAssignVolunteerRequest) =>
     request(`/workshops/${workshopId}/volunteers`, { method: 'POST', body: JSON.stringify(req) }),
+  // The backend declares this handler as
+  // `toggle_volunteer_scan(workshop_id, volunteer_user_id, attendance)` against
+  // the path `/{workshop_id}/volunteers/{user_id}/toggle_scan` — so `user_id` in
+  // the path is never read, and `volunteer_user_id` is a *required query
+  // parameter*. Sending only `attendance` is a 422. The id therefore goes in
+  // both places: the path keeps the URL honest, the query is what the handler
+  // actually binds. Unlike the mess and hostel equivalents, whose team id is a
+  // real path parameter.
   toggleWorkshopScan: (workshopId, userId, attendance) =>
-    request(`/workshops/${workshopId}/volunteers/${userId}/toggle_scan${qs({ attendance })}`, {
-      method: 'PUT',
-    }),
+    request(
+      `/workshops/${workshopId}/volunteers/${userId}/toggle_scan${qs({
+        volunteer_user_id: userId,
+        attendance,
+      })}`,
+      { method: 'PUT' },
+    ),
   workshopLogs: (workshopId) => request(`/workshops/${workshopId}/logs`),
+  workshopParticipation: (workshopId) => request(`/workshops/${workshopId}/participation`),
+  updateWorkshopParticipant: (workshopId, participantId, req: WorkshopParticipantUpdateRequest) =>
+    request(`/workshops/${workshopId}/participants/${participantId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(req),
+    }),
+  removeWorkshopVolunteer: (workshopId, userId) =>
+    request(`/workshops/${workshopId}/volunteers/${userId}`, { method: 'DELETE' }),
   myWorkshopRegistrations: () => request('/workshops/my_registrations'),
   registerForWorkshop: (workshopId) =>
     request(`/workshops/${workshopId}/register`, { method: 'POST' }),
@@ -188,9 +218,58 @@ export const realApi: ApiClient = {
 
   // ---- participants ----
   participantStatistics: () => request('/participants/statistics'),
+  listParticipants: (filter = {}, limit = 200) =>
+    request(`/participants${qs({ limit, q: filter.q, house: filter.house })}`),
+  updateParticipant: (participantId, req: ParticipantAdminUpdateRequest) =>
+    request(`/participants/${participantId}`, { method: 'PATCH', body: JSON.stringify(req) }),
+
+  // ---- queries ----
+  raiseQuery: (req: QueryCreateRequest) =>
+    request('/queries', { method: 'POST', body: JSON.stringify(req) }),
+  myQueries: () => request('/queries/mine'),
+  listQueries: (filter = {}, limit = 100) =>
+    request(`/queries${qs({ limit, status: filter.status, category: filter.category })}`),
+  updateQuery: (queryId, req: QueryUpdateRequest) =>
+    request(`/queries/${queryId}`, { method: 'PATCH', body: JSON.stringify(req) }),
+  replyToQuery: (queryId, req: QueryReplyRequest) =>
+    request(`/queries/${queryId}/replies`, { method: 'POST', body: JSON.stringify(req) }),
+
+  // ---- issues ----
+  reportIssue: (req: IssueCreateRequest) =>
+    request('/issues', { method: 'POST', body: JSON.stringify(req) }),
+  myIssues: () => request('/issues/mine'),
+  // `qs` drops undefined keys, so an unfiltered call sends only `limit`.
+  listIssues: (filter = {}, limit = 100) =>
+    request(
+      `/issues${qs({
+        limit,
+        status: filter.status,
+        facility_type: filter.facility_type,
+        facility_id: filter.facility_id,
+      })}`,
+    ),
+  updateIssue: (issueId, req: IssueUpdateRequest) =>
+    request(`/issues/${issueId}`, { method: 'PATCH', body: JSON.stringify(req) }),
 
   // ---- audit ----
   // `qs` drops undefined keys, so an unfiltered call sends only `limit`.
   auditLogs: (limit = 100, filter = {}) =>
-    request(`/audit-logs${qs({ limit, target_id: filter.target_id, action: filter.action })}`),
+    request(
+      `/audit-logs${qs({
+        limit,
+        target_id: filter.target_id,
+        action: filter.action,
+        since: filter.since,
+        until: filter.until,
+      })}`,
+    ),
+  auditLogSummary: (filter = {}) =>
+    request(
+      `/audit-logs/summary${qs({
+        target_id: filter.target_id,
+        action: filter.action,
+        since: filter.since,
+        until: filter.until,
+      })}`,
+    ),
 };
