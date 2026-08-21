@@ -16,3 +16,8 @@ __pycache__/
 *.env
 .env
 !*.env.example
+
+# Database dumps taken before destructive maintenance. They are full participant
+# documents, so they carry password hashes and per-user RSA private keys and must
+# never be committed. Safe to delete once the change they cover is settled.
+.backups/
