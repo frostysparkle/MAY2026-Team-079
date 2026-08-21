@@ -97,7 +97,15 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
     if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
         raise HTTPException(status_code=403, detail="Not authorized")
         
-    logging = True if request.role == "other" else False
+    # Both roles a mess team can hold scan on assignment. This used to be
+    # `role == "other"` only, which meant a member created as a `volunteer` -- the
+    # role the word "volunteer" maps to -- landed with scanning off and needed an
+    # admin to switch them on before they could log a single meal.
+    #
+    # Still a whitelist rather than a default-true: `role` is a free string, so an
+    # unrecognised value gets no scanning instead of inheriting it by accident.
+    # Revoking afterwards is unchanged -- see `toggle_scan`.
+    logging = request.role in ("volunteer", "other")
     team_member = {
         "user_id": request.user_id,
         "role": request.role,
