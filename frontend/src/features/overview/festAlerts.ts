@@ -23,6 +23,14 @@ import type { ActivityPulse } from './auditSeries';
 import type { EventSummary, StaffOpsSummary, WorkshopSummary } from './festMetrics';
 import type { HostelRow, HostelSummary } from '@/features/hostels/hostelOccupancy';
 import type { MessRow, MessSummary } from '@/features/mess/messOccupancy';
+import {
+  placeList,
+  FAULT_CLUSTER_THRESHOLD,
+  STALE_FAULT_HOURS,
+  STALE_QUERY_HOURS,
+  SUPPORT_BACKLOG_THRESHOLD,
+  type SupportSummary,
+} from './supportMetrics';
 
 export type AlertSeverity = 'critical' | 'warning' | 'attention' | 'info';
 
@@ -70,6 +78,15 @@ export interface AlertInput {
   workshops: WorkshopSummary | null;
   staff: StaffOpsSummary | null;
   pulse: ActivityPulse | null;
+  /**
+   * Participant queries and reported faults — the support backlog.
+   *
+   * Optional so an existing caller that has not been taught about it still
+   * compiles; absent behaves exactly as an unreadable queue does, which is to
+   * say no support rule fires. See `supportMetrics.ts` for why the thresholds
+   * live there rather than here.
+   */
+  support?: SupportSummary | null;
   /** Domains whose data is incomplete because a request failed. */
   failedDomains: string[];
 }
@@ -82,6 +99,10 @@ export interface AlertRoutes {
   workshops: string;
   staff: string;
   auditLogs: string;
+  /** The query desk. */
+  queries: string;
+  /** The facility issues desk. */
+  issues: string;
 }
 
 export function buildAlerts(input: AlertInput, routes: AlertRoutes): FestAlert[] {
@@ -133,7 +154,58 @@ export function buildAlerts(input: AlertInput, routes: AlertRoutes): FestAlert[]
     });
   }
 
+  // A fault filed under a category that describes a risk to a person, still
+  // unresolved. This is critical on the same terms as the rules above it — not
+  // "will be bad later" but "somebody is in it right now" — and it is the one
+  // support figure that should never wait for a threshold to be crossed. One is
+  // enough.
+  const support = input.support ?? null;
+  const urgentFaults = support?.urgentFaults ?? [];
+  if (urgentFaults.length > 0) {
+    const count = urgentFaults.length;
+    alerts.push({
+      id: 'support-urgent-faults',
+      severity: 'critical',
+      title: `${count} safety ${count === 1 ? 'fault is' : 'faults are'} unresolved`,
+      detail: `Reported at ${placeList(urgentFaults)} and not yet closed. A safety report is not a maintenance queue item.`,
+      action: { label: 'Open Issues', to: routes.issues },
+    });
+  }
+
   /* ── warning ── */
+
+  // Unanswered, and old enough that the silence is the story rather than the
+  // queue. Measured from when it was raised, because the wait belongs to the
+  // asker: a query nobody has replied to for half a fest day has been dropped,
+  // whatever its status column says.
+  const stalledQueries = support?.stalledQueries ?? 0;
+  if (stalledQueries > 0) {
+    const count = stalledQueries;
+    alerts.push({
+      id: 'support-stalled-queries',
+      severity: 'warning',
+      title: `${count} ${count === 1 ? 'query has' : 'queries have'} had no reply in ${STALE_QUERY_HOURS} hours`,
+      detail:
+        'Nobody has written back at all — not a slow answer, no answer. A status of “assigned” can mean claimed and then forgotten.',
+      action: { label: 'Open Queries', to: routes.queries },
+    });
+  }
+
+  // Untouched rather than unfixed: `updated_at` moves on a note as well as a
+  // status change, so a team that says "part ordered" resets this. What remains
+  // is a report nobody has acknowledged in a day.
+  const stalledFaults = support?.stalledFaults ?? 0;
+  if (stalledFaults > 0) {
+    const count = stalledFaults;
+    alerts.push({
+      id: 'support-stalled-faults',
+      severity: 'warning',
+      title: `${count} reported ${count === 1 ? 'fault has' : 'faults have'} not been touched in ${STALE_FAULT_HOURS} hours`,
+      detail:
+        'No status change and no note since it was filed. The reporter is being shown a ticket that nothing has happened to.',
+      action: { label: 'Open Issues', to: routes.issues },
+    });
+  }
 
   if (input.hostels.pending !== null && input.hostels.pending >= BACKLOG_THRESHOLD) {
     alerts.push({
@@ -207,6 +279,37 @@ export function buildAlerts(input: AlertInput, routes: AlertRoutes): FestAlert[]
       title: `${unassigned} staff ${unassigned === 1 ? 'account has' : 'accounts have'} no duty`,
       detail: 'These accounts can sign in but are not on any event, hall, block, or workshop team.',
       action: { label: 'Open Staff', to: routes.staff },
+    });
+  }
+
+  // Volume, so the board still says something when nothing has gone stale yet.
+  // Deliberately `attention` and not `warning`: a busy support desk is what a
+  // running fest looks like, and the two rules above are what say it is going
+  // wrong. This one just names the load.
+  const waiting = support?.waiting ?? 0;
+  if (waiting >= SUPPORT_BACKLOG_THRESHOLD) {
+    const openQueries = support?.outstandingQueries ?? 0;
+    const openFaults = support?.openFaults ?? 0;
+    alerts.push({
+      id: 'support-backlog',
+      severity: 'attention',
+      title: `${waiting.toLocaleString()} people are waiting on the fest team`,
+      detail: `${openQueries.toLocaleString()} open ${openQueries === 1 ? 'query' : 'queries'} and ${openFaults.toLocaleString()} open ${openFaults === 1 ? 'fault' : 'faults'} across the fest.`,
+      action: { label: 'Open Queries', to: routes.queries },
+    });
+  }
+
+  // One place carrying several faults is a fact about the place, not about the
+  // faults — and the capacity alert rail cannot say it, because occupancy is
+  // fine in a block whose showers are all broken.
+  const clusters = support?.clusters ?? [];
+  if (clusters.length > 0) {
+    alerts.push({
+      id: 'support-fault-clusters',
+      severity: 'attention',
+      title: `${clusters.length} ${clusters.length === 1 ? 'place has' : 'places have'} ${FAULT_CLUSTER_THRESHOLD}+ open faults`,
+      detail: `${clusters.map((place) => `${place.facilityId} (${place.count})`).join(', ')} — worth looking at the place rather than the tickets.`,
+      action: { label: 'Open Issues', to: routes.issues },
     });
   }
 

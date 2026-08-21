@@ -36,7 +36,9 @@ export function LiveFlowPanel({
   className?: string;
 }) {
   const series = useMemo(() => campusStreams(audit, 24), [audit]);
-  const pulse = useMemo(() => activityPulse(audit.recent), [audit.recent]);
+  // The time-bounded feed — see `ActivityPanel`. A spike is a statement about
+  // hours, so it cannot be computed from a fixed number of rows.
+  const pulse = useMemo(() => activityPulse(audit.pulse), [audit.pulse]);
 
   const legend = useMemo(
     () =>

@@ -88,7 +88,19 @@ export function EventsPanel({
         <Figure
           label="Scans today"
           value={orDash(summary.scansToday)}
-          note={`${orDashPercent(summary.attendanceRate)} of registrations`}
+          /*
+           * Scoped to the events that actually opened today, and says so. The old
+           * note read "N% of registrations" off a ratio whose denominator was every
+           * event in the fest, so it understated turnout by however many events had
+           * not run — which on a five-day fest is most of them.
+           */
+          note={
+            summary.turnoutEvents === 0
+              ? 'no event doors open today'
+              : `${orDashPercent(summary.turnoutToday)} turnout across ${summary.turnoutEvents} event${
+                  summary.turnoutEvents === 1 ? '' : 's'
+                } open today`
+          }
         />
         <Figure label="Live now" value={summary.live} tone={summary.live > 0 ? 'good' : 'muted'} />
         <Figure
@@ -173,20 +185,32 @@ export function EventsPanel({
         <PanelBlock title="Entry capacity">
           <FigureRow>
             <Figure
-              label="Entries left"
-              value={orDash(summary.entriesLeft)}
+              label="Entries left today"
+              value={orDash(summary.gateEntriesLeft)}
               note={`across ${summary.withCapacity} event${summary.withCapacity === 1 ? '' : 's'} with a published limit`}
             />
             <Figure
-              label="At capacity"
-              value={summary.atCapacity.length}
-              tone={summary.atCapacity.length > 0 ? 'bad' : 'muted'}
+              label="Door at capacity"
+              value={summary.gateAtCapacity.length}
+              tone={summary.gateAtCapacity.length > 0 ? 'bad' : 'muted'}
               note="today's scans have met the limit"
             />
+            {/*
+              The other half of the pair, which the board could not previously
+              show. Bookings reaching the limit is the state an organiser acts on
+              *before* the doors open, and it is invisible in every door figure
+              beside it — an event can be fully booked with nobody scanned in.
+            */}
+            <Figure
+              label="Fully booked"
+              value={summary.demandAtCapacity.length}
+              tone={summary.demandAtCapacity.length > 0 ? 'warn' : 'muted'}
+              note="registrations have met the limit"
+            />
           </FigureRow>
-          {summary.nearCapacity.length > 0 && (
+          {summary.gateNearCapacity.length > 0 && (
             <ul className="flex list-none flex-col gap-1 p-0">
-              {summary.nearCapacity.slice(0, 4).map((row) => (
+              {summary.gateNearCapacity.slice(0, 4).map((row) => (
                 <li key={row.id}>
                   <Link
                     to={path(ROUTES.eventParticipation, { eventId: row.id })}
@@ -198,10 +222,10 @@ export function EventsPanel({
                     <span
                       className={cn(
                         'shrink-0 text-xs font-semibold tabular-nums',
-                        row.capacity?.atCapacity ? 'text-danger' : 'text-warning',
+                        row.gate?.atCapacity ? 'text-danger' : 'text-warning',
                       )}
                     >
-                      {row.capacity?.summary}
+                      {row.gate?.summary}
                     </span>
                   </Link>
                 </li>

@@ -9,6 +9,7 @@ import {
 import type { HostelRow, HostelSummary } from '@/features/hostels/hostelOccupancy';
 import type { MessRow, MessSummary } from '@/features/mess/messOccupancy';
 import type { EventSummary, StaffOpsSummary, WorkshopSummary } from './festMetrics';
+import { SUPPORT_BACKLOG_THRESHOLD, type SupportSummary } from './supportMetrics';
 
 const ROUTES: AlertRoutes = {
   hostels: '/staff/admin/hostels',
@@ -17,6 +18,8 @@ const ROUTES: AlertRoutes = {
   workshops: '/staff/admin/workshops',
   staff: '/staff/admin/backend-teams',
   auditLogs: '/staff/admin/audit-logs',
+  queries: '/staff/queries',
+  issues: '/staff/issues',
 };
 
 function hostelSummary(over: Partial<HostelSummary> = {}): HostelSummary {
@@ -58,15 +61,17 @@ function eventSummary(over: Partial<EventSummary> = {}): EventSummary {
     unscheduled: 0,
     registrations: 30,
     scansToday: 0,
-    attendanceRate: 0,
+    turnoutToday: null,
+    turnoutEvents: 0,
     withoutRegistrations: [],
     topByRegistrations: [],
     liveNow: [],
     startingSoon: [],
     withCapacity: 0,
-    entriesLeft: null,
-    atCapacity: [],
-    nearCapacity: [],
+    gateEntriesLeft: null,
+    gateAtCapacity: [],
+    gateNearCapacity: [],
+    demandAtCapacity: [],
     ...over,
   };
 }
@@ -99,6 +104,27 @@ function staffSummary(over: Partial<StaffOpsSummary> = {}): StaffOpsSummary {
     workloadBuckets: [],
     byDepartment: [],
     busiest: [],
+    ...over,
+  };
+}
+
+/**
+ * A quiet support desk by default.
+ *
+ * Zeroes rather than nulls, because "read it, nothing waiting" is the healthy
+ * state these rules are measured against; the unreadable case is asserted
+ * separately with nulls.
+ */
+function support(over: Partial<SupportSummary> = {}): SupportSummary {
+  return {
+    outstandingQueries: 0,
+    unansweredQueries: 0,
+    stalledQueries: 0,
+    openFaults: 0,
+    stalledFaults: 0,
+    urgentFaults: [],
+    clusters: [],
+    waiting: 0,
     ...over,
   };
 }
@@ -173,6 +199,133 @@ describe('critical rules', () => {
     expect(
       idsOf({ events: eventSummary({ live: 0 }), staff: staffSummary({ mutedAssignments: 2 }) }),
     ).not.toContain('scanners-muted-during-live-event');
+  });
+
+  it('fires on a single unresolved safety fault, with no threshold to cross', () => {
+    // One is enough: this is "somebody is in it now", not "this will get worse".
+    expect(
+      idsOf({
+        support: support({
+          urgentFaults: [{ facilityType: 'hostel', facilityId: 'Ganga Block', count: 1 }],
+        }),
+      }),
+    ).toContain('support-urgent-faults');
+  });
+
+  it('names the place a safety fault was reported at', () => {
+    const alert = buildAlerts(
+      input({
+        support: support({
+          urgentFaults: [{ facilityType: 'hostel', facilityId: 'Ganga Block', count: 1 }],
+        }),
+      }),
+      ROUTES,
+    ).find((a) => a.id === 'support-urgent-faults');
+    expect(alert?.detail).toContain('Ganga Block');
+    expect(alert?.action?.to).toBe(ROUTES.issues);
+  });
+});
+
+describe('support rules', () => {
+  it('reports nothing when both queues are quiet', () => {
+    expect(idsOf({ support: support() })).toEqual([]);
+  });
+
+  it('reports nothing when both queues could not be read', () => {
+    // A failed read is not a backlog: nulls must fire no rule at all, rather
+    // than being coerced to 0 and read as a healthy desk or to NaN and compared.
+    const unreadable = support({
+      outstandingQueries: null,
+      unansweredQueries: null,
+      stalledQueries: null,
+      openFaults: null,
+      stalledFaults: null,
+      waiting: null,
+    });
+    expect(idsOf({ support: unreadable })).toEqual([]);
+  });
+
+  it('reports nothing when the caller passes no support figures at all', () => {
+    // `support` is optional on AlertInput, so an older caller still compiles and
+    // simply raises no support rows.
+    expect(idsOf({ support: null })).toEqual([]);
+    expect(idsOf({})).toEqual([]);
+  });
+
+  it('warns about a query nobody has replied to, and links to the query desk', () => {
+    const alert = buildAlerts(input({ support: support({ stalledQueries: 3 }) }), ROUTES).find(
+      (a) => a.id === 'support-stalled-queries',
+    );
+    expect(alert?.severity).toBe('warning');
+    expect(alert?.title).toContain('3 queries');
+    expect(alert?.action?.to).toBe(ROUTES.queries);
+  });
+
+  it('warns about a fault nobody has touched, and links to the issues desk', () => {
+    const alert = buildAlerts(input({ support: support({ stalledFaults: 1 }) }), ROUTES).find(
+      (a) => a.id === 'support-stalled-faults',
+    );
+    expect(alert?.severity).toBe('warning');
+    expect(alert?.title).toContain('1 reported fault has');
+    expect(alert?.action?.to).toBe(ROUTES.issues);
+  });
+
+  it('names the backlog only once it is worth naming', () => {
+    // A busy support desk is what a running fest looks like, so this is
+    // `attention` and it waits for a real volume.
+    expect(
+      idsOf({
+        support: support({
+          outstandingQueries: SUPPORT_BACKLOG_THRESHOLD - 1,
+          openFaults: 0,
+          waiting: SUPPORT_BACKLOG_THRESHOLD - 1,
+        }),
+      }),
+    ).not.toContain('support-backlog');
+
+    const alert = buildAlerts(
+      input({
+        support: support({
+          outstandingQueries: SUPPORT_BACKLOG_THRESHOLD - 2,
+          openFaults: 2,
+          waiting: SUPPORT_BACKLOG_THRESHOLD,
+        }),
+      }),
+      ROUTES,
+    ).find((a) => a.id === 'support-backlog');
+    expect(alert?.severity).toBe('attention');
+    expect(alert?.detail).toContain('2 open faults');
+  });
+
+  it('flags a place carrying several faults, which occupancy alerting cannot see', () => {
+    // A block whose showers are all broken is at a perfectly normal occupancy.
+    const alert = buildAlerts(
+      input({
+        support: support({
+          clusters: [
+            { facilityType: 'hostel', facilityId: 'Kaveri', count: 5 },
+            { facilityType: 'mess', facilityId: 'Hall C', count: 3 },
+          ],
+        }),
+      }),
+      ROUTES,
+    ).find((a) => a.id === 'support-fault-clusters');
+    expect(alert?.severity).toBe('attention');
+    expect(alert?.detail).toContain('Kaveri (5)');
+    expect(alert?.detail).toContain('Hall C (3)');
+  });
+
+  it('keeps a support backlog out of the capacity alerting it is not', () => {
+    // 9.2's rail ranks on occupancy; a fault outbreak must not be escalated into
+    // a bed-shortage alert.
+    const ids = idsOf({
+      support: support({
+        stalledFaults: 4,
+        clusters: [{ facilityType: 'hostel', facilityId: 'Kaveri', count: 9 }],
+      }),
+    });
+    expect(ids).not.toContain('hostel-campus-full');
+    expect(ids).not.toContain('capacity-pressure');
   });
 });
 

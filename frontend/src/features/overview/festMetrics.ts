@@ -78,13 +78,28 @@ export interface EventRow {
   liveRound: string | null;
   teamSize: number;
   /**
-   * Entries left against the organiser's published capacity — story 3.2.
+   * Today's admissions against the organiser's published capacity — the door,
+   * story 3.2. Resets at local midnight, because `scansToday` does.
    *
    * `null` for the many events that publish no capacity, which is a different
    * state from "no entries left" and must not be summed as zero. See
    * `features/events/eventCapacity`.
+   *
+   * Named `gate` rather than `capacity` on purpose. This used to be the only
+   * capacity figure the board had, under a name that read like registration
+   * inventory, so a daily door count was being consumed as "how many places are
+   * left on this event" — two different questions with two different answers.
    */
-  capacity: EventCapacityReadout | null;
+  gate: EventCapacityReadout | null;
+  /**
+   * Cumulative registrations against the same published capacity — demand.
+   *
+   * The figure an admin acts on *before* the event: bookings can be at the limit
+   * while the door has admitted nobody, and only this side of the pair can say so.
+   * `readEventCrowd` has always drawn this distinction for the participant-facing
+   * screens; the board had only ever computed the door half.
+   */
+  demand: EventCapacityReadout | null;
 }
 
 /**
@@ -171,9 +186,13 @@ export function buildEventRows(
       startsAt: nextStart(event, now),
       liveRound: liveRoundName(event, now),
       teamSize: event.event_team?.length ?? 0,
-      capacity: readEventCapacity(
+      gate: readEventCapacity(
         readEventExtras(event.registration).capacity,
         stat && typeof stat.total_daily_scans === 'number' ? stat.total_daily_scans : null,
+      ),
+      demand: readEventCapacity(
+        readEventExtras(event.registration).capacity,
+        stat ? stat.count : null,
       ),
     };
   });
@@ -191,8 +210,24 @@ export interface EventSummary {
   registrations: number | null;
   /** Σ attendance scans today, or `null` unless every event was read. */
   scansToday: number | null;
-  /** Share of registrations that have been scanned today. */
-  attendanceRate: number | null;
+  /**
+   * Turnout at the events whose doors actually operated today: today's scans as a
+   * share of *those* events' registrations.
+   *
+   * This replaces `attendanceRate`, which divided today's scans by the
+   * registrations of **every** event in the fest. On a 54-event fest where three
+   * run today, the numerator could only ever come from those three while the
+   * denominator carried all 54, so the board reported single-digit "attendance"
+   * on a well-attended day and an event that ran yesterday dragged it down
+   * forever. Restricting the denominator to the same events the numerator can come
+   * from is what makes it a rate rather than an artefact.
+   *
+   * `null` when no event has a door open today, or when any contributing event's
+   * figures were unreadable — an unknown is not a zero.
+   */
+  turnoutToday: number | null;
+  /** How many events `turnoutToday` is measured across. */
+  turnoutEvents: number;
   /** Events with a readable count of zero. Unread events are excluded. */
   withoutRegistrations: EventRow[];
   /** Best-attended events, most registrations first. */
@@ -204,15 +239,28 @@ export interface EventSummary {
   /** How many events have published an entry capacity at all. */
   withCapacity: number;
   /**
-   * Σ entries left across events that publish a capacity, or `null` unless every
-   * one of them was readable. Events with no published capacity contribute
-   * nothing — they are not "full", they are unlimited as far as the fest knows.
+   * Σ entries left *at the door today* across events that publish a capacity, or
+   * `null` unless every one of them was readable. Events with no published
+   * capacity contribute nothing — they are not "full", they are unlimited as far
+   * as the fest knows.
+   *
+   * Every field below is prefixed `gate` because all of them reset at local
+   * midnight with `scansToday`. The unprefixed names they replace read like
+   * registration inventory and were consumed as such.
    */
-  entriesLeft: number | null;
-  /** Publishing a capacity and already at or past it. Fullest first. */
-  atCapacity: EventRow[];
-  /** Publishing a capacity and 75% or more of the way through it. Fullest first. */
-  nearCapacity: EventRow[];
+  gateEntriesLeft: number | null;
+  /** Today's admissions have met or passed the limit. Fullest first. */
+  gateAtCapacity: EventRow[];
+  /** Today's admissions are 75% or more of the way through it. Fullest first. */
+  gateNearCapacity: EventRow[];
+  /**
+   * Registrations have met or passed the published limit. Fullest first.
+   *
+   * Disjoint from `gateAtCapacity` in general: an event can be fully booked with
+   * nobody through the door yet, which is exactly the state worth acting on and
+   * the one the board could not previously see.
+   */
+  demandAtCapacity: EventRow[];
 }
 
 export function summariseEvents(
@@ -241,11 +289,35 @@ export function summariseEvents(
   const horizon = now.getTime() + withinHours * 3_600_000;
 
   // Only events that actually declare a limit take part in the capacity figures.
-  const capped = rows.filter((row) => row.capacity !== null);
-  const cappedRead = capped.filter((row) => row.capacity?.remaining !== null);
+  const capped = rows.filter((row) => row.gate !== null);
+  const cappedRead = capped.filter((row) => row.gate?.remaining !== null);
   // Fullest first, so the rows an admin has to act on lead both lists.
-  const byFullest = (a: EventRow, b: EventRow) =>
-    (b.capacity?.percent ?? 0) - (a.capacity?.percent ?? 0);
+  const byFullestGate = (a: EventRow, b: EventRow) =>
+    (b.gate?.percent ?? 0) - (a.gate?.percent ?? 0);
+  const byFullestDemand = (a: EventRow, b: EventRow) =>
+    (b.demand?.percent ?? 0) - (a.demand?.percent ?? 0);
+
+  /*
+   * The events whose doors operated today: running right now, or already scanned
+   * somebody in. An event that has not opened contributes to neither side of the
+   * turnout ratio, which is the whole correction — it has not "had 0% turnout",
+   * it has not happened.
+   */
+  const openedToday = rows.filter(
+    (row) => row.phase === 'live' || (row.scansToday !== null && row.scansToday > 0),
+  );
+  /*
+   * Requires every event to be readable, not just the ones known to have opened.
+   * An event whose participation call failed has an unknown scan count, so it
+   * might belong in `openedToday` — and if it does, leaving it out shifts both
+   * sides of the ratio. Following the same null-over-guess rule as `registrations`
+   * and `scansToday` above keeps a partial read from rendering as a real rate.
+   */
+  const fullyReadable =
+    rows.length > 0 && rows.every((row) => row.registrations !== null && row.scansToday !== null);
+  const turnoutRegistrations = openedToday.reduce((sum, row) => sum + (row.registrations ?? 0), 0);
+  const turnoutScans = openedToday.reduce((sum, row) => sum + (row.scansToday ?? 0), 0);
+  const turnoutComplete = fullyReadable && openedToday.length > 0;
 
   return {
     total: rows.length,
@@ -257,10 +329,11 @@ export function summariseEvents(
     unscheduled: rows.filter((row) => row.phase === 'unscheduled').length,
     registrations,
     scansToday,
-    attendanceRate:
-      registrations !== null && scansToday !== null && registrations > 0
-        ? (scansToday / registrations) * 100
+    turnoutToday:
+      turnoutComplete && turnoutRegistrations > 0
+        ? (turnoutScans / turnoutRegistrations) * 100
         : null,
+    turnoutEvents: openedToday.length,
     withoutRegistrations: readable.filter((row) => row.registrations === 0),
     topByRegistrations: [...readable].sort(
       (a, b) => (b.registrations ?? 0) - (a.registrations ?? 0),
@@ -273,14 +346,15 @@ export function summariseEvents(
       )
       .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0)),
     withCapacity: capped.length,
-    entriesLeft:
+    gateEntriesLeft:
       capped.length > 0 && cappedRead.length === capped.length
-        ? cappedRead.reduce((sum, row) => sum + (row.capacity?.remaining ?? 0), 0)
+        ? cappedRead.reduce((sum, row) => sum + (row.gate?.remaining ?? 0), 0)
         : null,
-    atCapacity: capped.filter((row) => row.capacity?.atCapacity).sort(byFullest),
-    nearCapacity: capped
-      .filter((row) => row.capacity?.status === 'filling' || row.capacity?.status === 'full')
-      .sort(byFullest),
+    gateAtCapacity: capped.filter((row) => row.gate?.atCapacity).sort(byFullestGate),
+    gateNearCapacity: capped
+      .filter((row) => row.gate?.status === 'filling' || row.gate?.status === 'full')
+      .sort(byFullestGate),
+    demandAtCapacity: rows.filter((row) => row.demand?.atCapacity).sort(byFullestDemand),
   };
 }
 

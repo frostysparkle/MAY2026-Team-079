@@ -29,8 +29,11 @@ export function ActivityPanel({
     [audit.recent, limit],
   );
 
-  const pulse = useMemo(() => activityPulse(audit.recent), [audit.recent]);
-  const lastFifteen = useMemo(() => rowsSince(audit.recent, 15).length, [audit.recent]);
+  // `pulse`, not `recent`: both of these are questions about a span of time, and
+  // `recent` is a count of rows. Reading them off the newest 60 made the spike
+  // badge here disagree with the alert rail on the same screen.
+  const pulse = useMemo(() => activityPulse(audit.pulse), [audit.pulse]);
+  const lastFifteen = useMemo(() => rowsSince(audit.pulse, 15).length, [audit.pulse]);
 
   return (
     <OverviewPanel

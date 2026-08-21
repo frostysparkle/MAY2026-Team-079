@@ -22,6 +22,7 @@ import {
   summariseStaffOps,
   summariseWorkshops,
 } from '@/features/overview/festMetrics';
+import { summariseSupport } from '@/features/overview/supportMetrics';
 import { useFestSnapshot } from '@/features/overview/useFestSnapshot';
 import { AttentionRail, type PressurePoint } from '@/features/overview/board/AttentionRail';
 import { CapacityBoard } from '@/features/overview/board/CapacityBoard';
@@ -43,6 +44,7 @@ import { HostelsPanel } from '@/features/overview/panels/HostelsPanel';
 import { MessPanel } from '@/features/overview/panels/MessPanel';
 import { ParticipantsPanel } from '@/features/overview/panels/ParticipantsPanel';
 import { StaffPanel } from '@/features/overview/panels/StaffPanel';
+import { SupportPanel } from '@/features/overview/panels/SupportPanel';
 import { WorkshopsPanel } from '@/features/overview/panels/WorkshopsPanel';
 
 /**
@@ -77,6 +79,8 @@ export default function AdminOverviewPage() {
     workshops,
     staff,
     audit,
+    queries,
+    issues,
     mess,
     messStats,
     hostels,
@@ -122,10 +126,25 @@ export default function AdminOverviewPage() {
             hostels: hostels ?? [],
             workshops: workshops ?? [],
           },
-          uniqueActors(rowsOnDay(audit.recent)),
+          /*
+           * Who acted today, counted across the whole day rather than inferred
+           * from a page.
+           *
+           * This used to be `uniqueActors(rowsOnDay(audit.recent))` — the actors
+           * appearing in the newest 60 unfiltered rows, filtered to today. On a
+           * quiet fest that happens to be right; on a busy one 60 rows can span
+           * minutes, so the figure was a floor that drifted further from the truth
+           * the more the fest did. `audit.today.actor_ids` is the distinct set for
+           * the viewer's calendar day, counted server-side with no limit in front
+           * of it.
+           *
+           * The old derivation stays as the fallback, so losing the summary call
+           * degrades the number rather than blanking the card.
+           */
+          audit.today ? new Set(audit.today.actor_ids) : uniqueActors(rowsOnDay(audit.recent)),
         ),
       ),
-    [staff, events, mess, hostels, workshops, audit.recent],
+    [staff, events, mess, hostels, workshops, audit.today, audit.recent],
   );
 
   const onCampus = useMemo(
@@ -137,9 +156,27 @@ export default function AdminOverviewPage() {
     [participants, hostelRows],
   );
 
-  const mealsToday = useMemo(() => mealMatrix(rowsOnDay(audit.messScans)).total, [audit.messScans]);
+  /*
+   * Meals served today — people fed, not cards read.
+   *
+   * `meals_served` de-duplicates to one entry per `(diner, day, slot)` across the
+   * whole day, server-side. The client-side matrix does the same arithmetic and
+   * remains the fallback, but it can only ever see the newest `messScans` rows,
+   * which is why the exact figure is preferred when it is there.
+   */
+  const mealsToday = useMemo(
+    () => audit.today?.meals?.meals_served ?? mealMatrix(rowsOnDay(audit.messScans)).total,
+    [audit.today, audit.messScans],
+  );
+  /** Re-scans behind today's figure — read twice, fed once. */
+  const duplicateScansToday = audit.today?.meals?.duplicate_scans ?? null;
+  /** Distinct people fed today, which is smaller than meals whenever anyone ate twice. */
+  const dinersToday = audit.today?.meals?.unique_diners ?? null;
+
   const messScansRecently = useMemo(() => rowsSince(audit.messScans, 20).length, [audit.messScans]);
-  const pulse = useMemo(() => activityPulse(audit.recent), [audit.recent]);
+  // The time-bounded feed, not `recent`: comparing this hour with the previous six
+  // is only possible over a window defined in hours.
+  const pulse = useMemo(() => activityPulse(audit.pulse), [audit.pulse]);
 
   /* ── the pulse row's movement figures ──
      Each delta compares the last hour against the one before it, off the same
@@ -191,6 +228,15 @@ export default function AdminOverviewPage() {
     [participants, hostelSummary.allocated, messSummary.allocated, onCampus],
   );
 
+  /**
+   * The support backlog, for the alert rail.
+   *
+   * `SupportPanel` counts these for itself, but a panel is something an admin has
+   * to scroll to. The alert engine is what surfaces without being looked for, and
+   * it had no view of either queue until this was passed in.
+   */
+  const support = useMemo(() => summariseSupport(queries, issues), [queries, issues]);
+
   const alerts = useMemo(
     () =>
       buildAlerts(
@@ -211,6 +257,7 @@ export default function AdminOverviewPage() {
           workshops: workshopSummary,
           staff: staffSummary,
           pulse,
+          support,
           failedDomains,
         },
         {
@@ -220,6 +267,8 @@ export default function AdminOverviewPage() {
           workshops: ROUTES.adminWorkshops,
           staff: ROUTES.adminBackendTeams,
           auditLogs: ROUTES.adminAuditLogs,
+          queries: ROUTES.queryConsole,
+          issues: ROUTES.facilityIssues,
         },
       ),
     [
@@ -234,6 +283,7 @@ export default function AdminOverviewPage() {
       workshopSummary,
       staffSummary,
       pulse,
+      support,
       failedDomains,
     ],
   );
@@ -271,16 +321,31 @@ export default function AdminOverviewPage() {
           accent={DOMAIN_COLOR.people}
           label="On campus now"
           value={onCampus === null ? '—' : onCampus.toLocaleString()}
-          {...(participants && onCampus !== null
+          {...(participants && onCampus !== null && participants.hostel_allotted > 0
             ? {
+                /*
+                 * Measured against residents, not against everyone registered.
+                 *
+                 * `currently_on_campus` counts `accommodation.logged_in`, which
+                 * only a participant holding a hostel bed can ever set — it is
+                 * written by the hostel entry scanner. Dividing it by
+                 * `total_registered` therefore compared two different
+                 * populations: every day visitor sat in the denominator with no
+                 * way to appear in the numerator, so the bar read far emptier
+                 * than campus actually was and could never reach 100%.
+                 *
+                 * `hostel_allotted` is the population the numerator is drawn
+                 * from, which makes the ratio "residents currently inside, of
+                 * residents" — a figure that can legitimately reach full.
+                 */
                 progress: {
                   value: onCampus,
-                  max: participants.total_registered,
-                  label: 'Participants on campus, of everyone registered',
-                  caption: `of ${participants.total_registered.toLocaleString()} registered`,
+                  max: participants.hostel_allotted,
+                  label: 'Residents scanned in, of everyone with a hostel bed',
+                  caption: `of ${participants.hostel_allotted.toLocaleString()} with a bed`,
                 },
               }
-            : { footnote: 'checked into a hostel' })}
+            : { footnote: 'residents scanned into a hostel' })}
         />
         <KpiCard
           icon={Radio}
@@ -300,8 +365,25 @@ export default function AdminOverviewPage() {
           label="Meals today"
           value={mealsToday.toLocaleString()}
           delta={{ percent: mealDelta, label: 'vs the previous hour' }}
+          /*
+           * With the exact summary loaded this is a complete count, so the old
+           * "trail truncated" caveat no longer applies to it — the truncation
+           * warning belongs to the feed the *chart* is drawn from, not to this
+           * number. What is worth surfacing instead is how many diners those meals
+           * fed, and how many re-scans were discarded to get there, because that
+           * is the difference between this figure and the raw scan count somebody
+           * might tally from the trail.
+           */
           footnote={
-            audit.truncated.includes('meal scans') ? 'trail truncated — a floor' : undefined
+            audit.today?.meals
+              ? dinersToday !== null && duplicateScansToday
+                ? `${dinersToday.toLocaleString()} diners · ${duplicateScansToday.toLocaleString()} re-scans ignored`
+                : dinersToday !== null
+                  ? `${dinersToday.toLocaleString()} diners`
+                  : undefined
+              : audit.truncated.includes('meal scans')
+                ? 'trail truncated — a floor'
+                : undefined
           }
         />
         <KpiCard
@@ -315,6 +397,9 @@ export default function AdminOverviewPage() {
             label: 'Staff who acted today, of all accounts',
             caption: `of ${staffSummary.accounts.toLocaleString()} accounts`,
           }}
+          // Says which of the two derivations produced the number, because they
+          // differ: one is the day, the other is whatever fitted in 60 rows.
+          footnote={audit.today ? undefined : 'from recent activity — a floor'}
         />
       </div>
 
@@ -380,6 +465,10 @@ export default function AdminOverviewPage() {
           tier={tiers.fast}
         />
         <ParticipantsPanel participants={participants} workshops={workshops} tier={tiers.fast} />
+        {/* Story 9.1's two missing panels — open queries and reported faults —
+            folded into one, because the question an admin is asking is "is
+            anybody waiting on us". */}
+        <SupportPanel queries={queries} issues={issues} tier={tiers.fast} />
         <FinancePanel
           messStats={messStats}
           hostelStats={hostelStats}

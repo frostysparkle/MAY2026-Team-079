@@ -37,7 +37,13 @@ export function StaffPanel({
   audit: AuditFeeds;
   tier: TierState;
 }) {
-  const activeIds = useMemo(() => uniqueActors(rowsOnDay(audit.recent)), [audit.recent]);
+  // The exact set for the viewer's day when it has loaded, falling back to the
+  // old estimate from the newest rows. Must match the "Staff active today" KPI's
+  // derivation — the card and this panel are the same claim in two places.
+  const activeIds = useMemo(
+    () => (audit.today ? new Set(audit.today.actor_ids) : uniqueActors(rowsOnDay(audit.recent))),
+    [audit.today, audit.recent],
+  );
 
   const rows = useMemo(
     () =>

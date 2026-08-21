@@ -157,23 +157,50 @@ describe('buildEventRows', () => {
     expect(rows[0].scansToday).toBeNull();
   });
 
-  it('derives entries left from the published capacity and the scans today', () => {
+  it('derives entries left at the door from the published capacity and the scans today', () => {
     const rows = buildEventRows([capped('E1', 200)], { E1: participation(150, 142) }, NOW);
-    expect(rows[0].capacity?.capacity).toBe(200);
-    expect(rows[0].capacity?.remaining).toBe(58);
-    expect(rows[0].capacity?.atCapacity).toBe(false);
+    expect(rows[0].gate?.capacity).toBe(200);
+    expect(rows[0].gate?.remaining).toBe(58);
+    expect(rows[0].gate?.atCapacity).toBe(false);
   });
 
-  it('leaves capacity null for an event that publishes no limit', () => {
+  /**
+   * The two readouts answer different questions off the same published limit, and
+   * the board previously only had the door one under a name that read like the
+   * other. 150 registrations against a limit of 200 is 50 places left to book; 142
+   * scanned in is 58 admissions left today. Neither figure substitutes for the
+   * other.
+   */
+  it('reads demand from registrations, separately from the door', () => {
+    const rows = buildEventRows([capped('E1', 200)], { E1: participation(150, 142) }, NOW);
+    expect(rows[0].demand?.admitted).toBe(150);
+    expect(rows[0].demand?.remaining).toBe(50);
+    expect(rows[0].gate?.admitted).toBe(142);
+    expect(rows[0].gate?.remaining).toBe(58);
+  });
+
+  it('can report a fully booked event whose door has admitted nobody', () => {
+    // The state the board could not previously see: bookings closed, gate empty.
+    const rows = buildEventRows([capped('E1', 200)], { E1: participation(200, 0) }, NOW);
+    expect(rows[0].demand?.atCapacity).toBe(true);
+    expect(rows[0].gate?.atCapacity).toBe(false);
+    expect(summariseEvents(rows).demandAtCapacity.map((row) => row.id)).toEqual(['E1']);
+    expect(summariseEvents(rows).gateAtCapacity).toEqual([]);
+  });
+
+  it('leaves both readouts null for an event that publishes no limit', () => {
     // Most events do not. "No limit declared" is not "no entries left".
     const rows = buildEventRows([event('E1')], { E1: participation(150, 142) }, NOW);
-    expect(rows[0].capacity).toBeNull();
+    expect(rows[0].gate).toBeNull();
+    expect(rows[0].demand).toBeNull();
   });
 
   it('keeps entries left null when the scan count could not be read', () => {
     const rows = buildEventRows([capped('E1', 200)], { E1: participation(150) }, NOW);
-    expect(rows[0].capacity?.capacity).toBe(200);
-    expect(rows[0].capacity?.remaining).toBeNull();
+    expect(rows[0].gate?.capacity).toBe(200);
+    expect(rows[0].gate?.remaining).toBeNull();
+    // Registrations were readable, so demand still resolves.
+    expect(rows[0].demand?.remaining).toBe(50);
   });
 });
 
@@ -195,7 +222,7 @@ describe('summariseEvents', () => {
     );
     expect(partial.registrations).toBeNull();
     expect(partial.scansToday).toBeNull();
-    expect(partial.attendanceRate).toBeNull();
+    expect(partial.turnoutToday).toBeNull();
   });
 
   it('lists only readable events as having no registrations', () => {
@@ -218,7 +245,7 @@ describe('summariseEvents', () => {
     expect(summary.total).toBe(0);
     expect(summary.registrations).toBeNull();
     expect(summary.withCapacity).toBe(0);
-    expect(summary.entriesLeft).toBeNull();
+    expect(summary.gateEntriesLeft).toBeNull();
   });
 
   it('sums entries left across capped events, ignoring uncapped ones', () => {
@@ -232,7 +259,7 @@ describe('summariseEvents', () => {
     // 50 left of E1, 90 of E2. E3 declares no limit, so it contributes nothing
     // rather than being treated as unlimited-and-therefore-zero.
     expect(summary.withCapacity).toBe(2);
-    expect(summary.entriesLeft).toBe(140);
+    expect(summary.gateEntriesLeft).toBe(140);
   });
 
   it('leaves the entries-left total null when one capped event is unreadable', () => {
@@ -243,7 +270,7 @@ describe('summariseEvents', () => {
         NOW,
       ),
     );
-    expect(summary.entriesLeft).toBeNull();
+    expect(summary.gateEntriesLeft).toBeNull();
   });
 
   it('ranks the events at and near their limit, fullest first', () => {
@@ -258,8 +285,8 @@ describe('summariseEvents', () => {
         NOW,
       ),
     );
-    expect(summary.atCapacity.map((row) => row.id)).toEqual(['Full']);
-    expect(summary.nearCapacity.map((row) => row.id)).toEqual(['Full', 'Filling']);
+    expect(summary.gateAtCapacity.map((row) => row.id)).toEqual(['Full']);
+    expect(summary.gateNearCapacity.map((row) => row.id)).toEqual(['Full', 'Filling']);
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import type { AuditLogEntry } from '@/api/types';
 import {
   activityPulse,
+  QUIET_BASELINE_SPIKE_FLOOR,
   bucketByDay,
   bucketByHour,
   localDayKey,
@@ -165,13 +166,83 @@ describe('mealMatrix', () => {
     expect(matrix.cells.find((c) => c.row === 'Day 2' && c.column === 'lunch')?.value).toBe(0);
   });
 
-  it('skips rows missing a day or a recognised slot rather than inventing a sitting', () => {
+  /**
+   * A swipe that cannot be filed still fed somebody.
+   *
+   * This used to drop such rows entirely, which made the headline total smaller
+   * than the trail it was derived from with nothing on screen to explain the
+   * difference. They now count toward `total` and are reported as `unclassified`,
+   * while still being kept out of the grid, which has no cell for them.
+   */
+  it('counts rows with an unusable day or slot instead of discarding them', () => {
     const matrix = mealMatrix([
       entry({ timestamp: '2026-08-18T02:00:00Z', details: { slot: 'breakfast' } }),
       entry({ timestamp: '2026-08-18T02:00:00Z', details: { day: 1, slot: 'brunch' } }),
     ]);
-    expect(matrix.total).toBe(0);
+    expect(matrix.total).toBe(2);
+    expect(matrix.unclassified).toBe(2);
+    // No grid: neither row names a (day, slot) cell that exists.
     expect(matrix.days).toEqual([]);
+    expect(matrix.bySlot).toEqual({ breakfast: 0, lunch: 0, dinner: 0 });
+  });
+
+  /**
+   * `MESS_SCAN` writes one row per card read, so a card read twice at a busy
+   * counter served two meals as far as the board was concerned. One person, one
+   * sitting, one meal — however many times the scanner fired.
+   */
+  it('counts a diner once per sitting however many times their card was read', () => {
+    const matrix = mealMatrix([
+      entry({
+        timestamp: '2026-08-18T02:00:00Z',
+        details: { participant_id: 'P1', day: 1, slot: 'breakfast' },
+      }),
+      entry({
+        timestamp: '2026-08-18T02:00:30Z',
+        details: { participant_id: 'P1', day: 1, slot: 'breakfast' },
+      }),
+      entry({
+        timestamp: '2026-08-18T02:01:00Z',
+        details: { participant_id: 'P1', day: 1, slot: 'breakfast' },
+      }),
+    ]);
+    expect(matrix.total).toBe(1);
+    expect(matrix.duplicateScans).toBe(2);
+    expect(matrix.uniqueDiners).toBe(1);
+    expect(matrix.bySlot.breakfast).toBe(1);
+  });
+
+  it('counts the same diner separately in each sitting they attend', () => {
+    const matrix = mealMatrix([
+      entry({
+        timestamp: '2026-08-18T02:00:00Z',
+        details: { participant_id: 'P1', day: 1, slot: 'breakfast' },
+      }),
+      entry({
+        timestamp: '2026-08-18T07:00:00Z',
+        details: { participant_id: 'P1', day: 1, slot: 'lunch' },
+      }),
+      entry({
+        timestamp: '2026-08-19T02:00:00Z',
+        details: { participant_id: 'P1', day: 2, slot: 'breakfast' },
+      }),
+    ]);
+    // Three meals eaten by one person — meals and diners are different questions.
+    expect(matrix.total).toBe(3);
+    expect(matrix.uniqueDiners).toBe(1);
+    expect(matrix.duplicateScans).toBe(0);
+  });
+
+  it('keeps anonymous rows distinct rather than collapsing them into one meal', () => {
+    // With no `participant_id` there is nothing to de-duplicate on. Treating them
+    // as one diner would silently erase every swipe but the first.
+    const matrix = mealMatrix([
+      entry({ timestamp: '2026-08-18T02:00:00Z', details: { day: 1, slot: 'breakfast' } }),
+      entry({ timestamp: '2026-08-18T02:00:00Z', details: { day: 1, slot: 'breakfast' } }),
+    ]);
+    expect(matrix.total).toBe(2);
+    expect(matrix.duplicateScans).toBe(0);
+    expect(matrix.uniqueDiners).toBe(0);
   });
 });
 
@@ -244,12 +315,35 @@ describe('activityPulse', () => {
     expect(pulse.spiking).toBe(false);
   });
 
-  it('never spikes against a zero baseline', () => {
-    // At the very start of the fest everything is infinitely above nothing, and
-    // firing on that trains an admin to ignore the strip.
+  /**
+   * A zero baseline used to force `spiking` false, which suppressed the alert in
+   * exactly the case it exists for: a burst after a quiet spell *is* an empty
+   * baseline. It was worse than that when the feed was the newest 60 rows — a busy
+   * hour put all 60 in the current bucket, guaranteeing six empty baseline hours,
+   * so the strip went quiet precisely because the fest got loud.
+   */
+  it('flags a burst after a quiet spell, where there is no baseline to beat', () => {
     const pulse = activityPulse(rowsAtHoursAgo([0, 0, 0, 0, 0, 0, 40]), now);
     expect(pulse.baseline).toBe(0);
+    expect(pulse.spiking).toBe(true);
+  });
+
+  it('still says nothing about a single stray row on a dead fest', () => {
+    // The reason the zero-baseline case was suppressed in the first place: firing
+    // on the fest's first row would train an admin to ignore the strip.
+    const pulse = activityPulse(rowsAtHoursAgo([0, 0, 0, 0, 0, 0, 1]), now);
+    expect(pulse.baseline).toBe(0);
     expect(pulse.spiking).toBe(false);
+  });
+
+  it('needs the quiet-baseline floor before calling a zero baseline a spike', () => {
+    const below = activityPulse(
+      rowsAtHoursAgo([0, 0, 0, 0, 0, 0, QUIET_BASELINE_SPIKE_FLOOR - 1]),
+      now,
+    );
+    const at = activityPulse(rowsAtHoursAgo([0, 0, 0, 0, 0, 0, QUIET_BASELINE_SPIKE_FLOOR]), now);
+    expect(below.spiking).toBe(false);
+    expect(at.spiking).toBe(true);
   });
 });
 

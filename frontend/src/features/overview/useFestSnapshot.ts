@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/api';
+import { hoursAgoIso, localDayBounds } from './auditSeries';
 import type {
   AuditLogEntry,
+  AuditLogSummary,
   BackendTeamMember,
   Event,
   EventParticipationResponse,
@@ -10,6 +12,8 @@ import type {
   Mess,
   MessStatisticsResponse,
   ParticipantStatisticsResponse,
+  QueryRecord,
+  StaffIssue,
   Workshop,
 } from '@/api/types';
 
@@ -67,7 +71,27 @@ export const AUDIT_LIMITS = {
   accommodation: 1000,
   eventRegistrations: 1000,
   recent: 60,
+  /**
+   * The hourly-trend window. Generous because it is bounded by *time* rather
+   * than by count — `PULSE_HOURS` of rows, whatever that turns out to be — so the
+   * limit is a safety valve rather than the thing deciding the answer.
+   */
+  pulse: 4000,
 } as const;
+
+/**
+ * How many hours of trail the hourly trend and spike detector read.
+ *
+ * One more than the seven `activityPulse` buckets, so the oldest bucket is
+ * complete rather than clipped part-way through its hour.
+ *
+ * This exists because the pulse used to run on `recent` — the newest 60 rows
+ * regardless of age. During a busy hour all 60 landed in that hour, leaving the
+ * six baseline hours reading zero, which made a genuine surge undetectable. A
+ * time-bounded window is the only shape of request that can answer "how does this
+ * hour compare with the last six".
+ */
+export const PULSE_HOURS = 8;
 
 export interface TierState {
   loading: boolean;
@@ -84,8 +108,26 @@ export interface AuditFeeds {
   accommodation: AuditLogEntry[];
   /** `EVENT_REGISTER` and `EVENT_DEREGISTER` interleaved. */
   eventRegistrations: AuditLogEntry[];
-  /** Unfiltered and recent — the activity ticker and the spike baseline. */
+  /** Unfiltered and recent, newest first — the activity ticker. */
   recent: AuditLogEntry[];
+  /**
+   * Unfiltered, bounded by time rather than count — the last `PULSE_HOURS`
+   * hours. What the hourly trend and the spike detector read, because a
+   * count-bounded feed cannot describe how one hour compares with the previous
+   * six.
+   */
+  pulse: AuditLogEntry[];
+  /**
+   * Exact counts for the viewer's current calendar day, straight from
+   * `GET /audit-logs/summary`. `null` while loading or if the call failed.
+   *
+   * This is what any figure labelled "today" should read. Deriving a daily number
+   * by filtering a capped feed makes it a floor the moment the fest produces more
+   * rows in a day than the cap allows.
+   */
+  today: AuditLogSummary | null;
+  /** Exact counts for the whole trail, unbounded by any window. */
+  trail: AuditLogSummary | null;
   /** Feeds that came back exactly at their limit, and so may be truncated. */
   truncated: string[];
 }
@@ -97,6 +139,9 @@ const EMPTY_FEEDS: AuditFeeds = {
   accommodation: [],
   eventRegistrations: [],
   recent: [],
+  pulse: [],
+  today: null,
+  trail: null,
   truncated: [],
 };
 
@@ -147,6 +192,14 @@ export interface FestSnapshot {
   workshops: Workshop[] | null;
   staff: BackendTeamMember[] | null;
   audit: AuditFeeds;
+  /**
+   * Every participant query, and every reported fault, fest-wide — Story 9.1's
+   * two missing panels. Both are single list calls that scope themselves to the
+   * caller, and a Super Admin's scope is the fest, so this costs two requests
+   * rather than one per entity. That is why they belong to the fast tier.
+   */
+  queries: QueryRecord[] | null;
+  issues: StaffIssue[] | null;
 
   mess: Mess[] | null;
   messStats: Record<string, MessStatisticsResponse>;
@@ -171,6 +224,8 @@ export function useFestSnapshot(): FestSnapshot {
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [staff, setStaff] = useState<BackendTeamMember[] | null>(null);
   const [audit, setAudit] = useState<AuditFeeds>(EMPTY_FEEDS);
+  const [queries, setQueries] = useState<QueryRecord[] | null>(null);
+  const [issues, setIssues] = useState<StaffIssue[] | null>(null);
 
   const [mess, setMess] = useState<Mess[] | null>(null);
   const [messStats, setMessStats] = useState<Record<string, MessStatisticsResponse>>({});
@@ -225,19 +280,25 @@ export function useFestSnapshot(): FestSnapshot {
     const auditFor = async (
       key: keyof typeof AUDIT_LIMITS,
       action?: string,
+      window?: { since?: string; until?: string },
     ): Promise<AuditLogEntry[]> => {
       try {
         const limit = AUDIT_LIMITS[key];
-        return await api.auditLogs(limit, action ? { action } : {});
+        return await api.auditLogs(limit, { ...(action ? { action } : {}), ...window });
       } catch {
         return [];
       }
     };
 
+    // Resolved once per wave so every window in it describes the same instant.
+    const day = localDayBounds();
+
     const [
       participantStats,
       workshopList,
       staffList,
+      queryList,
+      issueList,
       messScans,
       hostelEntry,
       hostelExit,
@@ -246,10 +307,22 @@ export function useFestSnapshot(): FestSnapshot {
       eventIn,
       eventOut,
       recent,
+      pulse,
+      todaySummary,
+      trailSummary,
     ] = await Promise.all([
       api.participantStatistics().catch(() => null),
       api.listWorkshops().catch(() => null),
       api.listBackendTeams().catch(() => null),
+      // The list endpoints cap themselves, so these ask for a fest-sized window
+      // rather than the 100 either would default to — a board reading "12 open"
+      // off a truncated page would be quietly wrong in the one direction that
+      // matters.
+      api.listQueries({}, 1000).catch(() => null),
+      api
+        .listIssues({}, 1000)
+        .then((response) => response.issues)
+        .catch(() => null),
       auditFor('messScans', 'MESS_SCAN'),
       auditFor('hostelEntry', 'HOSTEL_ENTRY'),
       auditFor('hostelExit', 'HOSTEL_EXIT'),
@@ -258,6 +331,11 @@ export function useFestSnapshot(): FestSnapshot {
       auditFor('eventRegistrations', 'EVENT_REGISTER'),
       auditFor('eventRegistrations', 'EVENT_DEREGISTER'),
       auditFor('recent'),
+      auditFor('pulse', undefined, { since: hoursAgoIso(PULSE_HOURS) }),
+      // Exact, server-counted, and unaffected by every limit above. Two requests
+      // buy every "today" figure and every trail total on the board.
+      api.auditLogSummary({ since: day.since, until: day.until }).catch(() => null),
+      api.auditLogSummary({}).catch(() => null),
     ]);
 
     if (!alive.current) return;
@@ -268,6 +346,10 @@ export function useFestSnapshot(): FestSnapshot {
     noteFailure('workshops', workshopList === null ? 'workshops' : null);
     setStaff(staffList);
     noteFailure('staff', staffList === null ? 'staff roster' : null);
+    setQueries(queryList);
+    noteFailure('queries', queryList === null ? 'participant queries' : null);
+    setIssues(issueList);
+    noteFailure('issues', issueList === null ? 'reported faults' : null);
 
     // A feed that came back exactly at its limit was almost certainly cut off.
     // Saying so is what stops "meals today" being read as a complete count when
@@ -285,6 +367,9 @@ export function useFestSnapshot(): FestSnapshot {
       accommodation: [...accommodationIn, ...accommodationOut],
       eventRegistrations: [...eventIn, ...eventOut],
       recent,
+      pulse,
+      today: todaySummary,
+      trail: trailSummary,
       truncated,
     });
 
@@ -415,6 +500,8 @@ export function useFestSnapshot(): FestSnapshot {
     workshops,
     staff,
     audit,
+    queries,
+    issues,
     mess,
     messStats,
     hostels,
