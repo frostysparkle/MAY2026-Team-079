@@ -7,6 +7,10 @@ from bson import ObjectId
 import asyncio
 
 from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest, ScanQRRequest
+# Imported on its own line so the line above stays byte-for-byte as it was; used
+# only by the workshop-desk routes at the foot of this file.
+from typing import List, Optional
+from models import WorkshopParticipantUpdateRequest
 from database import workshops_collection, participants_collection, backend_teams_collection, workshop_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
@@ -433,3 +437,366 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
         return {"message": "On-spot registration successful and marked present"}
     
     raise HTTPException(status_code=400, detail="Invalid scan_type")
+
+
+# ==========================================================================
+# WORKSHOP DESK — roster, corrections, and team removal
+#
+# Everything below is additive: no route, guard, response shape, or error string
+# above this line changes. The three routes exist because the workshop desk the
+# volunteers actually staff could not be built from what came before:
+#
+#   * `GET /workshops` returns counts but no identities.
+#   * `GET /workshops/{id}/logs` returns identities but is Super Admin-only, so
+#     the volunteer who *created* those rows could not read them back.
+#   * Nothing returned a registrant's academic level, so "interest by level" had
+#     to be approximated from the roll number.
+#   * Nothing corrected a mis-scan, and nothing stood a volunteer down except
+#     switching their scanning off and leaving them on the team forever.
+#
+# The helpers are new too, rather than a refactor of the routes above — those are
+# left exactly as they were.
+# ==========================================================================
+
+
+def _resolve_workshop(workshop_id: str):
+    """
+    A workshop by its readable id, its slot id, or its raw ObjectId.
+
+    The same three-way lookup `register_for_workshop` and `workshop_attendance`
+    already do, so a client that can scan against an id can also read the roster
+    for it. Returns None rather than raising, so each caller words its own 404.
+    """
+    workshop = workshops_collection.find_one({"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]})
+    if workshop:
+        return workshop
+    try:
+        return workshops_collection.find_one({"_id": ObjectId(workshop_id)})
+    except Exception:
+        return None
+
+
+def _is_super_admin(user_id) -> bool:
+    return bool(backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}))
+
+
+def _workshop_team_member(workshop: dict, user_id) -> Optional[dict]:
+    """This user's entry on `workshop_team`, or None if they are not on it."""
+    if user_id is None:
+        return None
+    return next(
+        (member for member in workshop.get("workshop_team", []) if str(member.get("user_id")) == str(user_id)),
+        None,
+    )
+
+
+def _workshop_team_details(workshop: dict) -> List[dict]:
+    """
+    The team, with a readable name attached where one exists.
+
+    Same resolution order as `view_participation` in events: a staff account's
+    designation, upgraded to a real name and phone when that person also has a
+    participant document. Never returns a password hash or an ObjectId.
+    """
+    details = []
+    for member in workshop.get("workshop_team", []):
+        member_id = member.get("user_id")
+        staff = backend_teams_collection.find_one({"paradox_id": member_id})
+        name = staff.get("designation") or staff.get("email") if staff else None
+        phone = None
+
+        person = participants_collection.find_one({"participant_id": member_id})
+        if person:
+            profile = person.get("profile") or {}
+            name = profile.get("full_name") or name
+            phone = profile.get("phone")
+
+        details.append({
+            "user_id": str(member_id) if member_id is not None else None,
+            "role": member.get("role"),
+            "attendance": member.get("attendance", True),
+            "name": name,
+            "phone": phone,
+        })
+    return details
+
+
+# Only the fields the desk renders. An inclusion projection on purpose: a field
+# added to `participants` later stays private until it is named here. Password
+# hashes, QR keypairs, and embeddings are never in the document this route holds.
+_ROSTER_FIELDS = {
+    "_id": 0,
+    "participant_id": 1,
+    "email": 1,
+    "workshops": 1,
+    "profile.full_name": 1,
+    "profile.phone": 1,
+    "profile.house": 1,
+    "profile.gender": 1,
+    "profile.program": 1,
+    "profile.course_stage": 1,
+    "profile.academic_level": 1,
+    "profile.academic_level_number": 1,
+    "profile.degree": 1,
+    "profile.entry_year": 1,
+}
+
+
+@router.get("/{workshop_id}/participation")
+def workshop_participation(workshop_id: str, current_user: dict = Depends(get_current_staff)):
+    """
+    Who booked this workshop, who turned up, and what level they are at.
+
+    The counterpart of `GET /events/{event_id}/participation`, and gated the same
+    way: a Super Admin, **or** a member of this workshop's own `workshop_team`.
+    Any other staff account gets 403 — being staff somewhere is not being staff
+    here. Participants have no route to this at all; the fullness figures they may
+    read are the counts already on `GET /workshops`.
+
+    A team member is authorised whether or not their `attendance` flag is on: that
+    flag gates *scanning*, and a volunteer stood down from the door still needs to
+    read the room's own roster.
+
+    `course_stage` and `academic_level` are the reason this returns more than the
+    log ever could. They are the participant's real academic standing, written by
+    `PATCH /profile/complete` and by the student dataset, and they are what makes
+    an "interest by level" breakdown a count rather than an inference from a roll
+    number. Everything here is a projection of fields that already exist — no
+    field is computed, stored, or derived.
+    """
+    user_id = current_user.get("paradox_id")
+    workshop = _resolve_workshop(workshop_id)
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    is_super_admin = _is_super_admin(user_id)
+    member = _workshop_team_member(workshop, user_id)
+    if not (is_super_admin or member):
+        raise HTTPException(status_code=403, detail="Not authorized to view this workshop's participation")
+
+    ws_doc_id = workshop["_id"]
+    participants = list(participants_collection.find({"workshops.workshop_id": ws_doc_id}, _ROSTER_FIELDS))
+
+    rows = []
+    attended_count = 0
+    on_spot_count = 0
+    for person in participants:
+        entry = next(
+            (w for w in person.get("workshops", []) if str(w.get("workshop_id")) == str(ws_doc_id)),
+            None,
+        )
+        if entry is None:
+            # Only reachable if the array matched on a different workshop; skip
+            # rather than emit a row whose booking fields would be guesses.
+            continue
+
+        profile = person.get("profile") or {}
+        attended = bool(entry.get("attended", False))
+        booking_type = entry.get("booking_type")
+        if attended:
+            attended_count += 1
+        if booking_type == "on-spot":
+            on_spot_count += 1
+
+        rows.append({
+            "participant_id": person.get("participant_id"),
+            "name": profile.get("full_name"),
+            "email": person.get("email"),
+            "phone": profile.get("phone"),
+            "house": profile.get("house"),
+            "gender": profile.get("gender"),
+            "program": profile.get("program"),
+            # The three-value field the app reports on, and the four-level academic
+            # standing beside it. Both may be None for an account that has not
+            # completed its profile — the client shows that as "unknown" rather
+            # than dropping the person from the chart.
+            "course_stage": profile.get("course_stage"),
+            "academic_level": profile.get("academic_level"),
+            "academic_level_number": profile.get("academic_level_number"),
+            "degree": profile.get("degree"),
+            "entry_year": profile.get("entry_year"),
+            "booking_type": booking_type,
+            "attended": attended,
+            "slot_id": entry.get("slot_id"),
+        })
+
+    rows.sort(key=lambda row: (row.get("participant_id") or ""))
+
+    return {
+        "workshop_id": workshop.get("workshop_id"),
+        "name": workshop.get("name"),
+        "venue": workshop.get("venue"),
+        "slot_id": workshop.get("slot_id"),
+        "capacity": workshop.get("capacity", 0),
+        # The workshop's own counters, returned alongside the roster so a client
+        # never has to choose which to trust: `count` is what this response
+        # actually lists, `registration_count` is what the workshop has been
+        # charging seats against.
+        "registration_count": workshop.get("registration_count", 0),
+        "participant_count": workshop.get("participant_count", 0),
+        "count": len(rows),
+        "attended_count": attended_count,
+        "absent_count": len(rows) - attended_count,
+        "on_spot_count": on_spot_count,
+        "workshop_team": _workshop_team_details(workshop),
+        "participants": rows,
+    }
+
+
+@router.patch("/{workshop_id}/participants/{participant_id}")
+def update_workshop_participant(
+    workshop_id: str,
+    participant_id: str,
+    request: WorkshopParticipantUpdateRequest,
+    current_user: dict = Depends(get_current_staff),
+):
+    """
+    Correct one participant's record for this workshop — attendance, or how the
+    seat was taken.
+
+    Why this exists: attendance could only ever be set by a successful RSA-OAEP
+    scan, so a flat battery, a cracked screen, or a QR that expired in the queue
+    left a student who was visibly in the room marked absent, with no way back.
+    This is the authorised correction, and it is deliberately narrow.
+
+    Authorisation is stricter than the roster above: a Super Admin, or a team
+    member **whose `attendance` flag is on**. Writing attendance is the same
+    privilege as scanning it, so somebody stood down from the door cannot set by
+    hand what they are not allowed to scan.
+
+    Bookkeeping:
+      * `participant_count` follows the change, and only on a real transition, so
+        repeating the same correction cannot inflate the count.
+      * `registration_count` is left alone. The seat was already counted when the
+        booking was made; flipping `booking_type` re-labels that seat, it does not
+        take another one.
+
+    Every call writes a `workshop_logs` row and an audit entry naming the actor —
+    a hand-set attendance is exactly the kind of record that must not be
+    indistinguishable from a scan.
+    """
+    user_id = current_user.get("paradox_id")
+    workshop = _resolve_workshop(workshop_id)
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    is_super_admin = _is_super_admin(user_id)
+    member = _workshop_team_member(workshop, user_id)
+    if not (is_super_admin or member):
+        raise HTTPException(status_code=403, detail="Not authorized to update this workshop's participants")
+    if not is_super_admin and not member.get("attendance", True):
+        raise HTTPException(status_code=403, detail="Scanning disabled for this volunteer")
+
+    if request.attended is None and request.booking_type is None:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if request.booking_type is not None and request.booking_type not in ("pre-registered", "on-spot"):
+        raise HTTPException(status_code=400, detail="booking_type must be 'pre-registered' or 'on-spot'")
+
+    target = participants_collection.find_one({"participant_id": participant_id})
+    if not target:
+        target = participants_collection.find_one({"email": participant_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    ws_doc_id = workshop["_id"]
+    entry = next(
+        (w for w in target.get("workshops", []) if str(w.get("workshop_id")) == str(ws_doc_id)),
+        None,
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Participant is not registered for this workshop")
+
+    was_attended = bool(entry.get("attended", False))
+    update_fields = {}
+    changed = {}
+
+    if request.attended is not None and request.attended != was_attended:
+        update_fields["workshops.$.attended"] = request.attended
+        changed["attended"] = request.attended
+    if request.booking_type is not None and request.booking_type != entry.get("booking_type"):
+        update_fields["workshops.$.booking_type"] = request.booking_type
+        changed["booking_type"] = request.booking_type
+
+    if not update_fields:
+        # Idempotent: the record already says what was asked for, so nothing is
+        # written and no log row is invented for a change that did not happen.
+        return {"message": "No change", "participant_id": target.get("participant_id")}
+
+    participants_collection.update_one(
+        {"_id": target["_id"], "workshops.workshop_id": ws_doc_id},
+        {"$set": update_fields},
+    )
+
+    if "attended" in changed:
+        delta = 1 if changed["attended"] else -1
+        if delta > 0:
+            workshops_collection.update_one({"_id": ws_doc_id}, {"$inc": {"participant_count": 1}})
+        else:
+            # Floored, so a count that is already 0 cannot be driven negative by a
+            # correction to data that predates this route.
+            current = workshops_collection.find_one({"_id": ws_doc_id}, {"participant_count": 1})
+            if (current or {}).get("participant_count", 0) > 0:
+                workshops_collection.update_one({"_id": ws_doc_id}, {"$inc": {"participant_count": -1}})
+
+    workshop_logs_collection.insert_one({
+        "workshop_id": str(ws_doc_id),
+        "action": "attendance_override",
+        "scan_type": changed.get("booking_type", entry.get("booking_type")),
+        "participant_id": target.get("participant_id"),
+        "scanned_by": user_id,
+        "changes": changed,
+        "timestamp": datetime.utcnow(),
+    })
+    log_audit(current_user, "UPDATE_WORKSHOP_PARTICIPANT", workshop.get("workshop_id"), {
+        "participant_id": target.get("participant_id"),
+        "changes": changed,
+    })
+
+    return {
+        "message": "Participant record updated",
+        "participant_id": target.get("participant_id"),
+        "changes": changed,
+    }
+
+
+@router.delete("/{workshop_id}/volunteers/{user_id}")
+def remove_workshop_volunteer(
+    workshop_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_staff),
+):
+    """
+    Take somebody off this workshop's team.
+
+    The missing half of `POST /workshops/{id}/volunteers`: until now a volunteer
+    assigned by mistake, or one who has finished for the fest, could only have
+    their scanning switched off and stayed on the team's roster forever.
+
+    Super Admin only, matching assignment — who staffs a workshop is an
+    organiser's decision, and a volunteer removing a colleague is not.
+
+    Removal is by `workshop_team.user_id` and touches nothing else: the scans that
+    person already made stay in `workshop_logs`, with their id on them, because an
+    attendance record must not disappear when a shift ends.
+    """
+    actor_id = current_user.get("paradox_id")
+    if not _is_super_admin(actor_id):
+        raise HTTPException(status_code=403, detail="Only Super Admins can remove volunteers")
+
+    workshop = _resolve_workshop(workshop_id)
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    if not _workshop_team_member(workshop, user_id):
+        raise HTTPException(status_code=404, detail="That member is not on this workshop's team")
+
+    workshops_collection.update_one(
+        {"_id": workshop["_id"]},
+        {
+            "$pull": {"workshop_team": {"user_id": user_id}},
+            "$set": {"updated_at": datetime.utcnow()},
+        },
+    )
+    log_audit(current_user, "REMOVE_WORKSHOP_VOLUNTEER", workshop.get("workshop_id"), {"user_id": user_id})
+
+    return {"message": "Volunteer removed"}

@@ -142,6 +142,23 @@ class WorkshopAssignVolunteerRequest(BaseModel):
     role: str = "workshop_volunteer"
     attendance: bool = True
 
+class WorkshopParticipantUpdateRequest(BaseModel):
+    """
+    An authorised correction to one participant's record *for one workshop*.
+
+    Both fields are optional so a caller sends only what changes; an empty body is
+    rejected by the route rather than silently doing nothing.
+
+    Deliberately scoped to the two fields the workshop owns on
+    ``participants.workshops[]`` — whether they turned up, and whether the seat was
+    booked ahead or taken at the door. Identity fields (name, email, phone, house,
+    academic record) are *not* editable here: they belong to the participant, they
+    are read by every other screen in the fest, and a workshop volunteer is not who
+    should be rewriting them.
+    """
+    attended: Optional[bool] = None
+    booking_type: Optional[str] = None  # pre-registered | on-spot
+
 # Embeddings models — mirror the OpenAI embeddings API request shape, so any
 # openai-library client can call POST /embeddings as a drop-in.
 class EmbeddingRequest(BaseModel):
