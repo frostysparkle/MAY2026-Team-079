@@ -167,3 +167,25 @@ class EmbeddingRequest(BaseModel):
     encoding_format: Optional[str] = None  # "float" | "base64"
     dimensions: Optional[int] = None
     user: Optional[str] = None
+
+# Query models (Epic 6 — raise a query, track it, assign it, answer it)
+class QueryCreateRequest(BaseModel):
+    category: str                      # hostel | mess | event | workshop | general
+    subject: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    # The block, hall, event, or workshop the query is about. This is what routes
+    # it to a team: a `hostel` query naming a block reaches that block's
+    # `hostel_team` and nobody else. Omitted for `general`, which reaches the
+    # Super Admins.
+    target_id: Optional[str] = None
+
+class QueryUpdateRequest(BaseModel):
+    status: Optional[str] = None       # open | assigned | resolved
+    # Free text naming the team that owns it, e.g. "Ganga Block desk". The
+    # routing itself is derived from category + target_id, so this is a label for
+    # the humans reading the thread, not an access control.
+    assigned_team: Optional[str] = None
+    assigned_to: Optional[str] = None  # paradox_id of the staff member who owns it
+
+class QueryReplyRequest(BaseModel):
+    body: str = Field(..., min_length=1)
