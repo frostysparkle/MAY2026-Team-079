@@ -189,3 +189,20 @@ class QueryUpdateRequest(BaseModel):
 
 class QueryReplyRequest(BaseModel):
     body: str = Field(..., min_length=1)
+
+# Admin edit of another participant's record (Story 7.3). Every field optional:
+# the route only $sets the ones a request actually carries, so a form that edits
+# one field cannot blank the rest.
+class ParticipantAdminUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    house: Optional[str] = None
+    gender: Optional[str] = None
+    phone: Optional[str] = None
+    mess_preference: Optional[str] = None
+    country: Optional[str] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
+    program: Optional[str] = None
+    course_stage: Optional[str] = None
+    emergency_contact: Optional[EmergencyContact] = None

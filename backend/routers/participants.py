@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
 from collections import Counter
+from datetime import datetime
+from typing import Optional
+import re
 
 from database import participants_collection, backend_teams_collection
 from dependencies import get_current_staff
+from logger import log_audit
+from models import ParticipantAdminUpdateRequest
 
 router = APIRouter(prefix="/participants", tags=["Participants"])
 
@@ -118,3 +123,131 @@ def participant_statistics(current_user: dict = Depends(get_current_staff)):
         # a dict whose key order it should not have to trust.
         "signups_by_day": dict(sorted(signups_by_day.items())),
     }
+
+
+@router.get("")
+def list_participants(
+    q: Optional[str] = None,
+    house: Optional[str] = None,
+    limit: int = 200,
+    current_user: dict = Depends(get_current_staff),
+):
+    """
+    The fest-wide participant roster — Story 7.3's missing read half.
+
+    Super Admins only, matching every other roster in the API. ``/statistics``
+    above stays deliberately roster-free: a dashboard that shows totals to
+    whoever can see the dashboard must not be the thing that leaks a list of
+    names, so the two are separate endpoints rather than one endpoint with a
+    flag.
+
+    Projection is an allow-list. ``password_hash`` and ``qr_secrets`` are the two
+    fields that must never leave this collection, and an inclusion projection
+    means a field added to the schema later stays private until it is named here.
+    ``photo`` and ``embedding`` are excluded for size, not secrecy — a roster of
+    200 base64 photographs is a response nobody wants.
+
+    ``q`` matches a name, email, or participant id, case-insensitively, so one
+    search box finds a person however the admin knows them.
+    """
+    user_id = current_user.get("paradox_id")
+    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    mongo_filter: dict = {}
+    if house:
+        mongo_filter["profile.house"] = house
+    if q:
+        needle = re.escape(q.strip())
+        mongo_filter["$or"] = [
+            {"participant_id": {"$regex": needle, "$options": "i"}},
+            {"email": {"$regex": needle, "$options": "i"}},
+            {"profile.full_name": {"$regex": needle, "$options": "i"}},
+        ]
+
+    rows = participants_collection.find(mongo_filter, {
+        "_id": 0,
+        "participant_id": 1,
+        "email": 1,
+        "profile": 1,
+        "mess.registered": 1,
+        "mess.mess_id": 1,
+        "accommodation": 1,
+        "events": 1,
+        "workshops": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    }).limit(limit)
+
+    participants = []
+    for row in rows:
+        # `mess.mess_id` and `events[].event_id` hold raw ObjectIds — not JSON
+        # serialisable, and the reason a naive projection 500s here.
+        mess = row.get("mess") or {}
+        if mess.get("mess_id") is not None:
+            mess["mess_id"] = str(mess["mess_id"])
+        for registration in row.get("events") or []:
+            if registration.get("event_id") is not None:
+                registration["event_id"] = str(registration["event_id"])
+        # Counts, not the arrays themselves: an admin roster wants "3 events", and
+        # the per-event roster endpoints already answer "which three".
+        row["event_count"] = len(row.pop("events", None) or [])
+        row["workshop_count"] = len(row.pop("workshops", None) or [])
+        participants.append(row)
+
+    return {"count": len(participants), "participants": participants}
+
+
+@router.patch("/{participant_id}")
+def update_participant(
+    participant_id: str,
+    request: ParticipantAdminUpdateRequest,
+    current_user: dict = Depends(get_current_staff),
+):
+    """
+    Edit another person's record — Story 7.3's missing write half.
+
+    Super Admins only. Until this existed there was no endpoint anywhere that
+    wrote to a participant document other than the participant's own
+    ``PATCH /profile/complete``, so an admin who spotted a misspelled name on a
+    hostel roster could do nothing about it.
+
+    Deliberately narrow. Only ``profile`` fields are writable:
+
+    * ``email`` and ``participant_id`` are identity — ``participant_id`` is
+      derived from the email by ``generate_participant_id`` and is the key every
+      roster, log row, and QR payload joins on.
+    * ``password_hash`` and ``qr_secrets`` are credentials.
+    * ``mess`` / ``accommodation`` / ``events`` / ``workshops`` are owned by the
+      allocation and registration routes, which enforce capacity and state. An
+      admin writing them directly would put a participant in a hall with no seat
+      left, or mark them inside a block the scanner thinks they left.
+
+    Every field is optional and only the ones present are written, so a form that
+    fixes a phone number cannot blank an address.
+    """
+    user_id = current_user.get("paradox_id")
+    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    participant = participants_collection.find_one({"participant_id": participant_id})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    supplied = request.model_dump(exclude_unset=True, exclude_none=True)
+    if not supplied:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    update = {}
+    for field, value in supplied.items():
+        # Dotted keys, so an edit to one profile field leaves the rest of the map
+        # alone. Setting `profile` wholesale would delete every field the form
+        # does not carry.
+        update[f"profile.{field}"] = value
+    update["updated_at"] = datetime.utcnow()
+
+    participants_collection.update_one({"participant_id": participant_id}, {"$set": update})
+    log_audit(current_user, "UPDATE_PARTICIPANT", participant_id, {"fields_updated": sorted(supplied.keys())})
+
+    updated = participants_collection.find_one({"participant_id": participant_id}, {"_id": 0, "profile": 1})
+    return {"message": "Participant updated", "profile": (updated or {}).get("profile", {})}
