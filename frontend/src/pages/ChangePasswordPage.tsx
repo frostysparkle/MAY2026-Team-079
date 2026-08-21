@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
 import { currentParticipant, currentStaff, useAuthStore } from '@/stores/authStore';
 import { PasswordField, MIN_PASSWORD_LENGTH, PASSWORD_HINT } from '@/features/auth/PasswordField';
-import { Button, ResultBanner, SectionHeading } from '@/components/ui';
+import { Button, DetailPanel, ResultBanner } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 
 /**
@@ -56,9 +56,11 @@ export default function ChangePasswordPage() {
       // page from different places, and either should land back where it started.
       back={{ label: 'Back', onClick: () => navigate(-1) }}
     >
-      <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
-        <SectionHeading title="Change Password" />
-
+      {/* `DetailPanel` rather than the surface this hand-rolled, which was the
+          same radius, background, shadow, ring, gap and `SectionHeading` — minus
+          the `sm:p-5` step, so it was the one panel in either dashboard that
+          stayed at 16px padding on a desktop while its neighbours went to 20px. */}
+      <DetailPanel title="Change Password">
         {done && (
           <ResultBanner variant="success" title="Password changed">
             Your password has been updated.
@@ -89,7 +91,7 @@ export default function ChangePasswordPage() {
             Change password
           </Button>
         </form>
-      </section>
+      </DetailPanel>
     </FestivalScreen>
   );
 }

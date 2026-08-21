@@ -21,6 +21,8 @@ import { currentParticipant } from '@/stores/authStore';
 import {
   Avatar,
   Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
   DetailPanel,
   EmptyState,
   Fact,
@@ -29,6 +31,7 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { PanelMasonry } from '@/components/layout/PanelMasonry';
 import {
   courseStageLabel,
   formatDob,
@@ -68,9 +71,13 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const participant = currentParticipant();
 
+  // Both fall-through states keep the screen's default width rather than
+  // narrowing to `md`. A section that is 768px wide when it has nothing to show
+  // and 1280px wide when it does moves its own title and eyebrow sideways as it
+  // loads, which reads as the page having navigated somewhere.
   if (!participant) {
     return (
-      <FestivalScreen title="Profile" eyebrow="Participant" width="md">
+      <FestivalScreen title="Profile" eyebrow="Participant">
         <EmptyState title="Not signed in" description="Please sign in to view your profile." />
       </FestivalScreen>
     );
@@ -80,7 +87,7 @@ export default function ProfilePage() {
   // on it, so the one thing worth showing is the way to finish it.
   if (participant.full_name === null) {
     return (
-      <FestivalScreen title="Profile" eyebrow="Participant" width="md">
+      <FestivalScreen title="Profile" eyebrow="Participant">
         <EmptyState
           title="Profile incomplete"
           description="Complete your profile to use every module."
@@ -105,20 +112,19 @@ export default function ProfilePage() {
       // Not the email: it is already under the name in the header block below,
       // and a screen that prints it twice within 200px reads as a bug.
       subtitle="Everything Paradox holds about you, and where to change it."
+      // Three medium buttons, so three identically sized glyphs at one stroke
+      // weight and the medium gap `Button` already sets. They used to be 15/14/14
+      // at two weights with the small button's gap forced onto all three.
       actions={
         <>
-          <Button onClick={() => navigate(ROUTES.completeProfile)} className="gap-1.5">
-            <FileEdit size={15} strokeWidth={2.5} /> Edit profile
+          <Button onClick={() => navigate(ROUTES.completeProfile)}>
+            <FileEdit size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Edit profile
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigate(ROUTES.changePassword)}
-            className="gap-1.5"
-          >
-            <Lock size={14} /> Change password
+          <Button variant="secondary" onClick={() => navigate(ROUTES.changePassword)}>
+            <Lock size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Change password
           </Button>
-          <Button variant="ghost" onClick={() => navigate(ROUTES.myQr)} className="gap-1.5">
-            <QrCode size={14} /> My QR
+          <Button variant="ghost" onClick={() => navigate(ROUTES.myQr)}>
+            <QrCode size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> My QR
           </Button>
         </>
       }
@@ -128,8 +134,15 @@ export default function ProfilePage() {
           complete the record is on the right. The right half is why this is a
           bespoke block rather than a `DetailPanel` — it is the page's only
           figure, and it belongs beside the name rather than in a row of cards
-          of its own. */}
-      <section className="relative overflow-hidden rounded-2xl bg-surface p-5 shadow-card ring-1 ring-black/[0.03] sm:p-6">
+          of its own.
+
+          Bespoke, but not differently sized: the radius, surface, shadow, ring
+          and `p-4 sm:p-5` padding are `DetailPanel`'s, so this reads as the same
+          kind of card as the panels under it. It used to be `p-5 sm:p-6`, one step
+          more generous than every other card on the screen, which is exactly the
+          sort of difference that registers as sloppiness without being
+          identifiable. */}
+      <section className="relative overflow-hidden rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03] sm:p-5">
         {/* A wash of the brand gradient rather than a solid band: it marks this
             card as the page's subject without turning it into a second title. */}
         <div
@@ -137,7 +150,9 @@ export default function ProfilePage() {
           className="absolute inset-x-0 top-0 h-28 bg-gradient-to-br from-brand to-accent opacity-[0.08]"
         />
 
-        <div className="relative flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:text-left">
+        {/* `sm:items-center` was redundant beside the unprefixed `items-center`
+            it repeats. */}
+        <div className="relative flex flex-col items-center gap-5 text-center sm:flex-row sm:text-left">
           <Avatar
             src={participant.photo}
             name={participant.full_name}
@@ -162,7 +177,10 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="w-full shrink-0 rounded-2xl bg-surface-2/70 p-4 text-left ring-1 ring-line sm:w-56">
+          {/* Widens a step at `lg`, where the block itself has grown from ~600px
+              to ~1000px: held at a flat 14rem it read as a chip stranded at the
+              end of a long empty row rather than as the half of the card it is. */}
+          <div className="w-full shrink-0 rounded-2xl bg-surface-2/70 p-4 text-left ring-1 ring-line sm:w-56 lg:w-64">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
                 Profile
@@ -189,8 +207,10 @@ export default function ProfilePage() {
 
       {/* ---- the record itself ----
           Masonry rather than a grid: the groups are 3 and 4 rows tall, and
-          columns that pack by height end level where grid rows do not. */}
-      <div className="gap-5 md:columns-2 xl:columns-3 [&>*]:mb-5 [&>*]:break-inside-avoid">
+          columns that pack by height end level where grid rows do not. Shared
+          with the dashboard through `PanelMasonry`, so the two screens' panels
+          are spaced identically. */}
+      <PanelMasonry>
         {/* The name is not repeated here: it is the largest thing on the header
             block above, and a screen that says it twice reads as a form
             print-out rather than as a profile. */}
@@ -258,16 +278,12 @@ export default function ProfilePage() {
                 </StatusBadge>
               ))}
             </div>
-            <Button
-              size="sm"
-              onClick={() => navigate(ROUTES.completeProfile)}
-              className="w-fit gap-1.5"
-            >
-              <FileEdit size={13} strokeWidth={2.5} /> Add them
+            <Button size="sm" onClick={() => navigate(ROUTES.completeProfile)} className="w-fit">
+              <FileEdit size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> Add them
             </Button>
           </DetailPanel>
         )}
-      </div>
+      </PanelMasonry>
     </FestivalScreen>
   );
 }

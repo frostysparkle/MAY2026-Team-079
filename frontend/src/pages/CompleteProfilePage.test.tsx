@@ -96,16 +96,60 @@ describe('CompleteProfilePage', () => {
     expect(screen.getByRole('button', { name: /Upload photo/i })).toBeInTheDocument();
   });
 
-  it('no longer collects an emergency contact', () => {
+  /**
+   * This screen is the only place `profile.emergency_contact` can be written.
+   *
+   * It used not to collect one at all, which made Help & Contacts' "your
+   * emergency contact" card permanently empty while telling the participant to
+   * add it here. These three assert the field exists, that it stays optional, and
+   * that a half-filled contact is refused rather than sent as a 422.
+   */
+  it('collects an emergency contact, so the Help & Contacts card can be filled', () => {
     render(
       <MemoryRouter>
         <CompleteProfilePage />
       </MemoryRouter>,
     );
 
-    expect(screen.queryByText(/Emergency Contact/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Contact Name/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Relation/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Emergency contact/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Relation/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Phone$/i)).toBeInTheDocument();
+  });
+
+  it('opens the contact already filled in when the session carries one', () => {
+    useAuthStore.getState().setParticipantSession({
+      ...returningUser,
+      emergency_contact: { name: 'Ramesh Rao', relation: 'father', phone: '9812345678' },
+    });
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/^Name/i)).toHaveValue('Ramesh Rao');
+    expect(screen.getByLabelText(/Relation/i)).toHaveDisplayValue('Father');
+    expect(screen.getByLabelText(/^Phone$/i)).toHaveValue('9812345678');
+  });
+
+  it('refuses a half-filled emergency contact rather than sending a 422', async () => {
+    // `EmergencyContact` types all three fields as required, so two of them is
+    // rejected by the API. Better to say which is missing than to relay a 422.
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.type(screen.getByLabelText(/^Name/i), 'Ramesh Rao');
+    await userEvent.click(screen.getByRole('button', { name: /Save and continue/i }));
+
+    expect(
+      await screen.findByText(
+        'Give the name, the relation and the phone number, or leave all three blank.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('frames itself as an edit, not a first-time setup, when a profile exists', () => {

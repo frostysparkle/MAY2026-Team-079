@@ -7,14 +7,15 @@ import {
   CircleDashed,
   FileEdit,
   GraduationCap,
+  LifeBuoy,
   type LucideIcon,
   MapPin,
   User,
 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { ProfileCompleteRequest } from '@/api/types';
+import type { EmergencyContact, ProfileCompleteRequest } from '@/api/types';
 import { ROUTES } from '@/config/routes';
-import { GENDER_OPTIONS, MESS_PREFERENCES, PROGRAMS, COURSE_STAGES } from '@/config/constants';
+import { GENDER_OPTIONS, PROGRAMS, COURSE_STAGES } from '@/config/constants';
 import { HOUSES } from '@/config/houses';
 import { useAuthStore, currentParticipant } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
@@ -34,15 +35,25 @@ import { LocationSelect, type LocationValue } from '@/features/profile/LocationS
 import { cn } from '@/lib/cn';
 
 const HOUSE_OPTIONS = HOUSES.map((h) => ({ value: h, label: h }));
-const MESS_PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({
-  value: p,
-  label: p === 'non_veg' ? 'Non-veg' : p[0].toUpperCase() + p.slice(1),
-}));
 const PROGRAM_OPTIONS = PROGRAMS.map((p) => ({ value: p, label: p }));
 const COURSE_STAGE_OPTIONS = COURSE_STAGES.map((s) => ({
   value: s,
   label: s[0].toUpperCase() + s.slice(1),
 }));
+
+/**
+ * The relations `EmergencyContact.relation` is documented to take.
+ *
+ * A fixed list rather than free text because the backend names these four in
+ * `models.py`, and a typed relation is what lets Help & Contacts print "Father"
+ * rather than whatever was typed.
+ */
+const RELATION_OPTIONS = [
+  { value: 'father', label: 'Father' },
+  { value: 'mother', label: 'Mother' },
+  { value: 'elder_sibling', label: 'Elder sibling' },
+  { value: 'guardian', label: 'Guardian' },
+];
 
 /**
  * The one panel surface this screen uses — the same `rounded-3xl` card as the
@@ -61,11 +72,47 @@ type FormValues = {
   house: string;
   gender: string;
   phone: string;
-  mess_preference: string;
   address: string;
   program: string;
   course_stage: string;
+  /**
+   * Next-of-kin. Optional on the backend and optional here — but collected,
+   * which it was not.
+   *
+   * Nothing in the app used to write these, so `profile.emergency_contact` could
+   * only ever be set by a seeder, and Help & Contacts' "your emergency contact"
+   * card was permanently empty while telling the participant to add it on a
+   * screen that could not. This is that screen.
+   */
+  emergency_name: string;
+  emergency_relation: string;
+  emergency_phone: string;
 };
+
+/**
+ * The three emergency-contact inputs as the API's object, or `null` when none of
+ * them was filled in.
+ *
+ * All three or nothing, because `EmergencyContact` types every field as a
+ * required `str`: sending two of them is a 422, and sending three empty strings
+ * stores a contact that cannot be rung. `null` therefore means "the participant
+ * did not give one", which the caller turns into "leave the field alone".
+ */
+function emergencyContactFrom(values: FormValues): EmergencyContact | null {
+  const name = values.emergency_name.trim();
+  const relation = values.emergency_relation.trim();
+  const phone = values.emergency_phone.trim();
+  if (!name || !relation || !phone) return null;
+  return { name, relation, phone };
+}
+
+/** Whether some but not all of the contact was given — the one invalid state. */
+function partialEmergencyContact(values: FormValues): boolean {
+  const parts = [values.emergency_name, values.emergency_relation, values.emergency_phone].map(
+    (p) => p.trim(),
+  );
+  return parts.some(Boolean) && !parts.every(Boolean);
+}
 
 /** How far along the required half of the form is. */
 interface Progress {
@@ -78,13 +125,18 @@ interface Progress {
 }
 
 /**
- * Which groups are filled in, and how many of the thirteen answers the profile
+ * Which groups are filled in, and how many of the twelve answers the profile
  * requires are given. Derived rather than tracked, so it can never disagree
  * with what is in the form.
  *
  * The photo counts as a required answer like any field: it is mandatory before
  * a profile can be completed, so the count, the checklist and the submit hint
  * all have to agree that it is outstanding.
+ *
+ * The meal preference is deliberately not among them. It is asked on the
+ * Accommodation & Mess step instead, which is where a student decides whether
+ * they are eating on campus at all — asking it here made everybody answer a
+ * dietary question, including the majority who never take mess.
  */
 function progressOf(
   values: Partial<FormValues>,
@@ -103,7 +155,6 @@ function progressOf(
     values.address,
     values.program,
     values.course_stage,
-    values.mess_preference,
     photo,
   ];
   return {
@@ -113,7 +164,7 @@ function progressOf(
       values.full_name && values.dob && values.house && values.gender && values.phone,
     ),
     location: Boolean(location.country && location.state && location.city && values.address),
-    academic: Boolean(values.program && values.course_stage && values.mess_preference),
+    academic: Boolean(values.program && values.course_stage),
     photo: Boolean(photo),
   };
 }
@@ -336,7 +387,7 @@ function ProfileRail({
         <ul className="flex flex-col gap-2.5 border-t border-line pt-4">
           <ChecklistRow label="Personal" done={progress.personal} />
           <ChecklistRow label="Location" done={progress.location} />
-          <ChecklistRow label="Academic & Mess" done={progress.academic} />
+          <ChecklistRow label="Academic" done={progress.academic} />
           <ChecklistRow label="Profile photo" done={progress.photo} />
         </ul>
       </section>
@@ -359,11 +410,16 @@ function ProfileRail({
  * already answered from the stored session in that case. That matters for more
  * than convenience: `PATCH /profile/complete` replaces the whole profile
  * document, so a blank form would submit a blank record over a complete one.
- * `mess_preference` is the exception — `/auth/login` does not return it, so it
- * can only be prefilled within the session that saved it, and the checklist
- * shows when it still needs an answer. For the same reason the stored emergency
- * contact is resubmitted untouched: the screen no longer collects one, and
- * leaving it out of the payload would erase a contact already on file.
+ * For the same reason the stored emergency contact and meal preference are
+ * resubmitted untouched: this screen collects neither, and leaving them out of
+ * the payload would erase answers already on file.
+ *
+ * The meal preference moved to the next step. The flow is Complete Profile →
+ * Accommodation & Mess, and it is there — where a student says whether they want
+ * a bed, meals, both, or nothing — that being asked what they eat makes sense.
+ * Asking here put a dietary question in front of every student, including the
+ * majority who never take mess, and it had to be answered before the profile
+ * could be saved at all.
  *
  * The rail exists because the form's fields are capped at a readable measure,
  * which left a wide screen empty on both sides of a narrow column. It carries
@@ -385,6 +441,7 @@ export default function CompleteProfilePage() {
     register,
     handleSubmit,
     control,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
@@ -393,10 +450,12 @@ export default function CompleteProfilePage() {
       house: participant?.house ?? '',
       gender: participant?.gender ?? '',
       phone: participant?.phone ?? '',
-      mess_preference: participant?.mess_preference ?? '',
       address: participant?.address ?? '',
       program: participant?.program ?? '',
       course_stage: participant?.course_stage ?? '',
+      emergency_name: participant?.emergency_contact?.name ?? '',
+      emergency_relation: participant?.emergency_contact?.relation ?? '',
+      emergency_phone: participant?.emergency_contact?.phone ?? '',
     },
   });
 
@@ -409,6 +468,7 @@ export default function CompleteProfilePage() {
   const [customErrors, setCustomErrors] = useState<{
     location?: Partial<Record<keyof LocationValue, string>>;
     photo?: string;
+    emergency?: string;
   }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -429,22 +489,29 @@ export default function CompleteProfilePage() {
     if (dataUrl) setCustomErrors((prev) => ({ ...prev, photo: undefined }));
   }
 
-  function validateCustom(): boolean {
+  function validateCustom(formValues: FormValues): boolean {
     const locErrors: Partial<Record<keyof LocationValue, string>> = {};
     if (!location.country) locErrors.country = 'Country is required.';
     if (!location.state) locErrors.state = 'State is required.';
     if (!location.city) locErrors.city = 'City is required.';
     const photoError = photo ? undefined : 'A profile photo is required.';
+    // The contact is optional, but a half-filled one is not: the API types all
+    // three fields as required, so two of them is a 422 rather than a partial
+    // save. Caught here so the message names what is missing.
+    const emergencyError = partialEmergencyContact(formValues)
+      ? 'Give the name, the relation and the phone number, or leave all three blank.'
+      : undefined;
     setCustomErrors({
       location: Object.keys(locErrors).length ? locErrors : undefined,
       photo: photoError,
+      emergency: emergencyError,
     });
-    return Object.keys(locErrors).length === 0 && !photoError;
+    return Object.keys(locErrors).length === 0 && !photoError && !emergencyError;
   }
 
   async function onSubmit(formValues: FormValues) {
     setSubmitError(null);
-    if (!validateCustom()) return;
+    if (!validateCustom(formValues)) return;
 
     const payload: ProfileCompleteRequest = {
       full_name: formValues.full_name.trim(),
@@ -452,14 +519,21 @@ export default function CompleteProfilePage() {
       house: formValues.house,
       gender: formValues.gender,
       phone: formValues.phone.trim(),
-      mess_preference: formValues.mess_preference,
+      // Carried through untouched, like the emergency contact below: this screen
+      // no longer asks for a meal preference, and `PATCH /profile/complete`
+      // replaces the profile wholesale, so leaving it out of the payload would
+      // overwrite a choice already made on the Accommodation & Mess step.
+      mess_preference: session.mess_preference,
       country: location.country,
       state: location.state,
       city: location.city,
       address: formValues.address.trim(),
-      // Carried through untouched: the profile document is replaced wholesale,
-      // so an existing contact has to be resent to survive this save.
-      emergency_contact: session.emergency_contact ?? undefined,
+      // Collected here now, rather than carried through from the session
+      // untouched. Sent only when there is something to send: the backend
+      // replaces the profile wholesale, so an all-blank contact would write an
+      // empty record over a real one. `undefined` at least leaves the field
+      // alone as far as this client is concerned.
+      emergency_contact: emergencyContactFrom(formValues) ?? session.emergency_contact ?? undefined,
       program: formValues.program,
       course_stage: formValues.course_stage,
       photo: photo ?? undefined,
@@ -500,7 +574,10 @@ export default function CompleteProfilePage() {
 
       <form
         className="flex flex-col gap-5"
-        onSubmit={handleSubmit(onSubmit, () => validateCustom())}
+        // The invalid branch runs the custom checks too, so a submit blocked by a
+        // required field still surfaces a missing photo or a half-filled contact
+        // rather than reporting them one round-trip later.
+        onSubmit={handleSubmit(onSubmit, () => validateCustom(getValues()))}
         noValidate
       >
         {/* The fields keep a readable measure; the rail uses the space that
@@ -585,7 +662,7 @@ export default function CompleteProfilePage() {
               />
             </FormSection>
 
-            <FormSection icon={GraduationCap} title="Academic & Mess">
+            <FormSection icon={GraduationCap} title="Academic">
               <Select
                 label="Program"
                 required
@@ -602,16 +679,48 @@ export default function CompleteProfilePage() {
                 error={errors.course_stage?.message}
                 {...register('course_stage', { required: 'Course stage is required.' })}
               />
-              <Wide>
-                <Select
-                  label="Mess Preference"
-                  required
-                  placeholder="Select preference"
-                  options={MESS_PREF_OPTIONS}
-                  error={errors.mess_preference?.message}
-                  {...register('mess_preference', { required: 'Mess preference is required.' })}
-                />
-              </Wide>
+            </FormSection>
+
+            {/* Optional, and the only section that is — so it sits last, after
+                everything the profile cannot be saved without. */}
+            <FormSection icon={LifeBuoy} title="Emergency contact">
+              <div className="sm:col-span-2">
+                <p className="text-xs text-muted">
+                  Who the fest should call about you. Optional, and shown only to you — on Help
+                  &amp; Contacts, beside the fest&rsquo;s own duty numbers.
+                </p>
+              </div>
+              <TextInput
+                label="Name"
+                autoComplete="off"
+                placeholder="e.g. Ramesh Rao"
+                error={errors.emergency_name?.message}
+                {...register('emergency_name')}
+              />
+              <Select
+                label="Relation"
+                placeholder="Select relation"
+                options={RELATION_OPTIONS}
+                error={errors.emergency_relation?.message}
+                {...register('emergency_relation')}
+              />
+              <TextInput
+                label="Phone"
+                type="tel"
+                autoComplete="off"
+                placeholder="e.g. 9876500001"
+                error={customErrors.emergency}
+                {...register('emergency_phone')}
+              />
+              {isEditing && !session.emergency_contact && (
+                <div className="sm:col-span-2">
+                  <p className="text-xs text-warning">
+                    No contact is on file for this session. If one was recorded earlier it is not
+                    readable back by any endpoint, so it cannot be shown here — filling this in
+                    replaces whatever is stored.
+                  </p>
+                </div>
+              )}
             </FormSection>
           </div>
         </div>
