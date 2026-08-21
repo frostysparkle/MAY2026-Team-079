@@ -31,3 +31,8 @@ system_logs_collection = db["system_logs"]
 # field is either readable only by its own author or is load-bearing data a
 # query would corrupt, which is why this needed a collection of its own.
 queries_collection = db["queries"]
+# Participant-reported hostel and mess faults — story 5.4. A collection of its
+# own rather than a field on the participant or the facility, because a report
+# has to be readable by somebody other than its author and writable by somebody
+# other than the facility's owner, and no existing document allows both.
+issues_collection = db["issues"]
