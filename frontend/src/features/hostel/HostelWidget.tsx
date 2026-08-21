@@ -4,7 +4,15 @@ import { ChevronRight, Home } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { MyHostelResponse } from '@/api/types';
 import { ROUTES } from '@/config/routes';
-import { Button, IconTile, Skeleton, StatusBadge } from '@/components/ui';
+import {
+  Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
+  Card,
+  IconTile,
+  Skeleton,
+  StatusBadge,
+} from '@/components/ui';
 
 /**
  * Hostel panel for the participant dashboard.
@@ -49,11 +57,12 @@ export function HostelWidget() {
 
   if (data?.assigned_hostel) {
     return (
-      <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+      // `Card`, as in `MessWidget` — both used to retype `Card`'s own surface.
+      <Card className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <IconTile icon={Home} />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-ink">{data.assigned_hostel}</p>
+            <p className="truncate text-sm font-semibold text-ink">{data.assigned_hostel}</p>
             <p className="text-xs text-muted">Room {data.room ?? '—'}</p>
           </div>
           <StatusBadge tone={data.logged_in ? 'success' : 'neutral'}>
@@ -70,24 +79,24 @@ export function HostelWidget() {
             {data.volunteers.length} contact{data.volunteers.length === 1 ? '' : 's'} on duty
           </p>
           <Link to={ROUTES.accommodation} className="w-fit">
-            <Button variant="ghost" size="sm" className="gap-1.5">
+            <Button variant="ghost" size="sm">
               Details
-              <ChevronRight size={14} />
+              <ChevronRight size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} />
             </Button>
           </Link>
         </div>
-      </div>
+      </Card>
     );
   }
 
   const requested = data?.registered ?? false;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+    <Card className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <IconTile icon={Home} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-ink">
+          <p className="truncate text-sm font-semibold text-ink">
             {requested ? 'Accommodation requested' : 'Stay on campus'}
           </p>
           <p className="text-xs text-muted">
@@ -101,21 +110,21 @@ export function HostelWidget() {
 
       <div className="border-t border-line pt-3">
         <Link to={ROUTES.accommodation} className="w-fit">
-          <Button variant={requested ? 'ghost' : 'primary'} size="sm" className="gap-1.5">
+          <Button variant={requested ? 'ghost' : 'primary'} size="sm">
             {requested ? 'View or change' : 'Book accommodation'}
-            <ChevronRight size={14} />
+            <ChevronRight size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} />
           </Button>
         </Link>
       </div>
-    </div>
+    </Card>
   );
 }
 
 /** A panel-shaped line for the cases with no figures to show. */
 function PanelNote({ children }: { children: string }) {
   return (
-    <p className="rounded-2xl bg-surface p-4 text-sm text-muted shadow-card ring-1 ring-black/[0.03]">
-      {children}
-    </p>
+    <Card>
+      <p className="text-sm text-muted">{children}</p>
+    </Card>
   );
 }

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BedDouble,
+  BookOpen,
   Building2,
   CheckCircle2,
   DoorOpen,
   Hash,
   Info,
+  LifeBuoy,
+  Lock,
+  MessageSquareWarning,
+  Phone,
   QrCode,
   ReceiptText,
   RefreshCw,
@@ -14,17 +19,35 @@ import {
   Wallet,
 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Hostel, Mess, MessDayEntry, MyHostelResponse, MyMessResponse } from '@/api/types';
-import { ROUTES } from '@/config/routes';
-import { messCuisineLabel } from '@/config/constants';
+import type {
+  Hostel,
+  Mess,
+  MyHostelResponse,
+  MyMessResponse,
+  ProfileCompleteRequest,
+} from '@/api/types';
+import { ROUTES, supportPath } from '@/config/routes';
+import { messCuisineLabel, MESS_PREFERENCES } from '@/config/constants';
 import { messPreferenceLabel } from '@/features/profile/profileDisplay';
-import { currentParticipant } from '@/stores/authStore';
+import { FEST_DAYS } from '@/config/festCalendar';
+import { MessMenuBoard } from '@/features/mess/MessMenuBoard';
+import { MealSlotGrid } from '@/features/mess/MealSlotGrid';
+import { loggedMeals } from '@/features/mess/mealSlots';
+import { currentMenuDay, overrideFor, resolveMenu } from '@/features/mess/messMenu';
+import { currentParticipant, useAuthStore } from '@/stores/authStore';
 import { useLiveQr } from '@/features/qr/useLiveQr';
 import { EntryQrCard } from '@/features/qr/EntryQrCard';
 import { ALLOCATION_POLL_MS, useStayFacilities } from '@/features/stay/useStayFacilities';
 import { deriveStayStatus, type FacilityState } from '@/features/stay/stayStatus';
 import {
+  coordinatorContact,
+  hostelContacts,
+  telHref,
+  type DutyContact,
+} from '@/features/stay/dutyContacts';
+import {
   CHOICE_DESCRIPTION,
+  CHOICE_FACILITIES,
   CHOICE_LABEL,
   PAYMENT_DISCLAIMER,
   STAY_CHOICES,
@@ -40,18 +63,27 @@ import {
 } from '@/features/stay/stayChoice';
 import {
   Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
   ConfirmDialog,
   DetailPanel,
   ErrorState,
   Fact,
   FactList,
   ResultBanner,
+  Select,
   Skeleton,
   StatusBadge,
   ProgressBar,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { cn } from '@/lib/cn';
+
+/** The three values `POST /mess/allocate` can group a student under. */
+const MESS_PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({
+  value: p,
+  label: p === 'non_veg' ? 'Non-veg' : p[0].toUpperCase() + p.slice(1),
+}));
 
 /**
  * Accommodation & Mess — the screen a student lands on the moment their profile
@@ -72,6 +104,13 @@ import { cn } from '@/lib/cn';
  * filters on. Between the two the page polls, so the room number appears here on
  * its own rather than on a reload the student has to think to perform.
  *
+ * It also owns the meal preference. Complete Your Profile used to require one
+ * from every student before their profile could be saved, including the majority
+ * who never take mess; it is asked here instead, of the students who just said
+ * they want meals. And the whole step is skippable — a student can reach the
+ * rest of the app without answering, and the picker will still be waiting when
+ * they come back.
+ *
  * Dressed as every other signed-in screen: `FestivalScreen`, then `DetailPanel`
  * surfaces, the shared `Fact` rows, and the same pass card My QR carries.
  */
@@ -80,6 +119,7 @@ export default function AccommodationPage() {
   const [params, setParams] = useSearchParams();
   const participant = currentParticipant();
   const participantId = participant?.id ?? '';
+  const updateParticipantProfile = useAuthStore((s) => s.updateParticipantProfile);
 
   const [record, setRecord] = useState<StayRecord | null>(() =>
     participantId ? readStayRecord(participantId) : null,
@@ -122,13 +162,99 @@ export default function AccommodationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [justPaid]);
 
-  function choose(choice: StayChoice) {
+  /**
+   * Record the selection — and, when it includes meals, the meal preference that
+   * goes with it.
+   *
+   * The preference is a profile field, so it goes to the server first and the
+   * local selection is only stored if that succeeds. `POST /mess/allocate` reads
+   * `profile.mess_preference` and nothing else, so a mess booking saved without
+   * one is a booking the allocation batch cannot place; asking again is better
+   * than holding a place the organisers will skip over.
+   *
+   * `PATCH /profile/complete` replaces the profile document wholesale, which is
+   * why `profilePayload` resends every other field from the session untouched.
+   */
+  async function choose(choice: StayChoice, preference: string) {
     if (!participantId) return;
+    setActionError(null);
+
+    const wantsMess = CHOICE_FACILITIES[choice].includes('mess');
+    if (wantsMess && preference && preference !== participant?.mess_preference) {
+      const payload = profilePayload(participant, preference);
+      if (!payload) {
+        setActionError(
+          'Your profile is missing some details, so the meal preference could not be saved. Finish your profile and try again.',
+        );
+        return;
+      }
+      setBusy(true);
+      try {
+        updateParticipantProfile(await api.completeProfile(payload));
+      } catch (e) {
+        setActionError(
+          e instanceof ApiClientError ? e.message : 'Could not save your meal preference.',
+        );
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+
     const next: StayRecord = { choice, decided_at: new Date().toISOString(), receipt: null };
     saveStayRecord(participantId, next);
     setRecord(next);
     setEditing(false);
     if (needsPayment(choice)) navigate(ROUTES.accommodationPayment);
+  }
+
+  /**
+   * Change the meal preference on its own, without touching the booking.
+   *
+   * Offered while the hall is still unallotted, which is the window the backend
+   * allows: `PATCH /profile/complete` answers 409 once `mess.mess_id` is set. The
+   * screen hides the control in that state, so the 409 should be unreachable —
+   * but it is surfaced rather than swallowed, because it is also what a student
+   * would hit if the allocation batch ran while this page was open, and "your
+   * hall was just allotted" is exactly what they need to be told.
+   *
+   * Reloads afterwards so the panel re-derives its state from the server rather
+   * than from what we hoped the write did.
+   */
+  async function changePreference(next: string) {
+    if (!next || next === participant?.mess_preference) return;
+    const payload = profilePayload(participant, next);
+    if (!payload) {
+      setActionError(
+        'Your profile is missing some details, so the meal preference could not be saved. Finish your profile and try again.',
+      );
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      updateParticipantProfile(await api.completeProfile(payload));
+      await reload();
+    } catch (e) {
+      setActionError(
+        e instanceof ApiClientError ? e.message : 'Could not save your meal preference.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Leave the question unanswered and carry on into the app.
+   *
+   * Deliberately different from choosing "Neither": nothing is recorded, so the
+   * picker is still waiting on the next visit. A student arriving here straight
+   * from completing their profile may not know yet whether they need a bed, and
+   * making them assert "I need nothing" to get past the step would put a wrong
+   * answer on file.
+   */
+  function skip() {
+    navigate(ROUTES.home, { replace: true });
   }
 
   /**
@@ -204,7 +330,13 @@ export default function AccommodationPage() {
       {loadStatus === 'ready' && data && (
         <>
           {showPicker ? (
-            <ChoicePicker current={live.choice} onChoose={choose} />
+            <ChoicePicker
+              current={live.choice}
+              currentPreference={participant?.mess_preference ?? null}
+              saving={busy}
+              onChoose={choose}
+              onSkip={skip}
+            />
           ) : (
             <>
               {!live.paid && live.choice !== 'neither' && (
@@ -212,12 +344,9 @@ export default function AccommodationPage() {
                   You chose {CHOICE_LABEL[live.choice ?? 'neither'].toLowerCase()}. Nothing is
                   reserved until the {money(stayTotal(live.choice ?? 'neither'))} fee is settled.
                   <div className="mt-2">
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(ROUTES.accommodationPayment)}
-                      className="gap-1.5"
-                    >
-                      <Wallet size={14} /> Go to payment
+                    <Button size="sm" onClick={() => navigate(ROUTES.accommodationPayment)}>
+                      <Wallet size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> Go to
+                      payment
                     </Button>
                   </div>
                 </ResultBanner>
@@ -242,6 +371,8 @@ export default function AccommodationPage() {
                   mess={data.mess}
                   catalogue={data.messHalls}
                   preference={participant?.mess_preference ?? null}
+                  saving={busy}
+                  onChangePreference={(next) => void changePreference(next)}
                 />
 
                 {live.choice !== 'neither' && live.paid && (
@@ -329,20 +460,39 @@ export default function AccommodationPage() {
 /* ----------------------------------------------------------------- picker --- */
 
 /**
- * The four-way choice. Radios rather than four buttons: they are mutually
- * exclusive, arrow keys move between them, and the selected one survives a
- * mis-click on Continue.
+ * The four-way choice, and the meal preference that comes with the two options
+ * that include meals.
+ *
+ * Radios rather than four buttons: they are mutually exclusive, arrow keys move
+ * between them, and the selected one survives a mis-click on Continue.
+ *
+ * The meal preference lives here rather than on Complete Your Profile because
+ * this is the screen where a student decides whether they are eating on campus
+ * at all — so it is asked of the students it applies to, at the moment it
+ * applies, instead of being a required question for the whole fest. It appears
+ * only for "Accommodation and mess" and "Mess only", and Continue stays disabled
+ * until it is answered, because a mess booking with no preference is one
+ * `POST /mess/allocate` cannot place.
  */
 function ChoicePicker({
   current,
+  currentPreference,
+  saving,
   onChoose,
+  onSkip,
 }: {
   current: StayChoice | null;
-  onChoose: (choice: StayChoice) => void;
+  currentPreference: string | null;
+  saving: boolean;
+  onChoose: (choice: StayChoice, preference: string) => void;
+  onSkip: () => void;
 }) {
   const [selected, setSelected] = useState<StayChoice>(current ?? 'both');
+  const [preference, setPreference] = useState<string>(currentPreference ?? '');
   const items = stayLineItems(selected);
   const total = stayTotal(selected);
+  const needsPreference = CHOICE_FACILITIES[selected].includes('mess');
+  const missingPreference = needsPreference && !preference;
 
   return (
     <DetailPanel
@@ -390,6 +540,20 @@ function ChoicePicker({
         })}
       </fieldset>
 
+      {needsPreference && (
+        <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
+          <Select
+            label="Meal preference"
+            required
+            placeholder="Select preference"
+            options={MESS_PREF_OPTIONS}
+            value={preference}
+            onChange={(e) => setPreference(e.target.value)}
+            hint="Halls are allotted against this. You can change it from this screen until a hall is assigned."
+          />
+        </div>
+      )}
+
       {items.length > 0 && (
         <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
           {items.map((item) => (
@@ -405,19 +569,90 @@ function ChoicePicker({
         </div>
       )}
 
-      <Button fullWidth size="lg" onClick={() => onChoose(selected)} className="gap-1.5">
-        {total > 0 ? (
-          <>
-            <Wallet size={16} /> Continue to payment · {money(total)}
-          </>
-        ) : (
-          <>
-            <CheckCircle2 size={16} /> Confirm — nothing to pay
-          </>
+      <div className="flex flex-col gap-2">
+        <Button
+          fullWidth
+          size="lg"
+          loading={saving}
+          disabled={missingPreference}
+          onClick={() => onChoose(selected, preference)}
+        >
+          {total > 0 ? (
+            <>
+              <Wallet size={BUTTON_ICON.lg} strokeWidth={BUTTON_ICON_STROKE} /> Continue to payment
+              · {money(total)}
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={BUTTON_ICON.lg} strokeWidth={BUTTON_ICON_STROKE} /> Confirm —
+              nothing to pay
+            </>
+          )}
+        </Button>
+        {missingPreference && (
+          <p role="alert" className="text-center text-xs text-danger">
+            Choose a meal preference to continue.
+          </p>
         )}
-      </Button>
+        {/* Skipping is a first-class way out of this step, not a hidden one: a
+            student who does not know yet whether they need a bed should not have
+            to claim they need nothing in order to reach the rest of the app. */}
+        <Button fullWidth variant="ghost" disabled={saving} onClick={onSkip}>
+          Skip for now — decide later
+        </Button>
+      </div>
     </DetailPanel>
   );
+}
+
+/**
+ * The whole profile, resent with a new meal preference.
+ *
+ * `PATCH /profile/complete` replaces `profile` wholesale, so a partial payload
+ * would blank every field it omitted. Returns `null` when the session is missing
+ * one of the required answers — which would mean the profile was never completed,
+ * and the caller says so rather than sending a record with holes in it.
+ */
+function profilePayload(
+  participant: ReturnType<typeof currentParticipant>,
+  preference: string,
+): ProfileCompleteRequest | null {
+  if (!participant) return null;
+  const { full_name, dob, house, gender, phone, country, state, city, address, program } =
+    participant;
+  const stage = participant.course_stage;
+  if (
+    !full_name ||
+    !dob ||
+    !house ||
+    !gender ||
+    !phone ||
+    !country ||
+    !state ||
+    !city ||
+    !address ||
+    !program ||
+    !stage
+  ) {
+    return null;
+  }
+  return {
+    full_name,
+    dob,
+    house,
+    gender,
+    phone,
+    mess_preference: preference,
+    country,
+    state,
+    city,
+    address,
+    // Carried through untouched for the same reason as everything else here.
+    emergency_contact: participant.emergency_contact ?? undefined,
+    program,
+    course_stage: stage,
+    photo: participant.photo ?? undefined,
+  };
 }
 
 /* ------------------------------------------------------------ facilities --- */
@@ -463,29 +698,37 @@ function AccommodationPanel({
       }
     >
       {state === 'allocated' && hostel ? (
-        <FactList>
-          <Fact
-            icon={Building2}
-            label="Hostel Block"
-            value={block?.name ?? hostel.assigned_hostel}
-            hint={block ? `Block ${hostel.assigned_hostel}` : undefined}
-          />
-          <Fact icon={Hash} label="Room" value={hostel.room ?? '—'} />
-          <Fact
-            icon={DoorOpen}
-            label="Right Now"
-            value={hostel.logged_in ? 'Inside the block' : 'Outside the block'}
-            hint="Updated by the gate scanner each time you pass through."
-          />
-          {block?.capacity !== undefined && (
+        <div className="flex flex-col gap-4">
+          <FactList>
             <Fact
-              icon={BedDouble}
-              label="Block Capacity"
-              value={`${block.capacity.toLocaleString('en-IN')} beds`}
-              hint={block.category ?? undefined}
+              icon={Building2}
+              label="Hostel Block"
+              value={block?.name ?? hostel.assigned_hostel}
+              hint={block ? `Block ${hostel.assigned_hostel}` : undefined}
             />
-          )}
-        </FactList>
+            <Fact icon={Hash} label="Room" value={hostel.room ?? '—'} />
+            <Fact
+              icon={DoorOpen}
+              label="Right Now"
+              value={hostel.logged_in ? 'Inside the block' : 'Outside the block'}
+              hint="Updated by the gate scanner each time you pass through."
+            />
+            {block?.capacity !== undefined && (
+              <Fact
+                icon={BedDouble}
+                label="Block Capacity"
+                value={`${block.capacity.toLocaleString('en-IN')} beds`}
+                hint={block.category ?? undefined}
+              />
+            )}
+          </FactList>
+
+          {/* Story 5.3. `my_hostel` has always returned these names and numbers
+              to the allotted resident; the dashboard widget shows a count on
+              purpose, and this is the screen the block's details belong on. The
+              coordinator comes from the block's own catalogue record. */}
+          <DutyContacts hostel={hostel} block={block} />
+        </div>
       ) : state === 'awaiting_allocation' ? (
         <div className="flex flex-col gap-3">
           <PanelNote
@@ -518,32 +761,36 @@ function AccommodationPanel({
   );
 }
 
-const SLOTS: (keyof MessDayEntry)[] = ['breakfast', 'lunch', 'dinner'];
-const SLOT_LABEL: Record<keyof MessDayEntry, string> = {
-  breakfast: 'B',
-  lunch: 'L',
-  dinner: 'D',
-};
-
 function MessPanel({
   state,
   mess,
   catalogue,
   preference,
+  saving,
+  onChangePreference,
 }: {
   state: FacilityState;
   mess: MyMessResponse | null;
   catalogue: Mess[];
   preference: string | null;
+  saving: boolean;
+  onChangePreference: (next: string) => void;
 }) {
   const badge = STATE_BADGE[state];
   const hall = mess?.mess_details ?? null;
+  // Locked exactly when the backend locks it. `PATCH /profile/complete` refuses a
+  // change once `mess.mess_id` is set, and `state === 'allocated'` is that same
+  // fact read through `GET /mess/my_mess` — so the screen cannot offer an edit
+  // the API would reject, or refuse one it would allow.
+  const locked = state === 'allocated';
   const slots = mess?.slots ?? [];
-  const total = slots.length * SLOTS.length;
-  const logged = slots.reduce(
-    (sum, day) => sum + SLOTS.filter((slot) => day[slot]?.logged).length,
-    0,
-  );
+  // The published campus menu for whatever this hall cooks, with the hall's own
+  // menu laid over it — `mess.menu` when its team has published one, this
+  // device's copy otherwise. Arrives with `GET /mess/my_mess`, so no extra fetch.
+  const menu = useMemo(() => resolveMenu(hall, overrideFor(hall)), [hall]);
+  // Counted by the same helper the dashboard widget uses, so the "meals checked
+  // in" figure on this screen and the one on the dashboard cannot disagree.
+  const { logged, total } = loggedMeals(slots);
   // `POST /mess/allocate` groups halls by `preference` and looks up the
   // participant's own `profile.mess_preference`, so this is the real shortlist.
   const eligible = preference
@@ -555,11 +802,22 @@ function MessPanel({
       title="Mess"
       trailing={<StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>}
       footer={
-        state === 'allocated'
-          ? 'Your meal preference is taken from your profile — edit it there and the next allocation follows it.'
-          : undefined
+        locked
+          ? 'Your hall was allotted against this preference, so it is fixed for the fest. Ask the mess team at the counter if it is wrong.'
+          : state !== 'not_selected'
+            ? 'You can still change what you eat — halls are allotted against it, and it locks once yours is assigned.'
+            : undefined
       }
     >
+      {state !== 'not_selected' && (
+        <MealPreferenceField
+          preference={preference}
+          locked={locked}
+          saving={saving}
+          onChange={onChangePreference}
+        />
+      )}
+
       {state === 'allocated' && mess ? (
         <>
           <FactList>
@@ -580,13 +838,14 @@ function MessPanel({
                   .filter(Boolean)
                   .join(' · ') || undefined
               }
-              emptyText="Menu not recorded"
+              hint={menu.label}
+              emptyText="Dietary preference not recorded"
             />
             <Fact
               icon={QrCode}
               label="Meals Checked In"
               value={`${logged} of ${total}`}
-              hint="Breakfast, lunch and dinner across the five days."
+              hint={`Breakfast, lunch and dinner across the ${FEST_DAYS} days your pass covers.`}
             />
           </FactList>
 
@@ -599,37 +858,36 @@ function MessPanel({
             />
           )}
 
-          {slots.length > 0 && (
-            <div className="grid grid-cols-5 gap-1.5 text-center text-xs">
-              {slots.map((day, i) => (
-                <div key={i} className="flex flex-col gap-1">
-                  <span className="font-medium uppercase tracking-wide text-muted">
-                    Day {i + 1}
-                  </span>
-                  {SLOTS.map((slot) => (
-                    <span
-                      key={slot}
-                      className={cn(
-                        'rounded-md py-0.5 font-semibold',
-                        day[slot]?.logged
-                          ? 'bg-success-bg text-success'
-                          : 'bg-surface-2 font-medium text-muted',
-                      )}
-                    >
-                      {SLOT_LABEL[slot]}
-                    </span>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* The same meal card the dashboard widget draws, from one component —
+              it was written out in full on both screens. */}
+          <MealSlotGrid slots={slots} />
+
+          {/* ---- what is actually being served ---- */}
+          <div className="border-t border-line pt-4">
+            <h4 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink">
+              <BookOpen size={15} strokeWidth={2.25} aria-hidden /> Menu and meal timings
+            </h4>
+            <MessMenuBoard
+              menu={menu}
+              initialDay={currentMenuDay()}
+              /* The schedule runs six days; a participant's `mess.entries` is
+                 seeded with five. Day 6 has a menu and no swipe to log against
+                 it, which is worth saying where someone would otherwise turn up
+                 expecting one. */
+              dayNote={(day) =>
+                day > FEST_DAYS
+                  ? `Day ${day} is on the fest schedule but your mess pass carries ${FEST_DAYS} days of swipes, so there is no entry to log against it. Check with your hall.`
+                  : null
+              }
+            />
+          </div>
         </>
       ) : state === 'awaiting_allocation' ? (
         <div className="flex flex-col gap-3">
           <PanelNote
             icon={RefreshCw}
             title="Meals reserved — awaiting allocation"
-            body="Halls are assigned in batches against the meal preference on your profile. Yours appears here as soon as it is run."
+            body="Halls are assigned in batches against the meal preference you chose. Yours appears here as soon as it is run."
           />
           {eligible.length > 0 && (
             <p className="text-sm leading-relaxed text-muted">
@@ -657,6 +915,74 @@ function MessPanel({
   );
 }
 
+/**
+ * The meal preference, editable until a hall is allotted and read-only after.
+ *
+ * Both states are shown deliberately, rather than hiding the control once it
+ * locks: a student who cannot change what they eat needs to be told that, and
+ * told why, not left looking for a field that has quietly disappeared. The badge
+ * carries the state ("Editable" / "Locked") so it reads the same at a glance as
+ * the panel headers around it.
+ *
+ * Save is disabled until the value actually differs, so the button cannot fire a
+ * write that changes nothing.
+ */
+function MealPreferenceField({
+  preference,
+  locked,
+  saving,
+  onChange,
+}: {
+  preference: string | null;
+  locked: boolean;
+  saving: boolean;
+  onChange: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState<string>(preference ?? '');
+  const dirty = Boolean(draft) && draft !== preference;
+
+  if (locked) {
+    return (
+      <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-sm font-medium text-ink">
+            <Lock size={14} strokeWidth={2.25} aria-hidden className="shrink-0 text-muted" />
+            Meal preference
+          </span>
+          <StatusBadge tone="neutral">Locked</StatusBadge>
+        </div>
+        <p className="text-sm text-muted">
+          <span className="font-semibold text-ink">
+            {messPreferenceLabel(preference) ?? 'Not recorded'}
+          </span>{' '}
+          — fixed now that a hall is allotted.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface-2 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium text-ink">Meal preference</span>
+        <StatusBadge tone="info">Editable</StatusBadge>
+      </div>
+      <Select
+        label="What you eat"
+        options={MESS_PREF_OPTIONS}
+        placeholder="Select preference"
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        hint="Locks as soon as your hall is allotted."
+      />
+      <Button size="sm" loading={saving} disabled={!dirty} onClick={() => onChange(draft)}>
+        Save preference
+      </Button>
+    </div>
+  );
+}
+
 /** The one-line-with-an-icon block a panel shows when it has no figures yet. */
 function PanelNote({
   icon: Icon,
@@ -674,6 +1000,97 @@ function PanelNote({
         <p className="font-semibold text-ink">{title}</p>
         <p className="mt-0.5 text-sm leading-relaxed text-muted">{body}</p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The people on duty for this participant's block — Story 5.3.
+ *
+ * `GET /hostels/my_hostel` returns `volunteers[{name, phone}]` to the allotted
+ * resident, and has since before this screen existed; what was missing was
+ * anywhere that printed them. The coordinator is pulled from the block's own
+ * catalogue record, which `GET /hostels` returns whole to every signed-in user.
+ *
+ * Both go through `features/stay/dutyContacts.ts` first, because the backend
+ * substitutes the role word for a missing name and the literal string `"N/A"`
+ * for a missing phone — a card headed *volunteer* with *N/A* under it is worse
+ * than no card. A block with nobody reachable says so and points at the
+ * fest-wide directory instead of rendering an empty list.
+ */
+function DutyContacts({ hostel, block }: { hostel: MyHostelResponse; block: Hostel | undefined }) {
+  const coordinator = coordinatorContact(block?.coordinator);
+  const volunteers = hostelContacts(hostel);
+  const people: (DutyContact & { badge?: string })[] = [
+    ...(coordinator ? [{ ...coordinator, badge: 'Coordinator' }] : []),
+    ...volunteers,
+  ];
+
+  return (
+    <div className="rounded-2xl bg-surface-2 p-4">
+      {/* Same sub-heading treatment as "Menu and meal timings" in the mess panel:
+          15px glyph, `text-sm font-bold uppercase tracking-wide`. This screen had
+          the two nested headings in two different styles — one base-size and
+          semibold, one small caps and bold — which made two blocks doing the same
+          job inside two panels look like different kinds of thing. */}
+      <div className="mb-2 flex items-center gap-2">
+        <LifeBuoy size={15} strokeWidth={2.25} aria-hidden className="shrink-0 text-ink" />
+        <h3 className="text-sm font-bold uppercase tracking-wide text-ink">
+          Who to contact at your block
+        </h3>
+      </div>
+
+      {/* The heading owns the space under it now (`mb-2` above), so these no
+          longer add a margin of their own on top of it — two of them disagreed
+          about how much that should be. */}
+      {people.length === 0 ? (
+        <p className="text-sm leading-relaxed text-muted">
+          No contacts recorded for this block yet. Every published coordinator across the fest is
+          listed under Help &amp; Contacts.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {people.map((person, i) => (
+            <li
+              key={`${person.name}-${person.phone ?? i}`}
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
+            >
+              <span className="text-sm font-medium text-ink">
+                {person.name}
+                {person.badge && (
+                  <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    {person.badge}
+                  </span>
+                )}
+              </span>
+              {person.phone ? (
+                <a
+                  href={telHref(person.phone)}
+                  className="tap inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline"
+                >
+                  <Phone size={13} strokeWidth={2.5} aria-hidden />
+                  {person.phone}
+                </a>
+              ) : (
+                <span className="text-xs text-muted">No number recorded</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Story 5.4. The block's phone numbers are what you want for something
+          urgent; a written report is what you want for a broken desk that needs
+          somebody to remember it tomorrow. Both live here because both start
+          from the same thought, and the report is the one that leaves a record
+          the team can be held to. */}
+      <Link
+        to={supportPath('report')}
+        className="tap mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+      >
+        <MessageSquareWarning size={14} strokeWidth={2.5} aria-hidden />
+        Report a problem with your room or hall
+      </Link>
     </div>
   );
 }

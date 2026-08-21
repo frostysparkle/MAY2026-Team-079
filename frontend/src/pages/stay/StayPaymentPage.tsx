@@ -16,7 +16,14 @@ import {
   stayLineItems,
   stayTotal,
 } from '@/features/stay/stayChoice';
-import { Button, DetailPanel, ResultBanner, StatusBadge } from '@/components/ui';
+import {
+  Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
+  DetailPanel,
+  ResultBanner,
+  StatusBadge,
+} from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { cn } from '@/lib/cn';
 
@@ -178,8 +185,8 @@ export default function StayPaymentPage() {
       </DetailPanel>
 
       <div className="flex flex-col gap-2">
-        <Button fullWidth size="lg" loading={busy} onClick={() => void pay()} className="gap-1.5">
-          <Lock size={16} /> Pay {money(total)}
+        <Button fullWidth size="lg" loading={busy} onClick={() => void pay()}>
+          <Lock size={BUTTON_ICON.lg} strokeWidth={BUTTON_ICON_STROKE} /> Pay {money(total)}
         </Button>
         <Button
           fullWidth
