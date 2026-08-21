@@ -1,48 +1,105 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { path, ROUTES } from '@/config/routes';
 import { PublicPageChrome } from '@/features/landing/PublicPageChrome';
-import { EmptyState, Select, Skeleton } from '@/components/ui';
-import { announce } from '@/components/a11y/Announcer';
+import {
+  EmptyState,
+  ListToolbar,
+  Skeleton,
+  useListFilters,
+  type FilterSpec,
+} from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { EVENT_GRID_CLASS, EventPosterCard } from '@/features/events/EventPosterCard';
 import { usePublicWorkshops } from '@/features/workshops/usePublicWorkshops';
-import { workshopDays, WORKSHOP_COVER } from '@/features/workshops/workshopView';
+import { workshopDays, WORKSHOP_COVER, type WorkshopView } from '@/features/workshops/workshopView';
 import { shiftLabel, WORKSHOP_SHIFTS } from '@/features/workshops/workshopSlot';
 
 /**
- * Public, pre-login workshops catalogue — the flyer grid, filterable by day and
- * shift.
+ * Public, pre-login workshops catalogue — the flyer grid, searchable and
+ * filterable by day and shift.
  *
  * The programme comes from `GET /workshops/public`, so a visitor with no
  * account sees exactly what the Super Admin has published. The day and shift a
  * workshop runs in are carried by its `slot_id`; see `workshopSlot.ts`.
+ *
+ * The filter is the same one the dashboard uses — `useListFilters` for
+ * URL-backed state and `ListToolbar` for the single row of controls — so a
+ * visitor and an admin narrow the programme the same way, and a filtered view
+ * can be pasted into a chat and still open filtered. Mirrors
+ * `pages/staff/admin/AdminWorkshopsPage.tsx`; the only field left out is Seats,
+ * because the public record carries no registration count to filter on.
  */
 
-const ALL = 'all';
+/** URL query keys. Kept short: they are user-visible in a shared link. */
+const DAY_KEY = 'day';
+const SHIFT_KEY = 'shift';
+
+/**
+ * Lives in the advanced row, where `ListToolbar` renders the label on screen —
+ * hence a short noun and an "Any …" catch-all, rather than the "Filter by …"
+ * phrasing the sr-only inline labels use.
+ */
+const SHIFT_SPEC: FilterSpec = {
+  key: SHIFT_KEY,
+  label: 'Shift',
+  anyLabel: 'Any shift',
+  options: WORKSHOP_SHIFTS.map((shift) => ({ value: shift, label: shiftLabel(shift) })),
+};
+
+/** A workshop view plus the text the search box matches against. */
+interface WorkshopRow {
+  view: WorkshopView;
+  /** Lowercased haystack, joined once at load rather than per keystroke. */
+  haystack: string;
+}
 
 export default function PublicWorkshopsPage() {
   const { views, loading } = usePublicWorkshops();
-  const [day, setDay] = useState<string>(ALL);
-  const [shift, setShift] = useState<string>(ALL);
 
-  const days = useMemo(() => workshopDays(views), [views]);
+  const rows = useMemo<WorkshopRow[]>(
+    () =>
+      views.map((view) => ({
+        view,
+        haystack: [
+          view.name,
+          view.id,
+          view.venue,
+          view.dayLabel,
+          view.slot.shift && shiftLabel(view.slot.shift),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase(),
+      })),
+    [views],
+  );
+
+  // Days come from the programme itself, so the filter can only offer a day that
+  // something actually runs on.
+  const daySpec = useMemo<FilterSpec>(
+    () => ({
+      key: DAY_KEY,
+      label: 'Filter by day',
+      anyLabel: 'All days',
+      options: workshopDays(views).map((day) => ({ value: day.date, label: day.label })),
+    }),
+    [views],
+  );
+
+  const allSpecs = useMemo(() => [daySpec, SHIFT_SPEC], [daySpec]);
+  const filters = useListFilters(allSpecs);
 
   const visible = useMemo(
     () =>
-      views.filter(
-        (w) => (day === ALL || w.slot.date === day) && (shift === ALL || w.slot.shift === shift),
-      ),
-    [views, day, shift],
-  );
+      rows.filter((row) => {
+        if (!filters.matches(DAY_KEY, row.view.slot.date)) return false;
+        if (!filters.matches(SHIFT_KEY, row.view.slot.shift)) return false;
 
-  function updateDay(next: string) {
-    setDay(next);
-    announce(`${countFor(views, next, shift)} workshops shown`);
-  }
-  function updateShift(next: string) {
-    setShift(next);
-    announce(`${countFor(views, day, next)} workshops shown`);
-  }
+        if (!filters.needle) return true;
+        return row.haystack.includes(filters.needle);
+      }),
+    [rows, filters],
+  );
 
   return (
     <PublicPageChrome title="Workshops" active="Workshops" width="xl">
@@ -50,27 +107,6 @@ export default function PublicWorkshopsPage() {
         <p className="text-center text-sm text-muted">
           You can book only one workshop per shift on each day.
         </p>
-
-        <div className="mx-auto grid w-full max-w-md grid-cols-2 gap-3">
-          <Select
-            label="Day"
-            value={day}
-            onChange={(e) => updateDay(e.target.value)}
-            options={[
-              { value: ALL, label: `All days (${views.length})` },
-              ...days.map((d) => ({ value: d.date, label: `${d.label} (${d.count})` })),
-            ]}
-          />
-          <Select
-            label="Shift"
-            value={shift}
-            onChange={(e) => updateShift(e.target.value)}
-            options={[
-              { value: ALL, label: 'All shifts' },
-              ...WORKSHOP_SHIFTS.map((s) => ({ value: s, label: shiftLabel(s) })),
-            ]}
-          />
-        </div>
 
         {loading ? (
           // Placeholders in the real grid, so the page does not reflow.
@@ -82,42 +118,50 @@ export default function PublicWorkshopsPage() {
               </li>
             ))}
           </ul>
-        ) : visible.length === 0 ? (
+        ) : views.length === 0 ? (
           <EmptyState
-            title={views.length === 0 ? 'No workshops published yet' : 'No workshops match'}
-            description={
-              views.length === 0
-                ? 'The programme will appear here once workshops are published.'
-                : 'Try a different day or shift combination.'
-            }
+            title="No workshops published yet"
+            description="The programme will appear here once workshops are published."
           />
         ) : (
-          <ul className={cn(EVENT_GRID_CLASS)}>
-            {visible.map((w) => (
-              <EventPosterCard
-                key={w.id}
-                to={path(ROUTES.publicWorkshopDetail, { workshopId: w.id })}
-                name={w.name}
-                poster={w.poster}
-                fallbackImage={WORKSHOP_COVER}
-                meta={[w.dayLabel, w.slot.shift && shiftLabel(w.slot.shift)]
-                  .filter(Boolean)
-                  .join(' · ')}
+          <>
+            {/* Above the grid rather than in a panel of its own: the programme is
+                the page, and the toolbar reads as narrowing what follows it. */}
+            <ListToolbar
+              filters={filters}
+              specs={[daySpec]}
+              advancedSpecs={[SHIFT_SPEC]}
+              searchLabel="Search workshops"
+              searchPlaceholder="Search workshops by name, ID, or venue…"
+              shown={visible.length}
+              total={views.length}
+              noun="workshops"
+            />
+
+            {visible.length === 0 ? (
+              <EmptyState
+                title="No workshops match"
+                description="Try a different search, or clear the filters."
               />
-            ))}
-          </ul>
+            ) : (
+              <ul className={cn(EVENT_GRID_CLASS)}>
+                {visible.map(({ view }) => (
+                  <EventPosterCard
+                    key={view.id}
+                    to={path(ROUTES.publicWorkshopDetail, { workshopId: view.id })}
+                    name={view.name}
+                    poster={view.poster}
+                    fallbackImage={WORKSHOP_COVER}
+                    meta={[view.dayLabel, view.slot.shift && shiftLabel(view.slot.shift)]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  />
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
     </PublicPageChrome>
   );
-}
-
-function countFor(
-  views: ReturnType<typeof usePublicWorkshops>['views'],
-  day: string,
-  shift: string,
-): number {
-  return views.filter(
-    (w) => (day === ALL || w.slot.date === day) && (shift === ALL || w.slot.shift === shift),
-  ).length;
 }

@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench } from 'lucide-react';
+import { CalendarDays, Wrench } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Workshop } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
+  BUTTON_ICON,
+  BUTTON_ICON_STROKE,
   EmptyState,
   ErrorState,
-  SectionHeading,
-  Skeleton,
+  SectionBlock,
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
-import { EVENT_GRID_CLASS, EventPosterCard } from '@/features/events/EventPosterCard';
+import {
+  EVENT_GRID_CLASS,
+  EventGridSkeleton,
+  EventPosterCard,
+} from '@/features/events/EventPosterCard';
 import { slotStatus } from '@/features/workshops/registrationCache';
 import { useLiveSeats } from '@/features/workshops/useLiveSeats';
 import { sortWorkshops, workshopView, WORKSHOP_COVER } from '@/features/workshops/workshopView';
@@ -73,8 +78,14 @@ export default function WorkshopsListPage() {
     return [...byDay.values()];
   }, [workshops]);
 
+  // Inside the screen rather than instead of it — see `EventsListPage` for why a
+  // bare `ErrorState` is a full-bleed message with no section title on it.
   if (loadError) {
-    return <ErrorState title="Could not load workshops" description={loadError} onRetry={load} />;
+    return (
+      <FestivalScreen title="Workshops" eyebrow="Programme">
+        <ErrorState title="Could not load workshops" description={loadError} onRetry={load} />
+      </FestivalScreen>
+    );
   }
 
   const seatsLeft =
@@ -89,21 +100,17 @@ export default function WorkshopsListPage() {
           ? 'Loading the programme…'
           : `${workshops.length} workshop${workshops.length === 1 ? '' : 's'} · ${seatsLeft.toLocaleString()} seats left · one booking per shift`
       }
+      // Carries its glyph now, like the "Schedule" button on the event catalogue
+      // and the "Fest schedule" one on an event's own page. It was the only
+      // schedule link in the participant area with a bare label.
       actions={
         <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)}>
-          Fest schedule
+          <CalendarDays size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Fest schedule
         </Button>
       }
     >
       {workshops === null ? (
-        <ul className={EVENT_GRID_CLASS} aria-busy="true">
-          {Array.from({ length: 8 }, (_, i) => (
-            <li key={i} className="flex flex-col gap-2">
-              <Skeleton className="aspect-[4/5] w-full rounded-2xl" />
-              <Skeleton className="h-4 w-3/4" />
-            </li>
-          ))}
-        </ul>
+        <EventGridSkeleton />
       ) : workshops.length === 0 ? (
         <EmptyState
           title="No workshops yet"
@@ -112,18 +119,17 @@ export default function WorkshopsListPage() {
         />
       ) : (
         sections.map((section) => (
-          <section key={section.key} className="flex flex-col gap-4">
-            <SectionHeading
-              title={section.label}
-              meta={`${section.views.length} workshop${section.views.length === 1 ? '' : 's'}`}
-            />
-
+          <SectionBlock
+            key={section.key}
+            title={section.label}
+            meta={`${section.views.length} workshop${section.views.length === 1 ? '' : 's'}`}
+          >
             <ul className={EVENT_GRID_CLASS}>
               {section.views.map((view) => (
                 <WorkshopPosterCard key={view.id} view={view} />
               ))}
             </ul>
-          </section>
+          </SectionBlock>
         ))
       )}
     </FestivalScreen>

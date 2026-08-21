@@ -6,19 +6,29 @@ import type { Workshop } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import {
   ActionMenu,
+  ANY,
   Button,
   EmptyState,
   ErrorState,
+  ListToolbar,
   ResultBanner,
   SectionHeading,
   Skeleton,
   StatusBadge,
+  useListFilters,
+  type FilterSpec,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { EVENT_GRID_CLASS, EventPosterCard } from '@/features/events/EventPosterCard';
 import { useAdminWorkshopActions } from '@/features/workshops/adminWorkshopActions';
-import { workshopView, sortWorkshops, WORKSHOP_COVER } from '@/features/workshops/workshopView';
-import { shiftLabel, workshopDayLabel } from '@/features/workshops/workshopSlot';
+import {
+  workshopDays,
+  workshopView,
+  sortWorkshops,
+  WORKSHOP_COVER,
+  type WorkshopView,
+} from '@/features/workshops/workshopView';
+import { shiftLabel, workshopDayLabel, WORKSHOP_SHIFTS } from '@/features/workshops/workshopSlot';
 
 /**
  * Super Admin workshop dashboard, dressed as the festival programme — the same
@@ -28,15 +38,49 @@ import { shiftLabel, workshopDayLabel } from '@/features/workshops/workshopSlot'
  * Authoring lives in `AdminWorkshopEditorPage`. Mirrors `AdminEventsPage`.
  */
 
+/** Workshops whose slot id carries no date still need somewhere to live. */
+const UNDATED = 'Unscheduled';
+
+/** URL query keys. Kept short: they are user-visible in a shared link. */
+const DAY_KEY = 'day';
+const SHIFT_KEY = 'shift';
+const SEATS_KEY = 'seats';
+
+/**
+ * Both live in the advanced row, where `ListToolbar` renders the label on screen
+ * — hence short nouns and "Any …" catch-alls, matching Staffing on Hostels
+ * rather than the "Filter by …" phrasing the sr-only inline labels use.
+ */
+const SHIFT_SPEC: FilterSpec = {
+  key: SHIFT_KEY,
+  label: 'Shift',
+  anyLabel: 'Any shift',
+  options: WORKSHOP_SHIFTS.map((shift) => ({ value: shift, label: shiftLabel(shift) })),
+};
+
+const SEATS_SPEC: FilterSpec = {
+  key: SEATS_KEY,
+  label: 'Seats',
+  anyLabel: 'Any seats',
+  options: [
+    { value: 'available', label: 'Seats available' },
+    { value: 'full', label: 'Full' },
+  ],
+};
+
+/** A workshop view plus the text the search box matches against. */
+interface WorkshopRow {
+  view: WorkshopView;
+  /** Lowercased haystack, joined once at load rather than per keystroke. */
+  haystack: string;
+}
+
 /** A day heading plus the workshops running that day. */
 interface Section {
   key: string;
   label: string;
-  views: ReturnType<typeof workshopView>[];
+  views: WorkshopView[];
 }
-
-/** Workshops whose slot id carries no date still need somewhere to live. */
-const UNDATED = 'Unscheduled';
 
 export default function AdminWorkshopsPage() {
   const navigate = useNavigate();
@@ -60,12 +104,72 @@ export default function AdminWorkshopsPage() {
 
   const actions = useAdminWorkshopActions({ onDeleted: load });
 
-  const sections = useMemo<Section[]>(() => {
-    if (!workshops) return [];
-    const views = sortWorkshops(workshops.map(workshopView));
+  /* ----------------------------------------------------- filter / search --- */
 
+  // Sorted here rather than after filtering: programme order is a property of
+  // the collection, not of whatever the current search left behind.
+  const views = useMemo(
+    () => (workshops ? sortWorkshops(workshops.map(workshopView)) : []),
+    [workshops],
+  );
+
+  const rows = useMemo<WorkshopRow[]>(
+    () =>
+      views.map((view) => ({
+        view,
+        haystack: [
+          view.name,
+          view.id,
+          view.venue,
+          view.dayLabel,
+          view.slot.shift && shiftLabel(view.slot.shift),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase(),
+      })),
+    [views],
+  );
+
+  // Days come from the programme itself, so the filter can only offer a day that
+  // something actually runs on.
+  const daySpec = useMemo<FilterSpec>(
+    () => ({
+      key: DAY_KEY,
+      label: 'Filter by day',
+      anyLabel: 'All days',
+      options: workshopDays(views).map((day) => ({ value: day.date, label: day.label })),
+    }),
+    [views],
+  );
+
+  const allSpecs = useMemo(() => [daySpec, SHIFT_SPEC, SEATS_SPEC], [daySpec]);
+  const filters = useListFilters(allSpecs);
+
+  const visible = useMemo(() => {
+    const seats = filters.values[SEATS_KEY] ?? ANY;
+
+    return rows.filter((row) => {
+      if (!filters.matches(DAY_KEY, row.view.slot.date)) return false;
+      if (!filters.matches(SHIFT_KEY, row.view.slot.shift)) return false;
+
+      // `seatsLeft` is undefined when the record carries no registration count.
+      // An unknown count is not evidence either way, so it answers neither
+      // "available" nor "full" rather than being guessed into one of them.
+      const { seatsLeft } = row.view;
+      if (seats === 'available' && (seatsLeft === undefined || seatsLeft === 0)) return false;
+      if (seats === 'full' && seatsLeft !== 0) return false;
+
+      if (!filters.needle) return true;
+      return row.haystack.includes(filters.needle);
+    });
+  }, [rows, filters]);
+
+  // Group what survived the filters, so a narrowed programme keeps its day
+  // headings and an emptied day drops out rather than heading nothing.
+  const sections = useMemo<Section[]>(() => {
     const byDay = new Map<string, Section>();
-    for (const view of views) {
+    for (const { view } of visible) {
       const key = view.slot.date ?? UNDATED;
       const label = view.slot.date ? workshopDayLabel(view.slot.date) : UNDATED;
       const section = byDay.get(key) ?? { key, label, views: [] };
@@ -73,12 +177,15 @@ export default function AdminWorkshopsPage() {
       byDay.set(key, section);
     }
     return [...byDay.values()];
-  }, [workshops]);
+  }, [visible]);
+
+  /* ------------------------------------------------------------- render --- */
 
   if (loadError) {
     return <ErrorState title="Could not load workshops" description={loadError} onRetry={load} />;
   }
 
+  const total = workshops?.length ?? 0;
   const totalSeats = workshops?.reduce((sum, w) => sum + w.capacity, 0) ?? 0;
 
   return (
@@ -87,7 +194,7 @@ export default function AdminWorkshopsPage() {
       subtitle={
         workshops === null
           ? 'Loading the programme…'
-          : `${workshops.length} workshop${workshops.length === 1 ? '' : 's'} · ${totalSeats} seats`
+          : `${total} workshop${total === 1 ? '' : 's'} · ${totalSeats} seats`
       }
       actions={
         <Button onClick={() => navigate(ROUTES.adminWorkshopNew)} className="gap-1.5">
@@ -110,51 +217,74 @@ export default function AdminWorkshopsPage() {
             </li>
           ))}
         </ul>
-      ) : workshops.length === 0 ? (
+      ) : total === 0 ? (
         <EmptyState
           title="No workshops yet"
           description="Create one and it appears here and in the public catalogue."
           icon={Wrench}
         />
       ) : (
-        sections.map((section) => (
-          <section key={section.key} className="flex flex-col gap-4">
-            <SectionHeading
-              title={section.label}
-              meta={`${section.views.length} workshop${section.views.length === 1 ? '' : 's'}`}
-            />
+        <>
+          {/* Above the grid rather than in a panel of its own: the programme is
+              the page, and the toolbar reads as narrowing what follows it. */}
+          <ListToolbar
+            filters={filters}
+            specs={[daySpec]}
+            advancedSpecs={[SHIFT_SPEC, SEATS_SPEC]}
+            searchLabel="Search workshops"
+            searchPlaceholder="Search workshops by name, ID, or venue…"
+            shown={visible.length}
+            total={total}
+            noun="workshops"
+          />
 
-            <ul className={EVENT_GRID_CLASS}>
-              {section.views.map((view) => (
-                <EventPosterCard
-                  key={view.id}
-                  to={path(ROUTES.adminWorkshopEdit, { workshopId: view.id })}
-                  name={view.name}
-                  poster={view.poster}
-                  fallbackImage={WORKSHOP_COVER}
-                  meta={[view.slot.shift && shiftLabel(view.slot.shift), view.venue]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  badge={
-                    view.seatsLeft === 0 && (
-                      <StatusBadge tone="danger" className="shadow-card ring-1 ring-line">
-                        Full
-                      </StatusBadge>
-                    )
-                  }
-                  overlay={
-                    view.workshop && (
-                      <ActionMenu
-                        label={`Actions for ${view.name}`}
-                        items={actions.itemsFor(view.workshop)}
-                      />
-                    )
-                  }
+          {visible.length === 0 ? (
+            <EmptyState
+              title="No matching workshops"
+              description="Try a different search, or clear the filters."
+              icon={Wrench}
+            />
+          ) : (
+            sections.map((section) => (
+              <section key={section.key} className="flex flex-col gap-4">
+                <SectionHeading
+                  title={section.label}
+                  meta={`${section.views.length} workshop${section.views.length === 1 ? '' : 's'}`}
                 />
-              ))}
-            </ul>
-          </section>
-        ))
+
+                <ul className={EVENT_GRID_CLASS}>
+                  {section.views.map((view) => (
+                    <EventPosterCard
+                      key={view.id}
+                      to={path(ROUTES.adminWorkshopEdit, { workshopId: view.id })}
+                      name={view.name}
+                      poster={view.poster}
+                      fallbackImage={WORKSHOP_COVER}
+                      meta={[view.slot.shift && shiftLabel(view.slot.shift), view.venue]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      badge={
+                        view.seatsLeft === 0 && (
+                          <StatusBadge tone="danger" className="shadow-card ring-1 ring-line">
+                            Full
+                          </StatusBadge>
+                        )
+                      }
+                      overlay={
+                        view.workshop && (
+                          <ActionMenu
+                            label={`Actions for ${view.name}`}
+                            items={actions.itemsFor(view.workshop)}
+                          />
+                        )
+                      }
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
+        </>
       )}
 
       {actions.dialog}

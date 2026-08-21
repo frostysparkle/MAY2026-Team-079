@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
 import type { Workshop } from '@/api/types';
-import { ROUTES } from '@/config/routes';
+import { path, ROUTES } from '@/config/routes';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { WorkshopTeamPanel } from '@/features/workshops/WorkshopTeamPanel';
 import {
   Button,
   Card,
@@ -41,6 +42,13 @@ export default function AdminWorkshopEditorPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * The stored record, kept alongside the form fields for the team panel below —
+   * `workshop_team` is not editable here, it is assigned through its own routes.
+   * Refreshing it after a team change deliberately does *not* re-hydrate the
+   * form, so an unsaved edit survives assigning a volunteer.
+   */
+  const [record, setRecord] = useState<Workshop | null>(null);
 
   const [id, setId] = useState('');
   const [name, setName] = useState('');
@@ -71,6 +79,7 @@ export default function AdminWorkshopEditorPage() {
 
     function hydrate(workshop: Workshop) {
       const slot = parseSlotId(workshop.slot_id);
+      setRecord(workshop);
       setId(workshop.workshop_id);
       setName(workshop.name);
       setVenue(workshop.venue);
@@ -121,6 +130,15 @@ export default function AdminWorkshopEditorPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Re-reads the record only — the form keeps whatever is typed into it. */
+  function refreshRecord() {
+    if (!workshopId) return;
+    api
+      .listWorkshops()
+      .then((all) => setRecord(all.find((w) => w.workshop_id === workshopId) ?? null))
+      .catch(() => undefined);
   }
 
   const back = { label: 'Workshops', onClick: () => navigate(ROUTES.adminWorkshops) };
@@ -299,6 +317,44 @@ export default function AdminWorkshopEditorPage() {
           </Button>
         </div>
       </form>
+
+      {/* Outside the form on purpose: these are immediate writes to their own
+          routes, not part of the workshop's draft, and a submit button in a form
+          would save the workshop as a side effect of assigning a volunteer.
+          Only on edit — a workshop must exist before anybody can be put on it. */}
+      {isEdit && workshopId && (
+        <div className="mt-8 flex flex-col gap-4">
+          <p className="text-sm text-muted">
+            Volunteers and workshop managers assigned here get the two scanners and the workshop
+            desk for this workshop — the attendance figures, the attendee and absentee lists, and
+            the exports.
+          </p>
+          {/* `GET /workshops` carries the team but no names for it, so the members
+              are widened to the panel's shape with the name left null. The desk
+              gets the named version from the participation route instead. */}
+          <WorkshopTeamPanel
+            workshopId={workshopId}
+            team={record?.workshop_team?.map((member) => ({
+              user_id: member.user_id,
+              role: member.role,
+              attendance: member.attendance,
+              name: null,
+              phone: null,
+            }))}
+            canManage
+            onChanged={refreshRecord}
+          />
+          <div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate(path(ROUTES.workshopManage, { workshopId }))}
+            >
+              Open the workshop desk
+            </Button>
+          </div>
+        </div>
+      )}
     </FestivalScreen>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, Pencil, ScanLine, Trash2 } from 'lucide-react';
+import { BarChart3, DoorOpen, ExternalLink, Pencil, ScanLine, Trash2 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Workshop } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
@@ -50,9 +50,22 @@ export function useAdminWorkshopActions({
           navigate(path(ROUTES.adminWorkshopEdit, { workshopId: workshop.workshop_id })),
       },
       {
+        // First of the operational items: it is the screen that answers "how did
+        // this workshop go", and both scanners hang off it.
+        label: 'Workshop desk',
+        icon: BarChart3,
+        onSelect: () => navigate(path(ROUTES.workshopManage, { workshopId: workshop.workshop_id })),
+      },
+      {
         label: 'Scan attendance',
         icon: ScanLine,
         onSelect: () => navigate(path(ROUTES.scanWorkshop, { workshopId: workshop.workshop_id })),
+      },
+      {
+        label: 'On-spot scanner',
+        icon: DoorOpen,
+        onSelect: () =>
+          navigate(path(ROUTES.scanWorkshopOnSpot, { workshopId: workshop.workshop_id })),
       },
       {
         label: 'View public page',

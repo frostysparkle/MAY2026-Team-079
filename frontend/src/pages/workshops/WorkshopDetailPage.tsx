@@ -6,10 +6,12 @@ import type { Workshop } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import {
   Button,
+  DetailPanel,
   ErrorState,
+  Fact,
+  FactList,
   ProgressBar,
   ResultBanner,
-  SectionHeading,
   Skeleton,
   StatusBadge,
 } from '@/components/ui';
@@ -117,9 +119,10 @@ export default function WorkshopDetailPage() {
         .join(' · ')}
       back={backToWorkshops}
     >
-      <section className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
-        <SectionHeading title={view.name} />
-
+      {/* `DetailPanel`, like every other detail panel in the participant area.
+          This was the same surface written out by hand, one padding step short of
+          the shared one at `sm`. */}
+      <DetailPanel title={view.name}>
         <div className="flex flex-wrap items-center gap-2">
           {view.dayLabel && <StatusBadge tone="info">{view.dayLabel}</StatusBadge>}
           {view.slot.shift && (
@@ -136,14 +139,20 @@ export default function WorkshopDetailPage() {
           )}
         </div>
 
-        <dl className="grid gap-2 sm:grid-cols-2">
-          <Fact icon={MapPin} label="Venue" value={view.venue || '—'} />
+        {/* The shared `FactList`/`Fact`, so a workshop's venue and seat count read
+            exactly like a hostel block's or a mess hall's on the Stay screen and a
+            checkpoint's on My QR. This page had its own two-up grid of small tiles
+            with a 10px uppercase label and no icon tile — a fourth way of printing
+            a label and a value in a section that already had one. */}
+        <FactList>
+          <Fact icon={MapPin} label="Venue" value={view.venue || undefined} />
           <Fact
             icon={Users}
-            label="Seats taken"
-            value={taken === null ? '—' : `${taken} of ${seats?.capacity ?? view.capacity}`}
+            label="Seats Taken"
+            value={taken === null ? undefined : `${taken} of ${seats?.capacity ?? view.capacity}`}
+            emptyText="Not published yet"
           />
-        </dl>
+        </FactList>
 
         {seats && (
           <ProgressBar
@@ -173,20 +182,24 @@ export default function WorkshopDetailPage() {
             You already hold a workshop in this shift. Only one booking per shift is allowed.
           </ResultBanner>
         ) : (
-          <Button
-            loading={busy}
-            disabled={soldOut}
-            onClick={register}
-            className="w-full sm:w-fit sm:px-8"
-          >
+          // `fullWidth`, as the primary action of a panel is everywhere else in
+          // the participant area — the change-password form, the stay picker, the
+          // payment screen. `w-full sm:w-fit sm:px-8` made this the one panel CTA
+          // that changed shape at `sm` and carried its own horizontal padding.
+          <Button fullWidth loading={busy} disabled={soldOut} onClick={register}>
             {soldOut ? 'Workshop full' : 'Register'}
           </Button>
         )}
-      </section>
+      </DetailPanel>
 
       {/* Full-resolution flyer — for the shipped artwork the session title,
-          speaker and agenda are typeset into the image itself. */}
-      <div className="overflow-hidden rounded-2xl bg-surface-2 shadow-lift ring-1 ring-black/[0.06]">
+          speaker and agenda are typeset into the image itself.
+
+          On the panels' own elevation (`shadow-card` over a hairline
+          `ring-black/[0.03]`) rather than the heavier `shadow-lift` and darker
+          ring it had: `shadow-lift` is the *hover* elevation in this system, so a
+          resting card wearing it sits visibly proud of the panel above it. */}
+      <div className="overflow-hidden rounded-2xl bg-surface-2 shadow-card ring-1 ring-black/[0.03]">
         <img
           src={view.posterFull}
           alt={view.name}
@@ -200,17 +213,5 @@ export default function WorkshopDetailPage() {
         />
       </div>
     </FestivalScreen>
-  );
-}
-
-/** One labelled fact in the panel's grid, in the admin meta-tile shape. */
-function Fact({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-surface-2 px-3 py-2">
-      <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-        <Icon size={12} strokeWidth={2.25} aria-hidden /> {label}
-      </dt>
-      <dd className="text-sm font-bold text-ink">{value}</dd>
-    </div>
   );
 }

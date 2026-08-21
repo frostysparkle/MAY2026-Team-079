@@ -30,7 +30,7 @@ export function WorkshopBookingAction() {
       <p className="text-sm text-muted">
         You are signed in as staff.{' '}
         <Link to={ROUTES.staffHome} className="font-semibold text-brand hover:underline">
-          Open the staff dashboard
+          Open the staff area
         </Link>
         .
       </p>
