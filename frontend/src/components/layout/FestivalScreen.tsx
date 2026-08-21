@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /**
@@ -86,5 +87,38 @@ export function FestivalScreen({
 
       <div className="mt-8 flex flex-col gap-5">{children}</div>
     </div>
+  );
+}
+
+/**
+ * The line of small print a screen closes on — how announcements arrive, that a
+ * dismissal is per-device, that timings are tentative.
+ *
+ * Centred, because it belongs to the whole screen rather than to the block above
+ * it, and because `FestivalScreen` centres everything else it owns. Four screens
+ * carried one of these and no two agreed: one centred with an icon, two flush
+ * left, one flush left with an icon and a button inline. A footnote that changes
+ * alignment as you move between sections reads as a different page each time.
+ */
+export function ScreenNote({
+  icon: Icon,
+  className,
+  children,
+}: {
+  /** Optional leading glyph, sized to the 12px type beside it. */
+  icon?: LucideIcon;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <p
+      className={cn(
+        'flex flex-wrap items-center justify-center gap-1.5 text-center text-xs leading-relaxed text-muted',
+        className,
+      )}
+    >
+      {Icon && <Icon size={13} strokeWidth={2.25} aria-hidden className="shrink-0" />}
+      {children}
+    </p>
   );
 }

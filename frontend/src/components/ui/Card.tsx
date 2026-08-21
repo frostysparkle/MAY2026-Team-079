@@ -1,5 +1,8 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { IconTile, type IconTileTone } from './IconTile';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /** Adds hover-lift + press feedback for clickable cards. */
@@ -42,6 +45,52 @@ export function Card({ interactive = false, className, children, ...props }: Car
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * A `Card` that reads as one row: a tinted icon tile, a title over a subtitle,
+ * an optional badge, and the chevron that says it opens something.
+ *
+ * The dashboard is built almost entirely out of this shape — seven of them across
+ * My Events, What's Next, Help & Support and My Pass — and each one was written
+ * out by hand. They had drifted into three different title treatments (base
+ * `font-medium`, base `font-semibold`, `text-sm font-medium`), and only some of
+ * them truncated, so a long event name made its row taller than the row above it.
+ * One component fixes the height of every row on the screen.
+ *
+ * Wrap it in a `<Link>` to make it navigate; it deliberately does not take a
+ * `to`, because it is also used for rows that only ever report.
+ */
+export function CardRow({
+  icon,
+  tone = 'brand',
+  title,
+  subtitle,
+  trailing,
+  chevron = true,
+  className,
+}: {
+  icon: LucideIcon;
+  tone?: IconTileTone;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  /** A badge or chip before the chevron. */
+  trailing?: ReactNode;
+  /** Drop the chevron for a row that does not lead anywhere. */
+  chevron?: boolean;
+  className?: string;
+}) {
+  return (
+    <Card interactive className={cn('flex items-center gap-3', className)}>
+      <IconTile icon={icon} tone={tone} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-ink">{title}</p>
+        {subtitle && <p className="truncate text-xs text-muted">{subtitle}</p>}
+      </div>
+      {trailing}
+      {chevron && <ChevronRight size={18} aria-hidden className="shrink-0 text-muted" />}
+    </Card>
   );
 }
 

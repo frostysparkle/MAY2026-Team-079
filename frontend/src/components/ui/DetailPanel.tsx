@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { IconTile } from './IconTile';
-import { SectionHeading } from './SectionHeading';
+import { HEADING_ROW_CLASS, SectionHeading } from './SectionHeading';
 
 /**
  * The read-only counterpart of the admin list panels: the same `Card` surface
@@ -43,7 +43,7 @@ export function DetailPanel({
         className,
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className={HEADING_ROW_CLASS}>
         <SectionHeading title={title} meta={meta} />
         {trailing}
       </div>

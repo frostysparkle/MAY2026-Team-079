@@ -1,7 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-type Tone = 'brand' | 'success' | 'danger' | 'warning' | 'muted';
+export type IconTileTone = 'brand' | 'success' | 'danger' | 'warning' | 'muted';
+type Tone = IconTileTone;
 type Size = 'sm' | 'md' | 'lg';
 
 const toneClasses: Record<Tone, string> = {
