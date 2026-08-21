@@ -55,9 +55,15 @@ T2-2026
 | :--- | :--- |
 | Sprint window | 03-08-2026 to 12-08-2026 |
 | Feedback items implemented | 3 of 3 — none deferred |
-| Total documented API operations | 31 endpoints across 5 primary domains (Events, Workshops, Mess, Hostels, Audit) |
+| Total documented API operations | 73 operations across 12 route groups (see §3 and §8) |
 | Total assertions executed (pytest) | ~45 independent endpoint assertions |
 | Bugs found during Sprint 2 testing | Pre-existing race condition and state logic bugs fixed and closed |
+
+> **Post-sprint addendum, 20-08-2026.** Sections 1–7 record Sprint 2 as it was
+> submitted. Section 8 records the work done after it, closing the last four
+> epics of the requirements document. The operation count above is the current
+> figure and supersedes the "31 endpoints" originally written here, which
+> undercounted its own §3 tables.
 
 ### 2. Implementation of Sprint 1 User Feedback
 
@@ -142,6 +148,10 @@ T2-2026
 | :--- | :--- | :--- | :--- |
 | GET | /audit-logs | View system audit log | Super Admin only |
 
+> The tables above are the Sprint 2 surface. Nine operations added afterwards —
+> the `/queries` and `/issues` domains and the two participant-record routes —
+> are tabulated in §8.2.
+
 #### 3.2 External Libraries Used
 - **FastAPI** — High performance REST framework
 - **PyMongo** — MongoDB interaction and aggregation pipelines
@@ -202,3 +212,200 @@ The role-based screens were connected to the live backend in this sprint:
 - Full end-to-end demo of the running application.
 - Final pytest run with captured output statistics.
 - AI features implementation (discussion pending)
+
+<div style="page-break-after: always;"></div>
+
+### 8. Post-Sprint Addendum — Closing the Remaining Epics (20 August 2026)
+
+This section records work done after the Sprint 2 submission above. It exists
+because a delivery audit against the requirements document (`Delivery_Audit.md`)
+found that **6 of the 31 user stories were still open**, all of them behind one
+missing capability. They are now closed.
+
+### 8.1 What was open, and why
+
+The audit's own finding was that everything remaining sat behind a single gap:
+**the API had no channel by which a participant could write text that a
+different user could read back.** Every participant-writable field failed one
+half or the other — `events[].registration_data` is returned only to its own
+author, `team_id` is the event's team data that `allocate_teams` reads,
+`profile.*` is the identity every roster prints. So five stories could not be
+built at all, and a sixth was half-built.
+
+| Story | Epic | Status before | Status now |
+| :--- | :--- | :--- | :--- |
+| 6.1 Raise a query | 6 — Query & Contact Management | Not built | **Shipped** |
+| 6.2 Track its status | 6 | Not built | **Shipped** |
+| 6.3 Assign it to a team | 6 | Not built | **Shipped** |
+| 6.4 Help participants as POR / POC | 6 | Not built | **Shipped** |
+| 5.4 Report a hostel or mess issue | 5 — Hostel & Accommodation | Not built | **Shipped** |
+| 7.3 Manage participant records from one dashboard | 7 — Integrated Profile | Partial — view only | **Shipped** |
+| 9.1 Operational dashboard | 9 — Admin Visibility | Partial — two panels missing | **Shipped** |
+
+**All 9 epics and all 31 user stories are now delivered.**
+
+Two new backend domains were added, on the project owner's explicit
+authorisation, since `CLAUDE.md` freezes `backend/`:
+
+- **`/queries`** — the general question-and-answer channel Epic 6 needed. A
+  query is about anything at the fest: an event's rules, a workshop's
+  prerequisites, a hall's timings, or nothing in particular.
+- **`/issues`** — the maintenance record Story 5.4 needed. An issue is a *fault*
+  in a facility the reporter is actually placed in, with a room number and a
+  repair.
+
+They are deliberately two domains rather than one, because their guards
+genuinely differ: filing an issue requires being allotted to the facility, while
+asking a question about an event only requires being at the fest.
+
+Both changes are **additive**. No existing route, HTTP verb, query parameter,
+request or response field name, status code, or error `detail` string was
+altered, and no existing backend test needed editing.
+
+### 8.2 New API operations
+
+**Queries** (`/queries`) — Epic 6
+| Method | Path | Description | Auth |
+| :--- | :--- | :--- | :--- |
+| POST | /queries | Raise a query (6.1) | Participant |
+| GET | /queries/mine | Track own queries, with replies (6.2) | Participant |
+| GET | /queries | The staff queue, scoped to the caller's teams (6.3) | Staff |
+| PATCH | /queries/{query_id} | Set status and assignment (6.3) | Owning team / Super Admin |
+| POST | /queries/{query_id}/replies | The conversation (6.4) | Author or owning team |
+
+**Issues** (`/issues`) — Story 5.4
+| Method | Path | Description | Auth |
+| :--- | :--- | :--- | :--- |
+| POST | /issues | File a hostel or mess fault | Participant, placed in that facility |
+| GET | /issues/mine | Own reports with their status history | Participant |
+| GET | /issues | The duty queue, scoped to the caller's blocks and halls | Staff |
+| PATCH | /issues/{issue_id} | Move a report along, and answer the reporter | Facility team / Super Admin |
+
+**Participants** (`/participants`) — Story 7.3
+| Method | Path | Description | Auth |
+| :--- | :--- | :--- | :--- |
+| GET | /participants | Fest-wide roster, searchable by name / email / ID | Super Admin only |
+| PATCH | /participants/{participant_id} | Correct another person's profile | Super Admin only |
+
+`backend/openapi.json` was regenerated (60 paths, 73 operations; nothing
+removed) and `api_documentation.yaml` gained the matching hand-written entries
+and request schemas.
+
+### 8.3 Design decisions worth recording
+
+**Epic 6.4 needed no new role.** The obvious reading of "help participants as
+POR / POC" was to add a `por` / `poc` value to `backend_teams.role`. It was not
+done. A query is routed from its own `category` + `target_id` to that entity's
+existing team array — `hostel_team`, `mess_team`, `event_team`,
+`workshop_team` — which is the same membership test the scanners already
+authorise against. The people already named on those teams *are* the points of
+contact, so 6.4 ships with no schema change and no existing guard moved.
+
+**A query row carries no email and no phone.** A block's `hostel_team` cannot
+read `GET /hostels/{id}/statistics` — that is Super Admin only — so
+denormalising contact details onto a row any team member can fetch would have
+widened disclosure well past what answering a question needs. The row carries
+the asker's name and house; the reply thread is the channel back.
+
+**A staff member on no team gets an empty queue, not a 403.** Having no duty is
+a real state, and a console that errors at a volunteer between postings reads as
+a bug.
+
+**Story 7.3's write path is deliberately narrow.** Only `profile` fields are
+editable. `email` and `participant_id` are identity — the id is derived from the
+email and is the key every roster, log row, and QR payload joins on.
+`password_hash` and `qr_secrets` are credentials. Mess, accommodation, event and
+workshop state belongs to the allocation and registration routes, which enforce
+capacity and scan state; an admin writing them directly could seat somebody in a
+full hall or mark them inside a block the scanner thinks they left.
+
+**The dashboard reads only what it can prove.** Story 9.1's new panel shows a
+dash and names the failed read rather than a confident zero. A partial total that
+looks complete is the one failure mode a monitoring board must not have.
+
+### 8.4 New screens
+
+| Screen | Route | Stories |
+| :--- | :--- | :--- |
+| My Queries — ask, and read the answer | `/app/queries` | 6.1, 6.2 |
+| Report an Issue — file a fault, track the repair | `/app/report-issue` | 5.4 |
+| Query desk — the queue a team answers from | `/staff/queries` | 6.3, 6.4 |
+| Issues desk — the duty queue for reported faults | `/staff/issues` | 5.4 |
+| Participants — the fest-wide roster, and the one place a record can be corrected | `/staff/admin/participants` | 7.3 |
+| Support panel on the Fest Control Board — open queries and open faults | `/staff/admin/overview` | 9.1 |
+
+The two staff consoles are **duty** routes rather than admin ones: `GET /queries`
+and `GET /issues` both admit anybody named on a block's, hall's, event's or
+workshop's team, and hand a Super Admin the whole fest through the same screen.
+The participants screen is admin-only, because both routes behind it are.
+
+### 8.5 Verification
+
+Every figure below was produced by an actual run, not read off the source.
+
+| Check | Command | Result |
+| :--- | :--- | :--- |
+| Backend suite | `python3 -m pytest -q` from `backend/` | **227 passed**, 0 failed (282s) |
+| Type check | `npx tsc -b --noEmit` from `frontend/` | clean |
+| Frontend suite | `npx vitest run` | **742 passed** across 52 files, 0 failed |
+| Lint | `npx eslint .` | **0 errors** (28 warnings, all pre-existing classes) |
+| Format | `npx prettier --check .` | clean |
+| Production build | `npm run build` | passing |
+
+The backend suite went from 128 to 227 tests. The 99 new ones are 42 in
+`backend/testing/queries/test_queries.py`, 36 in
+`backend/testing/issues/test_issues.py`, and 21 in
+`backend/testing/participants/test_participant_admin.py`. **Every one of the 128
+that existed before still passes unchanged.** Most of the new assertions are
+about who is *refused* rather than what works — a volunteer on one block must
+not read another block's queries, a participant must not read a thread they did
+not raise, and an admin's edit must not reach a field the allocation routes own.
+
+The frontend suite gained **113 tests across 6 new files**: the two pure
+resolvers (`features/queries/queries.test.ts`,
+`features/participants/participantAdmin.test.ts`), the two screens a user
+actually opens (`pages/QueriesPage.test.tsx`,
+`pages/staff/QueryConsolePage.test.tsx`), the staff desk
+(`pages/staff/admin/AdminParticipantsPage.test.tsx`), and the dashboard panel
+(`features/overview/panels/SupportPanel.test.tsx`).
+
+**The contract was checked end to end, not just on both sides of a mock.** The
+frontend tests mock the API and the backend tests use hand-written bodies, so a
+shape mismatch would have passed both. The exact request bodies and query strings
+the frontend builds were therefore serialised and sent at the real routes against
+a real participant, a real volunteer, and a real Super Admin — 19 checks, all
+passing, covering the `POST /queries` body for both a targeted and a `general`
+query, the `PATCH` bodies for a status change and a claim, replies in both
+directions, and the roster's JSON-serialisability (a naive projection returns raw
+ObjectIds and 500s, so that one is a real risk rather than a formality).
+
+#### Two things stated plainly
+
+- **Delivery is on next open, not push.** A reply to a query, like an
+  announcement and like a schedule-change alert, appears the next time the
+  participant opens the app. There is still no subscription store and no send
+  route, so true push remains an improvement to shipped stories rather than a
+  blocker on unbuilt ones.
+- **`api_documentation.yaml` is behind on two operations that are not part of
+  this work.** `GET /workshops/public` and `PUT /mess/{mess_id}/menu` are in
+  `openapi.json` and have no hand-written YAML entry. Both belong to other
+  in-flight changes and were left alone rather than folded into this diff. They
+  are named here so the gap is recorded rather than discovered later.
+
+### 8.6 Requirements coverage — final position
+
+| Epic | Stories | Delivered |
+| :--- | :---: | :---: |
+| 1 — Centralized Event Information and Updates | 4 | 4 |
+| 2 — Easy Identification and Entry Management | 2 | 2 |
+| 3 — Event Attendance and Crowd Information | 4 | 4 |
+| 4 — Mess Information and Mess Entry | 4 | 4 |
+| 5 — Hostel and Accommodation Management | 4 | 4 |
+| 6 — Query and Contact Management | 5 | 5 |
+| 7 — Integrated Participant Profile | 3 | 3 |
+| 8 — Communication Between Teams | 2 | 2 |
+| 9 — Admin Visibility and Coordination | 3 | 3 |
+| **Total** | **31** | **31** |
+
+`Delivery_Audit.md` carries the story-by-story detail, the judgement calls, and
+the limitations each story shipped with.
