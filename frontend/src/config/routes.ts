@@ -51,6 +51,37 @@ export const ROUTES = {
   accommodation: '/app/accommodation',
   /** The mock checkout that settles that choice. */
   accommodationPayment: '/app/accommodation/payment',
+  /**
+   * Official notices addressed to this participant — Stories 8.1/8.2. The
+   * dashboard carries the first few; this is the full list.
+   */
+  announcements: '/app/announcements',
+  /**
+   * Help & Support — every way a participant reaches a human, in one section.
+   *
+   * One route with three tabs, selected by `?tab=`:
+   *
+   *   - `ask`      Stories 6.1/6.2 — raise a question and read the answer.
+   *   - `report`   Story 5.4 — file a hostel or mess fault and track the repair.
+   *   - `contacts` Story 6.5 — the coordinators on duty, and your own next-of-kin.
+   *
+   * These were three routes until they were not. Each one linked to the other two
+   * and each carried a paragraph on why it was not the other two, which is a fair
+   * sign the split lived in the navigation rather than in the student's head: from
+   * their side it is one errand — something needs dealing with — and three answers
+   * to "what do you want back". Sharing a screen also lets one row of figures
+   * cover both the questions and the reports, which no single one of them could.
+   *
+   * The three old paths below still resolve; they redirect here with the matching
+   * tab, because they are in the wild on bookmarks and in `AccommodationPage`.
+   */
+  support: '/app/support',
+  /** @deprecated Redirects to `support?tab=contacts`. Kept for existing links. */
+  helpDirectory: '/app/help',
+  /** @deprecated Redirects to `support?tab=report`. Kept for existing links. */
+  reportIssue: '/app/report-issue',
+  /** @deprecated Redirects to `support?tab=ask`. Kept for existing links. */
+  queries: '/app/queries',
 
   // Staff area
   /**
@@ -64,9 +95,49 @@ export const ROUTES = {
   staffDuties: '/staff/duties',
   staffChangePassword: '/staff/change-password',
   scanMess: '/staff/scan/mess/:messId',
+  /**
+   * The mess team's menu desk for one hall — dishes per fest day, service
+   * windows, and the hall's notice. A duty route rather than an admin one: any
+   * member of that hall's `mess_team` may open it, which is the same check the
+   * scanner makes.
+   */
+  messMenu: '/staff/mess/:messId/menu',
+  /**
+   * The duty console for reported hostel and mess faults — Story 5.4's answering
+   * half. A duty route rather than an admin one, on the same terms as `messMenu`:
+   * `GET /issues` admits anybody named on a block's or hall's team, and a Super
+   * Admin sees the whole fest through the same screen.
+   */
+  facilityIssues: '/staff/issues',
+  /**
+   * The desk where participants' questions get answered — Stories 6.3 and 6.4.
+   * A duty route on the same terms as `messMenu` and `facilityIssues`:
+   * `GET /queries` admits anybody named on a block's, hall's, event's or
+   * workshop's team, and a Super Admin sees the whole fest through it. This is
+   * how 6.4's "help participants as POR / POC" is delivered without adding a
+   * POR/POC role — the people already named on those teams are the points of
+   * contact.
+   */
+  queryConsole: '/staff/queries',
   scanHostel: '/staff/scan/hostel/:hostelId',
   scanEvent: '/staff/scan/event/:eventId',
+  /** The pre-registered turnstile: only students who booked a seat pass here. */
   scanWorkshop: '/staff/scan/workshop/:workshopId',
+  /**
+   * The on-spot desk — a second, separate scanner for walk-ins, capped
+   * server-side at 10% of capacity. A distinct route rather than a mode hidden
+   * behind a toggle, because admitting a walk-in and checking off a booking are
+   * two different jobs, often at two different desks, and a volunteer should be
+   * able to open (and be sent) the one they are staffing.
+   */
+  scanWorkshopOnSpot: '/staff/scan/workshop/:workshopId/on-spot',
+  /**
+   * The workshop desk: attendance figures, the attendee and absentee lists, the
+   * exports, and the workshop's own team. Open to that workshop's volunteers and
+   * managers as well as to Super Admins — the same shape as `messMenu`, a duty
+   * route rather than an admin one.
+   */
+  workshopManage: '/staff/workshops/:workshopId/manage',
   eventParticipation: '/staff/events/:eventId/participation',
   eventTeams: '/staff/events/:eventId/teams',
 
@@ -88,6 +159,18 @@ export const ROUTES = {
   adminMess: '/staff/admin/mess',
   adminHostels: '/staff/admin/hostels',
   adminBackendTeams: '/staff/admin/backend-teams',
+  /**
+   * Participant records — Story 7.3. The fest-wide roster `GET /participants`
+   * returns, and the only screen anywhere that can correct somebody else's
+   * profile. Admin-only, because both routes behind it are Super Admin only.
+   */
+  adminParticipants: '/staff/admin/participants',
+  /**
+   * The announcement desk — Stories 8.1/8.2. Admin-only because
+   * `PUT /events/{event_id}`, which is where a notice is stored, refuses anybody
+   * but a Super Admin. Other staff receive announcements on their duty board.
+   */
+  adminAnnouncements: '/staff/admin/announcements',
   adminAuditLogs: '/staff/admin/audit-logs',
   /**
    * Every log record for one entity. `domain` is events | workshops | mess |
@@ -104,4 +187,20 @@ export function path(template: string, params: Record<string, string>): string {
     (acc, [key, value]) => acc.replace(`:${key}`, encodeURIComponent(value)),
     template,
   );
+}
+
+/** Which tab of Help & Support a link means. */
+export type SupportTab = 'ask' | 'report' | 'contacts';
+
+/**
+ * A link straight to one tab of Help & Support, e.g.
+ * `supportPath('report')` → `/app/support?tab=report`.
+ *
+ * Exists so callers elsewhere in the app do not hand-assemble the query string:
+ * the tab names are the contract between `ROUTES.support`, the redirects from the
+ * three old paths, and `useTabParam`'s fallback, and one typo in a template
+ * literal would silently land somebody on the default tab instead.
+ */
+export function supportPath(tab: SupportTab): string {
+  return `${ROUTES.support}?tab=${tab}`;
 }
