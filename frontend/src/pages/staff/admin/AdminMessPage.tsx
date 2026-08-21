@@ -1,5 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Eye, LayoutGrid, List, Plus, RefreshCw, Shuffle, UtensilsCrossed } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  BookOpen,
+  Eye,
+  LayoutGrid,
+  List,
+  Plus,
+  RefreshCw,
+  Shuffle,
+  UtensilsCrossed,
+} from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { MessCreateRequest } from '@/api/types';
 import {
@@ -24,6 +34,7 @@ import {
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { MESS_CUISINE_OPTIONS } from '@/config/constants';
+import { path, ROUTES } from '@/config/routes';
 import { MessCards } from '@/features/mess/MessCards';
 import { MessDetailDialog } from '@/features/mess/MessDetailDialog';
 import { MessSummaryCards } from '@/features/mess/MessSummaryCards';
@@ -116,6 +127,7 @@ const ALL_SPECS = [...SPECS, ...ADVANCED_SPECS];
 
 export default function AdminMessPage() {
   const inventory = useMessInventory();
+  const navigate = useNavigate();
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -211,13 +223,20 @@ export default function AdminMessPage() {
   const actionsFor = useCallback(
     (row: MessRow): ActionMenuItem[] => [
       { label: 'View details', icon: Eye, onSelect: () => setDetailId(row.id) },
+      // Super Admins reach any hall's menu desk; its own team reaches it from
+      // their duty list. Same screen, same edits — only the way in differs.
+      {
+        label: 'Edit menu',
+        icon: BookOpen,
+        onSelect: () => navigate(path(ROUTES.messMenu, { messId: row.id })),
+      },
       {
         label: 'Refresh occupancy',
         icon: RefreshCw,
         onSelect: () => void inventory.refreshOne(row.id),
       },
     ],
-    [inventory],
+    [inventory, navigate],
   );
 
   const columns = useMessColumns({ onView: openDetail, actionsFor });

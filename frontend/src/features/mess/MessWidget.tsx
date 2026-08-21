@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { UtensilsCrossed } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { MessDayEntry, MyMessResponse } from '@/api/types';
-import { IconTile, ProgressBar, Skeleton, StatusBadge } from '@/components/ui';
-import { cn } from '@/lib/cn';
-
-const SLOTS: (keyof MessDayEntry)[] = ['breakfast', 'lunch', 'dinner'];
-const SLOT_LABELS: Record<keyof MessDayEntry, string> = {
-  breakfast: 'B',
-  lunch: 'L',
-  dinner: 'D',
-};
+import type { MyMessResponse } from '@/api/types';
+import { Card, IconTile, ProgressBar, Skeleton, StatusBadge } from '@/components/ui';
+import { MealSlotGrid } from '@/features/mess/MealSlotGrid';
+import { loggedMeals } from '@/features/mess/mealSlots';
 
 /**
  * Mess status panel for the participant dashboard: which hall, and how many of
@@ -57,18 +51,23 @@ export function MessWidget() {
   }
 
   const slots = data.slots ?? [];
-  const total = slots.length * SLOTS.length;
-  const logged = slots.reduce(
-    (sum, day) => sum + SLOTS.filter((slot) => day[slot].logged).length,
-    0,
-  );
+  // The same helper the Stay screen's mess panel counts with, so the two cannot
+  // report different figures for the same meal card.
+  const { logged, total } = loggedMeals(slots);
 
+  // `Card` rather than the surface this used to write out, which was `Card`'s
+  // exact declaration — radius, background, padding, shadow and ring — retyped.
+  // Two of them, in fact: this and `HostelWidget`, sitting one under the other in
+  // the same dashboard panel.
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
+    <Card className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <IconTile icon={UtensilsCrossed} tone="warning" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-ink">
+          {/* `text-sm`, matching `CardRow`'s title: these widgets sit directly
+              under the dashboard's own rows, and a base-size title beside a
+              small one is a step in what should be one list. */}
+          <p className="truncate text-sm font-semibold text-ink">
             {data.mess_details?.name ?? 'Your Mess'}
           </p>
           <p className="text-xs text-muted">Meal check-ins this week</p>
@@ -87,37 +86,16 @@ export function MessWidget() {
         />
       )}
 
-      {slots.length > 0 && (
-        <div className="grid grid-cols-5 gap-1.5 text-center text-xs">
-          {slots.map((day, i) => (
-            <div key={i} className="flex flex-col gap-1">
-              <span className="font-medium uppercase tracking-wide text-muted">Day {i + 1}</span>
-              {SLOTS.map((slot) => (
-                <span
-                  key={slot}
-                  className={cn(
-                    'rounded-md py-0.5 font-semibold',
-                    day[slot].logged
-                      ? 'bg-success-bg text-success'
-                      : 'bg-surface-2 font-medium text-muted',
-                  )}
-                >
-                  {SLOT_LABELS[slot]}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <MealSlotGrid slots={slots} />
+    </Card>
   );
 }
 
 /** A panel-shaped line for the cases with no figures to show. */
 function PanelNote({ children }: { children: string }) {
   return (
-    <p className="rounded-2xl bg-surface p-4 text-sm text-muted shadow-card ring-1 ring-black/[0.03]">
-      {children}
-    </p>
+    <Card>
+      <p className="text-sm text-muted">{children}</p>
+    </Card>
   );
 }
