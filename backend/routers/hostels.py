@@ -3,11 +3,21 @@ from logger import log_audit
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
-import random
 
 from database import hostel_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from models import ScanQRRequest
+
+class HostelIDGenerator:
+    def __init__(self):
+        self.current_id = 111
+
+    def next_id(self):
+        event_id = "HSTL" + str(self.current_id)
+        self.current_id += 1
+        return event_id
+
+generator = HostelIDGenerator()
 
 router = APIRouter(prefix="/hostels", tags=["Hostels"])
 
@@ -31,7 +41,7 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
         raise HTTPException(status_code=403, detail="Not authorized")
         
     hostel_doc = {
-        "hostel_id": request.hostel_id,
+        "hostel_id": generator.next_id(),
         "name": request.name,
         "capacity": request.capacity,
         "gender": request.gender,
