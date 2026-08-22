@@ -6,12 +6,17 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from database import hostel_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
-from models import ScanQRRequest
+from models import ScanQRRequest, MockPaymentRequest
 from id_generator import SequentialIDGenerator, generate_room_numbers
+from payments import simulate_payment
 
 generator = SequentialIDGenerator("HSTL")
 
 router = APIRouter(prefix="/hostels", tags=["Hostels"])
+
+# The fixed hostel fee charged by the mock payment endpoint below. Never
+# accepted from the client — see `MockPaymentRequest`.
+HOSTEL_FEE = 900
 
 # The only genders a block may be created for. Allocation groups participants
 # by this exact axis (`allocate_hostels` below), so anything outside this pair
@@ -203,6 +208,32 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
 
     log_audit(current_user, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to hostels"}
+
+@router.post("/pay")
+def pay_hostel_fee(request: MockPaymentRequest, current_user: dict = Depends(get_current_participant)):
+    """
+    Simulate settling the hostel fee.
+
+    Mock end to end: there is no real gateway behind this, `simulate_payment`
+    always succeeds today, and `HOSTEL_FEE` is the only amount this can ever
+    charge — never one the client supplies. Deliberately independent of
+    `accommodation.registered` / `accommodation.hostel_id`: this only records
+    that the fee was paid, it does not opt a participant into allocation or
+    place them in a block, so it can be called in any order relative to those.
+    """
+    if "participant_id" not in current_user:
+        raise HTTPException(status_code=400, detail="Only participants can pay the hostel fee")
+
+    payment = simulate_payment("hostel", HOSTEL_FEE, request.method)
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"accommodation.payment": payment}}
+    )
+    log_audit(current_user, "HOSTEL_PAYMENT", None, {
+        "transaction_id": payment["transaction_id"], "amount": payment["amount"]
+    })
+    return payment
+
 
 @router.post("/register")
 def register_for_accommodation(current_user: dict = Depends(get_current_participant)):

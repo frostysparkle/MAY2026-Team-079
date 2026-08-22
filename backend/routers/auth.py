@@ -62,7 +62,11 @@ def register(request: RegisterRequest):
             # allocated to, and that hall's own menu can change at any time.
             # `GET /mess/my_mess` derives the display list by merging this
             # against the allotted hall's current menu.
-            "scans": {}
+            "scans": {},
+            # Set only by `POST /mess/pay` (mock settlement). Independent of
+            # `registered`/`mess_id` — paying does not opt a participant into
+            # allocation, and allocation does not require having paid.
+            "payment": None
         },
         "accommodation": {
             "registered": False,
@@ -75,7 +79,10 @@ def register(request: RegisterRequest):
             "inside": False,
             # Stamped only by a "permanent_exit" scan — signals the participant
             # has left the fest for good and blocks any further entry scan.
-            "departure": None
+            "departure": None,
+            # Set only by `POST /hostels/pay` (mock settlement). Independent of
+            # `registered`/`hostel_id`, same reasoning as `mess.payment`.
+            "payment": None
         },
         "photo": None,
         "qr_secrets": {

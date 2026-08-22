@@ -7,7 +7,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from database import mess_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
-from models import ScanQRRequest
+from models import (
+    ScanQRRequest, MockPaymentRequest,
+    MESS_CUISINES as CUISINES, MESS_DIETS as DIETS, MESS_PREFERENCE_TYPES as MESS_TYPES,
+)
+from payments import simulate_payment
 
 router = APIRouter(prefix="/mess", tags=["Mess"])
 
@@ -20,11 +24,18 @@ router = APIRouter(prefix="/mess", tags=["Mess"])
 # regional variant. This is the *complete* set of values a hall's `type` may
 # take — there is no larger axis to extend it against, so it is validated as a
 # closed set rather than as two independently-checked parts.
+#
+# CUISINES / DIETS / MESS_TYPES are now defined once in `models.py`
+# (MESS_CUISINES / MESS_DIETS / MESS_PREFERENCE_TYPES) and imported here under
+# their old names, so this module's own code and tests keep reading exactly as
+# they did — but a participant's `profile.mess_preference` (validated in
+# `models.ProfileCompleteRequest`) and a hall's `type` are now provably the
+# same set instead of two lists that happen to agree.
 # ---------------------------------------------------------------------------
-CUISINES = ("north_indian", "south_indian")
-DIETS = ("veg", "non_veg")
 
-MESS_TYPES = {f"{cuisine}__{diet}" for cuisine in CUISINES for diet in DIETS} | {"jain"}
+# The fixed mess fee charged by the mock payment endpoint below. Never
+# accepted from the client — see `MockPaymentRequest`.
+MESS_FEE = 1200
 
 # The only meals a day's menu may name. A day is free to serve any subset of
 # these (e.g. a travel day with breakfast only) — the key is what makes a slot
@@ -326,7 +337,14 @@ def allocate_messes(current_user: dict = Depends(get_current_staff)):
         # a profile that never chose a preference stores exactly that. Treating
         # both the missing and the null case as the default is what stops a
         # genuine registrant being skipped silently on every run.
-        pref = (p.get("profile") or {}).get("mess_preference") or "veg"
+        #
+        # `profile.mess_preference` may now hold either a bare diet ("veg") —
+        # written before combined values existed, or by any caller that still
+        # sends one — or a combined "{cuisine}__{diet}" value like
+        # "north_indian__veg". `_diet_of` collapses either shape down to the
+        # bare diet `pref_groups` is keyed by, so both are placed correctly.
+        raw_pref = (p.get("profile") or {}).get("mess_preference") or "veg"
+        pref = _diet_of(raw_pref)
         available_messes = pref_groups.get(pref, [])
         assigned = False
         for chosen_mess in available_messes:
@@ -342,6 +360,32 @@ def allocate_messes(current_user: dict = Depends(get_current_staff)):
             
     log_audit(current_user, "ALLOCATE_MESSES", None, {"allocated_count": allocated})
     return {"message": f"Allocated {allocated} participants to messes"}
+
+@router.post("/pay")
+def pay_mess_fee(request: MockPaymentRequest, current_user: dict = Depends(get_current_participant)):
+    """
+    Simulate settling the mess fee.
+
+    Mock end to end: there is no real gateway behind this, `simulate_payment`
+    always succeeds today, and `MESS_FEE` is the only amount this can ever
+    charge — never one the client supplies. Deliberately independent of
+    `mess.registered` / `mess.mess_id`: this only records that the fee was
+    paid, it does not opt a participant into allocation or place them in a
+    hall, so it can be called in any order relative to those.
+    """
+    if "participant_id" not in current_user:
+        raise HTTPException(status_code=400, detail="Only participants can pay the mess fee")
+
+    payment = simulate_payment("mess", MESS_FEE, request.method)
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"mess.payment": payment}}
+    )
+    log_audit(current_user, "MESS_PAYMENT", None, {
+        "transaction_id": payment["transaction_id"], "amount": payment["amount"]
+    })
+    return payment
+
 
 @router.get("/my_mess")
 def my_mess(current_user: dict = Depends(get_current_participant)):
