@@ -46,7 +46,7 @@ def participant_statistics(current_user: dict = Depends(get_current_staff)):
         "mess.mess_id": 1,
         "accommodation.registered": 1,
         "accommodation.hostel_id": 1,
-        "accommodation.logged_in": 1,
+        "accommodation.inside": 1,
         "events": 1,
         "workshops": 1,
         "created_at": 1,
@@ -90,7 +90,7 @@ def participant_statistics(current_user: dict = Depends(get_current_staff)):
             hostel_registered += 1
         if accommodation.get("hostel_id"):
             hostel_allotted += 1
-        if accommodation.get("logged_in"):
+        if accommodation.get("inside"):
             on_campus += 1
 
         if participant.get("events"):

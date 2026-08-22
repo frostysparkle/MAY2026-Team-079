@@ -26,6 +26,20 @@ class SequentialIDGenerator:
         return generated_id
 
 
+def generate_room_numbers(num_rooms: int, start: int = 101):
+    """
+    The room numbers a newly created hostel starts with, e.g.
+    ``generate_room_numbers(3)`` -> ``["101", "102", "103"]``.
+
+    Isolated from `create_hostel` on purpose: numbering is currently a flat
+    sequential count, but a fest may later want floor-prefixed numbers
+    (101, 102, ... 201, 202, ...) or a non-numeric scheme. Keeping the scheme
+    behind this one function means that change touches only this function,
+    not every call site that builds a hostel document.
+    """
+    return [str(start + i) for i in range(num_rooms)]
+
+
 class EventIDGenerator:
     """
     Event ids and round ids, each with their own counter and a prefix derived
