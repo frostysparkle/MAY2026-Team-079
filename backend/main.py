@@ -5,7 +5,7 @@ from datetime import datetime
 from models import ProfileCompleteRequest
 
 from routers import (
-    workshops, events, mess, hostels, audit, participants, embeddings,
+    workshops, workshop_slots, events, mess, hostels, audit, participants, embeddings,
     queries, issues, auth, backend_teams
 )
 from dependencies import get_current_participant
@@ -135,6 +135,7 @@ def complete_profile(request: ProfileCompleteRequest, current_user: dict = Depen
 app.include_router(auth.router)
 app.include_router(backend_teams.router)
 app.include_router(workshops.router)
+app.include_router(workshop_slots.router)
 app.include_router(events.router)
 app.include_router(mess.router)
 app.include_router(hostels.router)

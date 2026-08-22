@@ -6,12 +6,12 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 import asyncio
 
-from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest, ScanQRRequest
+from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignVolunteerRequest, ScanQRRequest, parse_instant_utc
 # Imported on its own line so the line above stays byte-for-byte as it was; used
 # only by the workshop-desk routes at the foot of this file.
 from typing import List, Optional
 from models import WorkshopParticipantUpdateRequest
-from database import workshops_collection, participants_collection, backend_teams_collection, workshop_logs_collection
+from database import workshops_collection, workshop_slots_collection, participants_collection, backend_teams_collection, workshop_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
 from id_generator import SequentialIDGenerator
@@ -26,9 +26,18 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can create workshops")
-        
+
+    # A workshop's time comes from its slot, not from the request: the slot is
+    # the thing a Super Admin schedules independently, and start_time is
+    # denormalized from it here so the scan-window guard and slot-clash check
+    # never have to join back to workshop_slots on every read.
+    slot = workshop_slots_collection.find_one({"slot_id": request.slot_id})
+    if not slot:
+        raise HTTPException(status_code=404, detail="Workshop slot not found. Create it via POST /workshop-slots first.")
+
+    new_id = generator.next_id()
     new_workshop = {
-        "workshop_id": generator.next_id(),
+        "workshop_id": new_id,
         "slot_id": request.slot_id,
         "name": request.name,
         "description": request.description,
@@ -38,18 +47,25 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "registration_count": 0,
         "participant_count": 0,
         "instructions": request.instructions,
-        # ISO 8601 UTC string supplied by the caller, or None when omitted.
-        # None disables the time-window guard on attendance and change routes,
-        # so existing workshops created before this field was added keep working.
-        "start_time": request.start_time,
+        # Denormalized from the slot at creation time; kept in sync by
+        # PUT /workshop-slots/{slot_id} (see routers.workshop_slots).
+        "start_time": slot.get("start_time"),
+        "registration_start": request.registration_start,
+        "registration_end": request.registration_end,
+        "registration_open": request.registration_open,
+        # Internal one-shot memory bit: has the system already auto-closed
+        # this workshop once for its current registration_end? Never part of
+        # any request model, never serialized in any response. See
+        # _sync_registration_state.
+        "registration_closed_by_system": False,
         "workshop_team": [],
         "created_by": current_user["_id"],
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
     workshops_collection.insert_one(new_workshop)
-    log_audit(current_user, "CREATE_WORKSHOP", request.workshop_id, {"capacity": request.capacity})
-    return {"message": "Workshop created"}
+    log_audit(current_user, "CREATE_WORKSHOP", new_id, {"capacity": request.capacity, "slot_id": request.slot_id})
+    return {"message": "Workshop created", "workshop_id": new_id}
 
 @router.get("")
 def list_workshops(current_user: dict = Depends(get_current_user)):
@@ -60,14 +76,35 @@ def list_workshops(current_user: dict = Depends(get_current_user)):
     # workshop has been created through POST /workshops. It is an internal
     # reference with no use to a client, so it is projected out rather than
     # converted. Same fix as list_events.
+    #
+    # `registration_closed_by_system` is likewise excluded: this is an
+    # exclusion (blacklist) projection, so anything not explicitly named here
+    # leaks through — unlike PUBLIC_WORKSHOP_FIELDS below, which is an
+    # allow-list and hides it automatically.
+    # `registration_closed_by_system` is fetched here (not excluded) because
+    # `_sync_registration_state` needs to see it to tell "still open, not yet
+    # synced" apart from "open again because an admin overrode it" — it is
+    # stripped from each document below, after syncing, rather than at the
+    # query, so the sync itself never runs on a false premise.
     if admin:
-        return list(workshops_collection.find({}, {"_id": 0, "created_by": 0}))
-    return list(workshops_collection.find({}, {"_id": 0, "created_by": 0, "workshop_team": 0}))
+        raw = list(workshops_collection.find({}, {"created_by": 0}))
+    else:
+        raw = list(workshops_collection.find({}, {"created_by": 0, "workshop_team": 0}))
+
+    workshops = []
+    for workshop in raw:
+        synced = _sync_registration_state(workshop)
+        synced.pop("_id", None)
+        synced.pop("registration_closed_by_system", None)
+        workshops.append(synced)
+    return workshops
 
 
 # Allow-list of the fields that make up the published workshop programme.
 # Written as an inclusion projection on purpose: any field added to the
-# workshops collection later stays private until it is named here explicitly.
+# workshops collection later stays private until it is named here explicitly —
+# including the internal `registration_closed_by_system` bit, which is never
+# named and therefore never leaks through this projection.
 PUBLIC_WORKSHOP_FIELDS = {
     "_id": 0,
     "workshop_id": 1,
@@ -83,6 +120,9 @@ PUBLIC_WORKSHOP_FIELDS = {
     # the workshop runs and so the time-window a volunteer will face is not a
     # surprise.
     "start_time": 1,
+    "registration_start": 1,
+    "registration_end": 1,
+    "registration_open": 1,
 }
 
 
@@ -98,8 +138,21 @@ def list_public_workshops():
 
     Mirrors GET /events/public. Declared before any `/{workshop_id}` route so
     the literal path is not captured as a workshop id.
+
+    Each workshop is passed through the registration-window sync before its
+    `registration_open` is read, so a just-lapsed workshop reports closed the
+    first time it is listed, not only after something else has resolved it.
+
+    The full document (not just the public fields) is fetched so the sync can
+    see `registration_closed_by_system` — the internal field is stripped from
+    each result afterward, never returned to the caller.
     """
-    return list(workshops_collection.find({}, PUBLIC_WORKSHOP_FIELDS))
+    raw = list(workshops_collection.find({}))
+    result = []
+    for workshop in raw:
+        synced = _sync_registration_state(workshop)
+        result.append({field: synced.get(field) for field in PUBLIC_WORKSHOP_FIELDS if field != "_id"})
+    return result
 
 
 @router.get("/my_registrations")
@@ -121,10 +174,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
 
     registrations = []
     for entry in current_user.get("workshops", []):
-        workshop = workshops_collection.find_one(
-            {"_id": entry.get("workshop_id")},
-            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "embedding": 1, "venue": 1, "capacity": 1, "instructions": 1, "start_time": 1},
-        )
+        workshop = workshops_collection.find_one({"_id": entry.get("workshop_id")})
         if not workshop:
             # A workshop deleted after booking leaves an entry with nothing to
             # show; the slot is still reported so the clash rule stays visible.
@@ -136,10 +186,14 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
                 "embedding": None,
                 "venue": None,
                 "start_time": None,
+                "registration_start": None,
+                "registration_end": None,
+                "registration_open": None,
                 "booking_type": entry.get("booking_type"),
                 "attended": entry.get("attended", False),
             })
             continue
+        workshop = _sync_registration_state(workshop)
         registrations.append({
             "workshop_id": workshop.get("workshop_id"),
             "slot_id": entry.get("slot_id"),
@@ -148,6 +202,9 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
             "embedding": workshop.get("embedding"),
             "venue": workshop.get("venue"),
             "start_time": workshop.get("start_time"),
+            "registration_start": workshop.get("registration_start"),
+            "registration_end": workshop.get("registration_end"),
+            "registration_open": workshop.get("registration_open"),
             "booking_type": entry.get("booking_type"),
             "attended": entry.get("attended", False),
         })
@@ -160,16 +217,44 @@ def update_workshop(workshop_id: str, request: WorkshopUpdateRequest, current_us
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can edit workshops")
-        
-    update_data = {k: v for k, v in request.dict().items() if v is not None}
+
+    existing = workshops_collection.find_one({"workshop_id": workshop_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    update_data = {k: v for k, v in request.model_dump().items() if v is not None}
+
     if "description" in update_data:
-        existing = workshops_collection.find_one({"workshop_id": workshop_id}, {"description": 1})
-        if not existing or existing.get("description") != update_data["description"]:
+        if existing.get("description") != update_data["description"]:
             update_data["embedding"] = generate_embedding(update_data["description"])
+
+    # registration_start/registration_end may arrive independently of one
+    # another — merge onto the stored document before re-validating
+    # end > start, the same pattern events.py uses for
+    # RegistrationWindowUpdate. This also catches the case where only one
+    # bound is sent but the merged result would be invalid.
+    if "registration_start" in update_data or "registration_end" in update_data:
+        merged_start = update_data.get("registration_start", existing.get("registration_start"))
+        merged_end = update_data.get("registration_end", existing.get("registration_end"))
+        if not merged_start or not merged_end:
+            raise HTTPException(status_code=422, detail="registration_start and registration_end are required")
+        start_dt = parse_instant_utc(merged_start, "registration_start")
+        end_dt = parse_instant_utc(merged_end, "registration_end")
+        if end_dt <= start_dt:
+            raise HTTPException(status_code=400, detail="registration_end must be after registration_start")
+
+    # Pushing a *new* registration_end re-arms the one-shot auto-close for
+    # that new deadline. registration_open itself (if this request also sets
+    # it) is written exactly as given below, with no extra side effect on
+    # registration_closed_by_system — that is what lets an admin's override
+    # survive later reads (see _sync_registration_state).
+    if "registration_end" in update_data:
+        update_data["registration_closed_by_system"] = False
+
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         workshops_collection.update_one({"workshop_id": workshop_id}, {"$set": update_data})
-    log_audit(current_user, "UPDATE_WORKSHOP", workshop_id)
+    log_audit(current_user, "UPDATE_WORKSHOP", workshop_id, {k: v for k, v in update_data.items() if k != "embedding"})
     return {"message": "Workshop updated"}
 
 @router.delete("/{workshop_id}")
@@ -237,19 +322,25 @@ def register_for_workshop(workshop_id: str, current_user: dict = Depends(get_cur
         
     participant_obj_id = current_user["_id"]
     participant_id = current_user["participant_id"]
-    
-    workshop = workshops_collection.find_one({"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]})
-    if not workshop:
-        try:
-            workshop = workshops_collection.find_one({"_id": ObjectId(workshop_id)})
-        except Exception:
-            pass
+
+    # _resolve_workshop runs the registration-window sync as it looks the
+    # workshop up, so registration_open below always reflects whether
+    # registration_end has passed — even if nothing has read this workshop
+    # since it lapsed.
+    workshop = _resolve_workshop(workshop_id)
     if not workshop:
         raise HTTPException(status_code=404, detail="Workshop not found")
         
     ws_doc_id = workshop["_id"]
     real_ws_id = workshop.get("workshop_id", str(ws_doc_id))
     slot_id = workshop.get("slot_id")
+
+    # registration_open gates registration on its own — an admin's manual
+    # override of this flag is exactly what is allowed to reopen registration
+    # past registration_end. Capacity is checked independently right after,
+    # so an override can never register past a full workshop.
+    if not workshop.get("registration_open", False):
+        raise HTTPException(status_code=400, detail="Registration is closed for this workshop")
 
     if workshop.get("registration_count", 0) >= workshop.get("capacity", 0):
         raise HTTPException(status_code=400, detail="Workshop is full")
@@ -323,12 +414,10 @@ async def stream_workshop_seats(workshop_id: str):
 
 @router.post("/{workshop_id}/attendance")
 def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str = "pre-registered", current_user: dict = Depends(get_current_staff)):
-    workshop = workshops_collection.find_one({"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]})
-    if not workshop:
-        try:
-            workshop = workshops_collection.find_one({"_id": ObjectId(workshop_id)})
-        except Exception:
-            pass
+    # _resolve_workshop is defined later in this module but is only called at
+    # request time, once the whole module (and the function it names) has
+    # been loaded — same as every other forward reference to it below.
+    workshop = _resolve_workshop(workshop_id)
     if not workshop:
         raise HTTPException(status_code=404, detail="Workshop not found")
         
@@ -476,6 +565,65 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
 # ==========================================================================
 
 
+# ---------------------------------------------------------------------------
+# Registration window: one-shot auto-close, admin-override-sticks.
+#
+# `registration_open` is a stored, mutable flag rather than something computed
+# fresh on every read. Two things follow from that:
+#
+#   * Nothing flips it automatically on a schedule — there is no scheduler in
+#     this codebase — so it is synced lazily, the moment any route resolves
+#     the workshop.
+#   * A flag alone cannot tell "still True because nobody has looked yet"
+#     apart from "True because an admin deliberately reopened it after the
+#     deadline" — so `registration_closed_by_system` (an internal-only bit,
+#     never in any request/response model) records whether the *system* has
+#     already used its one auto-close for the current `registration_end`.
+#     An admin's own write to `registration_open` never touches that bit —
+#     only pushing a *new* `registration_end` does (see `update_workshop`) —
+#     which is what lets an override stick across subsequent reads.
+# ---------------------------------------------------------------------------
+
+def _sync_registration_state(workshop: dict) -> dict:
+    """
+    Auto-closes `registration_open` once, the first time this workshop is
+    resolved after its `registration_end` has passed, and returns the
+    up-to-date document (persisting the change if one was made).
+
+    A no-op for a workshop that has no registration window at all — older
+    documents predating this restructure would otherwise be locked closed by
+    a `None` bound; there should be none once this replace lands, but this
+    keeps the guard from crashing rather than skipping should one appear.
+    """
+    if workshop is None:
+        return workshop
+
+    end = workshop.get("registration_end")
+    if not end:
+        return workshop
+    if not workshop.get("registration_open"):
+        return workshop
+    if workshop.get("registration_closed_by_system"):
+        return workshop
+
+    try:
+        end_dt = parse_instant_utc(end, "registration_end")
+    except ValueError:
+        return workshop
+
+    if datetime.utcnow() <= end_dt:
+        return workshop
+
+    workshops_collection.update_one(
+        {"_id": workshop["_id"]},
+        {"$set": {"registration_open": False, "registration_closed_by_system": True, "updated_at": datetime.utcnow()}},
+    )
+    workshop = dict(workshop)
+    workshop["registration_open"] = False
+    workshop["registration_closed_by_system"] = True
+    return workshop
+
+
 def _resolve_workshop(workshop_id: str):
     """
     A workshop by its readable id, its slot id, or its raw ObjectId.
@@ -483,14 +631,18 @@ def _resolve_workshop(workshop_id: str):
     The same three-way lookup `register_for_workshop` and `workshop_attendance`
     already do, so a client that can scan against an id can also read the roster
     for it. Returns None rather than raising, so each caller words its own 404.
+
+    Every call runs the registration-window sync (`_sync_registration_state`)
+    before returning, so any route that resolves a workshop through this
+    helper sees an up-to-date `registration_open`.
     """
     workshop = workshops_collection.find_one({"$or": [{"workshop_id": workshop_id}, {"slot_id": workshop_id}]})
-    if workshop:
-        return workshop
-    try:
-        return workshops_collection.find_one({"_id": ObjectId(workshop_id)})
-    except Exception:
-        return None
+    if not workshop:
+        try:
+            workshop = workshops_collection.find_one({"_id": ObjectId(workshop_id)})
+        except Exception:
+            workshop = None
+    return _sync_registration_state(workshop)
 
 
 def _is_super_admin(user_id) -> bool:
@@ -722,6 +874,9 @@ def workshop_participation(workshop_id: str, current_user: dict = Depends(get_cu
         "venue": workshop.get("venue"),
         "slot_id": workshop.get("slot_id"),
         "start_time": workshop.get("start_time"),
+        "registration_start": workshop.get("registration_start"),
+        "registration_end": workshop.get("registration_end"),
+        "registration_open": workshop.get("registration_open"),
         "capacity": workshop.get("capacity", 0),
         # The workshop's own counters, returned alongside the roster so a client
         # never has to choose which to trust: `count` is what this response

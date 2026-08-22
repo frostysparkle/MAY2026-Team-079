@@ -28,6 +28,11 @@ db = client["paradox"]
 mess_collection = db["mess"]
 hostel_collection = db["hostel"]
 workshops_collection = db["workshops"]
+# Slot definitions (D1S1, D2S2, ...) created independently by Super Admins.
+# A workshop references one of these by slot_id and denormalizes its
+# start_time at creation time; editing/deleting a slot cascades to every
+# workshop referencing it. See routers/workshop_slots.py.
+workshop_slots_collection = db["workshop_slots"]
 event_collection = db["event"]
 backend_teams_collection = db["backend_teams"]
 participants_collection = db["participants"]

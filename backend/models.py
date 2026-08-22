@@ -28,22 +28,116 @@ class EmergencyContact(BaseModel):
     relation: str  # father | mother | elder_sibling | guardian
     phone: str
 
+# Closed vocabularies for every profile field the client can choose from a
+# fixed list, validated here rather than left as free strings. Centralised in
+# one place (instead of, say, `mess.py` defining its own mess vocabulary) so
+# `ProfileCompleteRequest`, `ParticipantAdminUpdateRequest`, and anything else
+# that reads or writes these fields can never disagree about what is valid.
+
+# The twelve official IITM BS houses, stored bare (no "House" suffix).
+HOUSES = (
+    "Bandipur", "Corbett", "Gir", "Kanha", "Kaziranga", "Nallamala",
+    "Namdapha", "Nilgiri", "Pichavaram", "Saranda", "Sundarbans", "Wayanad",
+)
+
+# Strict binary — no "other" bucket.
+GENDERS = ("male", "female")
+
+PROGRAMS = ("DS", "MS", "AE", "ES")
+
+COURSE_STAGES = ("foundational", "diploma", "degree")
+
+# Mess type vocabulary — the same closed set a mess hall's own `type` is
+# validated against (see `routers.mess`). Combined as "{cuisine}__{diet}" for
+# every hall that serves a specific regional menu, plus a standalone "jain"
+# for a hall that serves neither regional variant. Defined here rather than in
+# `routers/mess.py` so a participant's `mess_preference` and a hall's `type`
+# are provably the same set, not two lists that happen to agree today.
+MESS_CUISINES = ("north_indian", "south_indian")
+MESS_DIETS = ("veg", "non_veg")
+MESS_PREFERENCE_TYPES = {
+    f"{cuisine}__{diet}" for cuisine in MESS_CUISINES for diet in MESS_DIETS
+} | {"jain"}
+
+# The only methods a mock payment may be labelled with. Purely cosmetic on the
+# receipt — see `MockPaymentRequest`.
+PAYMENT_METHODS = ("upi", "card", "netbanking")
+
+
 class ProfileCompleteRequest(BaseModel):
     full_name: str
     dob: str
-    house: str     # 12 houses of IITM BS Degree Programme
-    gender: str    # male | female | other
+    house: str     # one of HOUSES, bare (no "House" suffix)
+    gender: str    # male | female
     phone: str
-    mess_preference: Optional[str] = "South Indian" # South Indian | North Indian | Jain
+    # None means "not yet chosen" — a participant who has not decided whether
+    # they are taking mess at all. Validated against MESS_PREFERENCE_TYPES
+    # when set; see `_valid_mess_preference`.
+    mess_preference: Optional[str] = None
     country: str
     state: str
     city: str
     address: str
     emergency_contact: Optional[EmergencyContact] = None
-    program: str   # DS | ES | AE | MS
+    program: str   # DS | MS | AE | ES
     course_stage: str # foundational | diploma | degree
     photo: Optional[str] = None # Base64 encoded string
     event_preferences: Optional[str] = None # free text: what sort of events/workshops the participant prefers
+
+    @field_validator("house")
+    @classmethod
+    def _valid_house(cls, v):
+        if v not in HOUSES:
+            raise ValueError(f"house must be one of {sorted(HOUSES)}")
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def _valid_gender(cls, v):
+        if v not in GENDERS:
+            raise ValueError(f"gender must be one of {sorted(GENDERS)}")
+        return v
+
+    @field_validator("program")
+    @classmethod
+    def _valid_program(cls, v):
+        if v not in PROGRAMS:
+            raise ValueError(f"program must be one of {sorted(PROGRAMS)}")
+        return v
+
+    @field_validator("course_stage")
+    @classmethod
+    def _valid_course_stage(cls, v):
+        if v not in COURSE_STAGES:
+            raise ValueError(f"course_stage must be one of {sorted(COURSE_STAGES)}")
+        return v
+
+    @field_validator("mess_preference")
+    @classmethod
+    def _valid_mess_preference(cls, v):
+        if v is not None and v not in MESS_PREFERENCE_TYPES:
+            raise ValueError(f"mess_preference must be one of {sorted(MESS_PREFERENCE_TYPES)}")
+        return v
+
+
+class MockPaymentRequest(BaseModel):
+    """
+    A mock payment attempt for the mess or hostel fee (`POST /mess/pay`,
+    `POST /hostels/pay`).
+
+    The amount is never accepted from the client — each route charges its own
+    fixed fee, so a participant cannot pay an arbitrary amount — so this model
+    carries only the payment method, which exists purely to label the mock
+    receipt the same way `StayPaymentPage`'s frontend mock does.
+    """
+    method: Optional[str] = "upi"
+
+    @field_validator("method")
+    @classmethod
+    def _valid_method(cls, v):
+        if v is not None and v not in PAYMENT_METHODS:
+            raise ValueError(f"method must be one of {sorted(PAYMENT_METHODS)}")
+        return v
 
 # QR Scanning
 class ScanQRRequest(BaseModel):
@@ -282,31 +376,109 @@ class BackendTeamUpdateRequest(BaseModel):
     designation: Optional[str] = Field(None, min_length=1)
     name: Optional[str] = None
 
-# Workshop models
-class WorkshopCreateRequest(BaseModel):
-    workshop_id: str
-    slot_id: str
-    name: str
-    description: str
-    venue: str
-    capacity: int
-    instructions: str
-    # ISO 8601 UTC datetime string, e.g. "2026-06-12T10:00:00".
-    # Drives the scanning and change windows enforced by
-    # POST /workshops/{id}/attendance and PATCH /workshops/{id}/participants/{pid}.
-    # Optional so workshops created before this field was introduced keep working;
-    # those workshops simply have no time-window guard (all scans pass through).
+# Workshop slot models
+#
+# A slot (D1S1, D2S2, ...) is a Super Admin-managed time block that workshops
+# are scheduled against — created independently of any workshop, and
+# referenced by `slot_id` from `WorkshopCreateRequest`. Restructured schema,
+# no backward compatibility with the old free-form `slot_id` string that used
+# to carry no stored time of its own.
+#
+# The id format is deliberately validated as a closed pattern (`D<day>S<shift>`)
+# rather than left as free text: it is what makes "same slot => same time
+# block" a guarantee the workshop-registration slot-clash check can rely on,
+# instead of an admin-entered convention nothing enforces.
+SLOT_ID_PATTERN = r"^D\d+S\d+$"
+
+class WorkshopSlotCreateRequest(BaseModel):
+    slot_id: str = Field(..., pattern=SLOT_ID_PATTERN)
+    start_time: str
+    end_time: str
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        start = parse_instant_utc(self.start_time, "start_time")
+        end = parse_instant_utc(self.end_time, "end_time")
+        if end <= start:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+class WorkshopSlotUpdateRequest(BaseModel):
+    """
+    Every field optional so a caller can push just one of the two — the route
+    merges whatever is given onto the stored document before re-validating
+    end > start, the same pattern `events.py` uses for `RegistrationWindowUpdate`.
+    """
     start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        if self.start_time is not None and self.end_time is not None:
+            start = parse_instant_utc(self.start_time, "start_time")
+            end = parse_instant_utc(self.end_time, "end_time")
+            if end <= start:
+                raise ValueError("end_time must be after start_time")
+        return self
+
+
+# Workshop models — restructured schema, no backward compatibility with the
+# previous shape. A workshop's `start_time` is no longer supplied directly by
+# the client: it is derived from the `workshop_slots` document its `slot_id`
+# names, and kept in sync with that slot (see routers/workshop_slots.py).
+#
+# `registration_open` is a stored, mutable flag rather than something computed
+# fresh on every read (unlike `events.RegistrationWindow.allowed`): the system
+# auto-closes it once, the first time it is enforced/read after
+# `registration_end` has passed, and an admin can explicitly set it back to
+# `True` afterwards and have that override stick. See
+# `routers.workshops._sync_registration_state`.
+class WorkshopCreateRequest(BaseModel):
+    # workshop_id is always assigned by the backend (SequentialIDGenerator) and
+    # is never accepted from a client.
+    slot_id: str = Field(..., pattern=SLOT_ID_PATTERN)
+    name: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    venue: str = Field(..., min_length=1)
+    capacity: int = Field(..., gt=0)
+    instructions: str = Field(..., min_length=1)
+    registration_start: str
+    registration_end: str
+    registration_open: bool = True
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        start = parse_instant_utc(self.registration_start, "registration_start")
+        end = parse_instant_utc(self.registration_end, "registration_end")
+        if end <= start:
+            raise ValueError("registration_end must be after registration_start")
+        return self
 
 class WorkshopUpdateRequest(BaseModel):
+    """
+    Every field optional so a caller updates only what it names. `slot_id` is
+    deliberately absent: a workshop's slot is fixed at creation because
+    participants' bookings reference it (same rule as before this restructure).
+    `start_time` is likewise absent as a direct field — it only ever changes
+    via a cascaded slot edit (`PUT /workshop-slots/{slot_id}`), never directly.
+    """
     name: Optional[str] = None
     description: Optional[str] = None
     venue: Optional[str] = None
-    capacity: Optional[int] = None
+    capacity: Optional[int] = Field(None, gt=0)
     instructions: Optional[str] = None
-    # Updatable post-creation so a corrected schedule can be pushed before
-    # the window guard would otherwise lock out all scanners.
-    start_time: Optional[str] = None
+    registration_start: Optional[str] = None
+    registration_end: Optional[str] = None
+    registration_open: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        if self.registration_start is not None and self.registration_end is not None:
+            start = parse_instant_utc(self.registration_start, "registration_start")
+            end = parse_instant_utc(self.registration_end, "registration_end")
+            if end <= start:
+                raise ValueError("registration_end must be after registration_start")
+        return self
 
 class WorkshopAssignVolunteerRequest(BaseModel):
     user_id: str
@@ -363,7 +535,10 @@ class QueryReplyRequest(BaseModel):
 
 # Admin edit of another participant's record (Story 7.3). Every field optional:
 # the route only $sets the ones a request actually carries, so a form that edits
-# one field cannot blank the rest.
+# one field cannot blank the rest. Validated against the same closed
+# vocabularies as `ProfileCompleteRequest` — an admin should not be able to
+# write a value a participant themselves could never submit — but only when a
+# field is actually present, since every field here is optional.
 class ParticipantAdminUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     house: Optional[str] = None
@@ -377,3 +552,38 @@ class ParticipantAdminUpdateRequest(BaseModel):
     program: Optional[str] = None
     course_stage: Optional[str] = None
     emergency_contact: Optional[EmergencyContact] = None
+
+    @field_validator("house")
+    @classmethod
+    def _valid_house(cls, v):
+        if v is not None and v not in HOUSES:
+            raise ValueError(f"house must be one of {sorted(HOUSES)}")
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def _valid_gender(cls, v):
+        if v is not None and v not in GENDERS:
+            raise ValueError(f"gender must be one of {sorted(GENDERS)}")
+        return v
+
+    @field_validator("program")
+    @classmethod
+    def _valid_program(cls, v):
+        if v is not None and v not in PROGRAMS:
+            raise ValueError(f"program must be one of {sorted(PROGRAMS)}")
+        return v
+
+    @field_validator("course_stage")
+    @classmethod
+    def _valid_course_stage(cls, v):
+        if v is not None and v not in COURSE_STAGES:
+            raise ValueError(f"course_stage must be one of {sorted(COURSE_STAGES)}")
+        return v
+
+    @field_validator("mess_preference")
+    @classmethod
+    def _valid_mess_preference(cls, v):
+        if v is not None and v not in MESS_PREFERENCE_TYPES:
+            raise ValueError(f"mess_preference must be one of {sorted(MESS_PREFERENCE_TYPES)}")
+        return v
