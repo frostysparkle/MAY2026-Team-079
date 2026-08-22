@@ -46,18 +46,6 @@ def register(request: RegisterRequest):
     
     # Generate unique asymmetric keys for the user
     private_key, public_key = generate_rsa_key_pair()
-    
-    # Initialize default mess entries structure (Day 1 to Day 5)
-    default_mess_entries = []
-    for day in range(1, 6):
-        default_mess_entries.append({
-            "day": day,
-            "slots": [
-                {"slot": "breakfast", "logged": False},
-                {"slot": "lunch", "logged": False},
-                {"slot": "dinner", "logged": False}
-            ]
-        })
 
     new_user = {
         "participant_id": participant_id,
@@ -67,7 +55,14 @@ def register(request: RegisterRequest):
         "mess": {
             "registered": False,
             "mess_id": None,
-            "entries": default_mess_entries
+            # Scan markers keyed the same way as the hall's own `menu`
+            # (`day_1`, `day_2`, ... -> `breakfast` | `lunch` | `dinner`).
+            # Starts empty rather than pre-seeded: which days/slots exist is
+            # entirely up to whichever hall this participant is later
+            # allocated to, and that hall's own menu can change at any time.
+            # `GET /mess/my_mess` derives the display list by merging this
+            # against the allotted hall's current menu.
+            "scans": {}
         },
         "accommodation": {
             "registered": False,
