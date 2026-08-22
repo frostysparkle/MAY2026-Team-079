@@ -90,7 +90,7 @@ export default function WorkshopManagePage() {
 
   const back = superAdmin
     ? { label: 'Workshops', onClick: () => navigate(ROUTES.adminWorkshops) }
-    : { label: 'Duties', onClick: () => navigate(ROUTES.staffDuties) };
+    : { label: 'Dashboard', onClick: () => navigate(ROUTES.staffDuties) };
 
   const rows = useMemo<RosterEntry[]>(() => {
     const source =

@@ -33,16 +33,24 @@ const NAV: {
   hideForSuperAdmin?: boolean;
 }[] = [
   { to: ROUTES.staffHome, label: 'Home' },
-  { to: ROUTES.staffDuties, label: 'Duties', hideForSuperAdmin: true },
-  // Story 5.4, and deliberately unflagged: `GET /issues` scopes itself to the
-  // caller's own block and hall teams, and hands a Super Admin the whole fest. So
-  // this is one screen both roles want, unlike the admin sections below it.
-  { to: ROUTES.facilityIssues, label: 'Issues' },
-  // Stories 6.3/6.4, unflagged for the same reason Issues is: `GET /queries`
-  // scopes itself to the caller's own event, workshop, block and hall teams, and
-  // hands a Super Admin the fest. It is beside Issues because the two are the
-  // same shift — one queue of faults, one of questions.
-  { to: ROUTES.queryConsole, label: 'Queries' },
+  // "Dashboard", not "Duties". The screen behind it has been titled `Dashboard`
+  // since it was written (`StaffHomePage`'s `FestivalScreen`), so the rail, the
+  // landing, and the six back buttons that lead here were all naming it something
+  // its own heading disagreed with. The route id stays `staffDuties`: renaming the
+  // path would break links that are live in the overview board and on bookmarks.
+  { to: ROUTES.staffDuties, label: 'Dashboard', hideForSuperAdmin: true },
+  // Story 5.4 and Stories 6.3/6.4, in one section and deliberately unflagged:
+  // `GET /queries` and `GET /issues` both scope themselves to the caller's own
+  // teams — events, workshops, blocks and halls for the first, blocks and halls
+  // for the second — and both hand a Super Admin the whole fest. So this is one
+  // screen both roles want, unlike the admin sections below it.
+  //
+  // It was two entries, Issues and Queries, sitting next to each other under a
+  // comment observing that they were the same shift. They were, and a volunteer
+  // still had to open both to learn that nothing was waiting on them. Now one
+  // section carries both queues as tabs with a shared row of figures, and the two
+  // old paths redirect into it.
+  { to: ROUTES.staffSupport, label: 'Support' },
   { to: ROUTES.adminOverview, label: 'Overview', superAdmin: true },
   { to: ROUTES.adminEvents, label: 'Events', superAdmin: true },
   { to: ROUTES.adminWorkshops, label: 'Workshops', superAdmin: true },

@@ -7,13 +7,21 @@ import {
 } from '@/features/issues/issues';
 
 /**
- * One set of figures across both halves of Help & Support.
+ * One set of figures across both halves of support — used by both sides of it.
  *
  * A participant does not hold "queries" and "issues"; they hold *things they
  * asked somebody to deal with*. Splitting the count the way the backend splits
  * the collections meant the old screens could each only answer half of "is
  * anybody dealing with my stuff", and a student with an unanswered report and an
  * answered question had to visit two routes to work that out.
+ *
+ * The duty desk has the same problem from the other end, so `StaffSupportPage`
+ * counts its queue with this too and the arithmetic is shared rather than
+ * reimplemented. `StaffIssue extends Issue`, so a staff queue satisfies the same
+ * parameter as a participant's own list with no widening needed. The field names
+ * read from the asker's side because that is whose backlog it is either way; a
+ * volunteer's screen labels `awaitingReply` as nobody having answered yet, which
+ * is the same fact said from the desk.
  *
  * Both halves are counted with the domains' own predicates rather than by
  * re-deriving status rules here — `countQueries`/`isUnanswered` from the queries

@@ -26,10 +26,13 @@ import type { TierState } from '../useFestSnapshot';
  * the word for its level alongside the colour.
  *
  * The rail scrolls inside its own panel rather than growing the page, so the
- * hero row keeps its height whether there are no alerts or fifteen. That is the
- * one place on this board where clipping content is right: the alerts are sorted
- * worst-first, so what gets pushed below the fold is always the least urgent
- * thing.
+ * command row keeps its height whether there are no alerts or fifteen. Both
+ * halves of that matter: the scroll here, and the fixed row height the page gives
+ * this card (`xl:auto-rows-[34rem]` in `AdminOverviewPage`) — without the fixed
+ * row, the grid still sized itself to this list's full content and the flow panel
+ * beside it stretched to match. Pushing alerts below the fold is the one place on
+ * this board where hiding content is right: they are sorted worst-first, so what
+ * goes under is always the least urgent thing.
  */
 
 const SEVERITY_ICON: Record<AlertSeverity, LucideIcon> = {

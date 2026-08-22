@@ -65,58 +65,63 @@ export function PipelinePanel({
       fill
       className={className}
     >
-      <ul className="my-auto flex list-none flex-col gap-3.5 p-0">
-        {stages.map((stage) => {
-          const percent =
-            stage.value === null || stage.of <= 0
-              ? null
-              : Math.min(100, Math.max(0, (stage.value / stage.of) * 100));
+      {/* The card's height is fixed by its grid row, and the seven stages fit it,
+          so this scroll only ever engages under a large user font size or a
+          zoomed-in viewport. It is here so that case clips nothing. */}
+      <div className="no-scrollbar -mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
+        <ul className="my-auto flex list-none flex-col gap-3.5 p-0">
+          {stages.map((stage) => {
+            const percent =
+              stage.value === null || stage.of <= 0
+                ? null
+                : Math.min(100, Math.max(0, (stage.value / stage.of) * 100));
 
-          return (
-            <li key={stage.key} className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="block h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: stage.color }}
-                  />
-                  <span className="truncate text-xs font-semibold text-ink">{stage.label}</span>
-                  <span className="hidden truncate text-[11px] text-muted sm:inline">
-                    {stage.note}
+            return (
+              <li key={stage.key} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="block h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: stage.color }}
+                    />
+                    <span className="truncate text-xs font-semibold text-ink">{stage.label}</span>
+                    <span className="hidden truncate text-[11px] text-muted sm:inline">
+                      {stage.note}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 text-xs tabular-nums">
-                  <b className="font-bold text-ink">{orDash(stage.value)}</b>
-                  <span className="ml-1.5 text-muted">
-                    {percent === null ? '' : `${Math.round(percent)}%`}
+                  <span className="shrink-0 text-xs tabular-nums">
+                    <b className="font-bold text-ink">{orDash(stage.value)}</b>
+                    <span className="ml-1.5 text-muted">
+                      {percent === null ? '' : `${Math.round(percent)}%`}
+                    </span>
                   </span>
-                </span>
-              </div>
-              <div
-                role="progressbar"
-                aria-label={`${stage.label}, ${stage.note}`}
-                aria-valuemin={0}
-                aria-valuemax={stage.of}
-                aria-valuenow={stage.value ?? undefined}
-                aria-valuetext={
-                  stage.value === null
-                    ? 'Could not be read'
-                    : `${stage.value.toLocaleString()} of ${stage.of.toLocaleString()}`
-                }
-                className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
-              >
-                {percent !== null && (
-                  <div
-                    className="h-full rounded-full transition-[width] duration-700"
-                    style={{ width: `${percent}%`, background: stage.color }}
-                  />
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label={`${stage.label}, ${stage.note}`}
+                  aria-valuemin={0}
+                  aria-valuemax={stage.of}
+                  aria-valuenow={stage.value ?? undefined}
+                  aria-valuetext={
+                    stage.value === null
+                      ? 'Could not be read'
+                      : `${stage.value.toLocaleString()} of ${stage.of.toLocaleString()}`
+                  }
+                  className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
+                >
+                  {percent !== null && (
+                    <div
+                      className="h-full rounded-full transition-[width] duration-700"
+                      style={{ width: `${percent}%`, background: stage.color }}
+                    />
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </BoardPanel>
   );
 }

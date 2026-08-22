@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { RankedBars, StatusBadge } from '@/components/ui';
-import { ROUTES } from '@/config/routes';
+import { staffSupportPath } from '@/config/routes';
 import type { QueryRecord, StaffIssue } from '@/api/types';
 import type { TierState } from '../useFestSnapshot';
 import { Figure, FigureRow, OverviewPanel, PanelBlock } from '../OverviewPanel';
@@ -31,8 +31,9 @@ import { countIssues, categoryLabel as issueCategoryLabel } from '@/features/iss
  * has replied. A status alone can say `assigned` for something claimed and then
  * forgotten, which is the failure a board should catch and a status column cannot.
  *
- * Read-only, like every other panel: it counts, then hands off to the two
- * consoles that own the work.
+ * Read-only, like every other panel: it counts, then hands off to the Support
+ * desk that owns the work — whose two tabs are the two consoles this panel used to
+ * point at separately, merged for the same reason this panel was never split.
  */
 export function SupportPanel({
   queries,
@@ -106,8 +107,8 @@ export function SupportPanel({
           : `${queryCounts.total} queries · ${issueCounts.total} reported faults`
       }
       tier={tier}
-      to={ROUTES.queryConsole}
-      toLabel="Open the query desk"
+      to={staffSupportPath('questions')}
+      toLabel="Open the support desk"
       badge={
         unreadable.length > 0 ? (
           <StatusBadge tone="neutral">Partial</StatusBadge>
@@ -165,8 +166,8 @@ export function SupportPanel({
 
       <p className="text-[11px] text-muted">
         Faults are answered on the{' '}
-        <Link to={ROUTES.facilityIssues} className="font-medium text-brand hover:underline">
-          issues desk
+        <Link to={staffSupportPath('faults')} className="font-medium text-brand hover:underline">
+          faults tab
         </Link>
         . Both figures are the whole fest, because a Super Admin&rsquo;s own queue is unscoped — a
         volunteer opening either console sees only their own blocks, halls, events and workshops.

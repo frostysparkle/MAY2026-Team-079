@@ -81,13 +81,15 @@ const SUPER_ADMIN_SECTIONS: LandingSection[] = [
 
 /**
  * Any other staffer — volunteer, event head, mess/hostel team. Their one
- * role-specific screen is the duty list; the rest of the programme is the public
+ * role-specific screen is their dashboard; the rest of the programme is the public
  * brochure, which they can read like anyone else. Scanners are deliberately
- * missing: they are per-entity routes, reached from the duty list that names
+ * missing: they are per-entity routes, reached from the dashboard that names
  * which mess, hostel, event, or workshop is actually theirs.
  */
 const STAFF_SECTIONS: LandingSection[] = [
-  { label: 'Duties', to: ROUTES.staffDuties },
+  // Named to match both the screen's own title and the staff rail — see the note
+  // on `NAV` in `StaffShell`.
+  { label: 'Dashboard', to: ROUTES.staffDuties },
   { label: 'Events', to: ROUTES.publicEvents },
   { label: 'Schedule', to: ROUTES.publicSchedule },
   { label: 'Workshops', to: ROUTES.publicWorkshops },

@@ -56,7 +56,10 @@ export function OverviewPanel({
   return (
     <section
       aria-label={title}
-      className={cn('glass-panel flex flex-col gap-4 overflow-hidden rounded-3xl p-5', className)}
+      className={cn(
+        'glass-panel flex min-h-0 flex-col gap-4 overflow-hidden rounded-3xl p-5',
+        className,
+      )}
       style={{ borderLeft: `4px solid ${hue}` }}
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -76,10 +79,36 @@ export function OverviewPanel({
           <Skeleton className="h-24 rounded-xl" />
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-4">{children}</div>
+        /*
+         * The body scrolls, the heading and the footer do not.
+         *
+         * Panels are paired two to a grid row, and a row is as tall as its taller
+         * panel, so the denser of a pair used to set the height and leave its
+         * neighbour with a band of empty glass — Participants against Staff &
+         * Volunteers was roughly two hundred pixels of it. The page now caps the
+         * row height instead, which only works if the overflow has somewhere to
+         * go: hence this scroller. Below `xl` there is no cap and nothing to
+         * scroll, so this is inert on a phone.
+         *
+         * The footer staying outside it is the point of putting the scroll here
+         * rather than on the whole panel — the staleness line and the hand-off
+         * link are the two things that must never scroll out of reach.
+         *
+         * `justify-between` handles the other half of the mismatch. A ceiling
+         * removes most of the empty band but not all of it, since panels differ in
+         * weight by more than any one number can absorb, and whatever is left over
+         * is spread between the blocks as breathing room instead of pooling above
+         * the footer. `gap-4` stays the floor, so nothing closes up. When the body
+         * overflows there is no free space to distribute and this does nothing,
+         * which is why it is safe next to the scroll: unlike `justify-center`, it
+         * can never push content out of the scrollable range.
+         */
+        <div className="no-scrollbar flex min-h-0 flex-1 flex-col justify-between gap-4 overflow-y-auto">
+          {children}
+        </div>
       )}
 
-      <footer className="flex items-center justify-between gap-3 border-t border-line/70 pt-3">
+      <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-line/70 pt-3">
         <Staleness tier={tier} />
         {to && (
           <Link

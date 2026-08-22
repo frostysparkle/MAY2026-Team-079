@@ -126,12 +126,12 @@ describe('role landing routes', () => {
     expect(screen.getByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
   });
 
-  it('gives a volunteer the landing at /staff with their duty list, not the admin sections', () => {
+  it('gives a volunteer the landing at /staff with their dashboard, not the admin sections', () => {
     useAuthStore.getState().setStaffSession(VOLUNTEER);
     renderAt(ROUTES.staffHome);
 
     const nav = perimeter();
-    expect(within(nav).getByText('Duties')).toBeInTheDocument();
+    expect(within(nav).getByText('Dashboard')).toBeInTheDocument();
     expect(within(nav).queryByText('Audit Logs')).toBeNull();
   });
 
@@ -146,12 +146,13 @@ describe('role landing routes', () => {
     );
   });
 
-  it('keeps the staff duty list as a section, no longer the /staff index', () => {
+  it('keeps the staff dashboard as a section, no longer the /staff index', () => {
     useAuthStore.getState().setStaffSession(VOLUNTEER);
     renderAt(ROUTES.staffDuties);
 
     const rail = screen.getAllByRole('navigation', { name: 'Staff sections' })[0];
-    expect(within(rail).getByRole('link', { name: 'Duties' })).toHaveAttribute(
+    // Labelled for the screen's own title. The route id stays `staffDuties`.
+    expect(within(rail).getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
       'href',
       ROUTES.staffDuties,
     );
@@ -178,6 +179,21 @@ describe('role landing routes', () => {
     // The landing is only public at `/`; behind the guard it needs a session.
     expect(screen.queryByRole('heading', { name: 'PARADOX' })).toBeNull();
     expect(screen.getByRole('heading', { name: /Welcome to Paradox/ })).toBeInTheDocument();
+  });
+
+  it('offers staff Support once, where Issues and Queries used to be two', () => {
+    useAuthStore.getState().setStaffSession(VOLUNTEER);
+    renderAt(ROUTES.staffSupport);
+
+    const rail = screen.getAllByRole('navigation', { name: 'Staff sections' })[0];
+    expect(within(rail).getByRole('link', { name: 'Support' })).toHaveAttribute(
+      'href',
+      ROUTES.staffSupport,
+    );
+    // The two the section replaced are gone from the rail, not merely renamed.
+    for (const label of ['Issues', 'Queries']) {
+      expect(within(rail).queryByRole('link', { name: label })).toBeNull();
+    }
   });
 
   it('offers Help & Support once, where three entries used to be', () => {
@@ -252,5 +268,58 @@ describe('support route redirects', () => {
     // The redirect lives inside the participant guard, so this is a sign-in
     // prompt rather than a redirect to a route that then bounces.
     expect(screen.getByRole('heading', { name: /Welcome to Paradox/ })).toBeInTheDocument();
+  });
+});
+
+/**
+ * The two sections the staff Support desk was consolidated out of.
+ *
+ * `/staff/queries` and `/staff/issues` are linked from the overview board's alert
+ * rail, from `SupportPanel`, and from the duty list, quite apart from whatever a
+ * volunteer bookmarked mid-fest — so they resolve to the tab that now carries
+ * each of them rather than 404ing.
+ */
+describe('staff support route redirects', () => {
+  beforeEach(() => {
+    useAuthStore.getState().clear();
+    useAuthStore.getState().setStaffSession(VOLUNTEER);
+  });
+  afterEach(() => useAuthStore.getState().clear());
+
+  const cases = [
+    [ROUTES.queryConsole, 'questions'],
+    [ROUTES.facilityIssues, 'faults'],
+  ] as const;
+
+  for (const [from, tab] of cases) {
+    it(`sends ${from} to the ${tab} tab`, () => {
+      const router = createMemoryRouter(routes, { initialEntries: [from] });
+      render(<RouterProvider router={router} />);
+
+      expect(router.state.location.pathname).toBe(ROUTES.staffSupport);
+      expect(router.state.location.search).toBe(`?tab=${tab}`);
+    });
+  }
+
+  it('replaces rather than stacks, so Back does not bounce through the redirect', () => {
+    const router = createMemoryRouter(routes, {
+      initialEntries: [ROUTES.staffDuties, ROUTES.facilityIssues],
+      initialIndex: 1,
+    });
+    render(<RouterProvider router={router} />);
+
+    expect(router.state.location.pathname).toBe(ROUTES.staffSupport);
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('still puts a participant through the staff guard on an old bookmark', () => {
+    useAuthStore.getState().clear();
+    useAuthStore.getState().setParticipantSession(PARTICIPANT);
+    const router = createMemoryRouter(routes, { initialEntries: [ROUTES.queryConsole] });
+    render(<RouterProvider router={router} />);
+
+    // The redirect lives inside the staff guard, so a participant is turned away
+    // rather than redirected to a route that then bounces them.
+    expect(screen.getByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
   });
 });

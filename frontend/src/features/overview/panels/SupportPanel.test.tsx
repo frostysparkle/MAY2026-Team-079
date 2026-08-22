@@ -137,15 +137,20 @@ describe('SupportPanel', () => {
     expect(screen.getByText('Nothing reported')).toBeInTheDocument();
   });
 
-  it('hands off to both consoles', () => {
+  /**
+   * The two consoles this panel used to point at separately are now the two tabs
+   * of one Support desk, so each hand-off names its tab directly rather than going
+   * through the redirect the old paths serve.
+   */
+  it('hands off to the tab that holds each backlog', () => {
     renderPanel();
-    expect(screen.getByRole('link', { name: /Open the query desk/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Open the support desk/ })).toHaveAttribute(
       'href',
-      '/staff/queries',
+      '/staff/support?tab=questions',
     );
-    expect(screen.getByRole('link', { name: 'issues desk' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'faults tab' })).toHaveAttribute(
       'href',
-      '/staff/issues',
+      '/staff/support?tab=faults',
     );
   });
 

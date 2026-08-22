@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { RefreshCw, Radio, ShieldCheck, UtensilsCrossed, Users } from 'lucide-react';
 import { Button, DOMAIN_COLOR } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
-import { ROUTES } from '@/config/routes';
+import { ROUTES, staffSupportPath } from '@/config/routes';
 import { buildHostelRows, summariseHostels } from '@/features/hostels/hostelOccupancy';
 import { buildMessRows, summariseMess } from '@/features/mess/messOccupancy';
 import {
@@ -267,8 +267,10 @@ export default function AdminOverviewPage() {
           workshops: ROUTES.adminWorkshops,
           staff: ROUTES.adminBackendTeams,
           auditLogs: ROUTES.adminAuditLogs,
-          queries: ROUTES.queryConsole,
-          issues: ROUTES.facilityIssues,
+          // Straight to the tab that holds the backlog the alert is about, rather
+          // than through the redirect the old paths now serve.
+          queries: staffSupportPath('questions'),
+          issues: staffSupportPath('faults'),
         },
       ),
     [
@@ -405,11 +407,20 @@ export default function AdminOverviewPage() {
 
       {/*
         2 — The command row: what is moving, beside what needs attention.
-        `items-stretch` with the rail's own internal scroll is what keeps the two
-        the same height regardless of how many alerts are open — the rail clips its
-        least-urgent entries rather than stretching the page.
+
+        `xl:auto-rows-[34rem]` is what actually holds the two cards to one height.
+        The rail's internal scroll alone did not: a grid row sized `auto` takes the
+        tallest item's *content* height, and a scroll container still reports its
+        full content, so fifteen open alerts grew the row and the flow panel beside
+        it stretched to match. Fixing the row makes the rail scroll instead. The
+        height clears the flow panel's 236px chart and its blocks, and that panel
+        scrolls too rather than clipping if a translation or a font size overruns.
+
+        Only from `xl`, where the row is three columns wide and neither card's
+        header wraps. Stacked below that, each card is its own row and sizing them
+        to content is right — a phone scrolls the page, not the card.
       */}
-      <div className="grid items-stretch gap-4 xl:grid-cols-3">
+      <div className="grid items-stretch gap-4 xl:auto-rows-[34rem] xl:grid-cols-3">
         <LiveFlowPanel audit={audit} tier={tiers.fast} className="xl:col-span-2" />
         <AttentionRail
           alerts={alerts}
@@ -420,8 +431,15 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* 3 — The operational row: how far registrations got, and where campus is
-             running out of room. */}
-      <div className="grid items-stretch gap-4 xl:grid-cols-2">
+             running out of room.
+             `auto-rows-[30rem]` fixes both cards' height instead of letting the
+             capacity table's row count decide it. Without it the grid row grows to
+             whatever the fullest campus needs — thirty blocks and halls made a
+             card taller than the viewport, and the pipeline beside it stretched to
+             match. A fixed row is what makes the internal scrolls below engage.
+             The height fits the pipeline's seven stages outright, so the card that
+             cannot scroll is never the one that has to. */}
+      <div className="grid auto-rows-[30rem] items-stretch gap-4 xl:grid-cols-2">
         <PipelinePanel
           stages={stages}
           registered={participants?.total_registered ?? null}
@@ -438,8 +456,18 @@ export default function AdminOverviewPage() {
         Panels are self-contained, so the order here is the only thing that decides
         the reading order: the operational spine first — where people sleep, eat,
         and go — then the organisation behind it, then money, then the raw trail.
+
+        `minmax(0,40rem)` is a ceiling on each row, not a fixed height, and the
+        distinction is what makes it safe across nine panels of very different
+        weights. A row still sizes itself to its taller panel while that fits;
+        past 40rem it stops, and `OverviewPanel`'s body scrolls. What this ends is
+        one dense panel dictating a row far taller than its neighbour has content
+        for — Participants left Staff & Volunteers around two hundred pixels of
+        empty glass, and Finance did the same to Support. A fixed height would have
+        cost the opposite: the lightest panels padded out to the tallest one's size,
+        and the lone Live activity panel on the last row stretched for no reason.
       */}
-      <div className="mt-2 grid gap-4 xl:grid-cols-2">
+      <div className="mt-2 grid gap-4 xl:auto-rows-[minmax(0,40rem)] xl:grid-cols-2">
         <HostelsPanel
           hostels={hostels}
           stats={hostelStats}

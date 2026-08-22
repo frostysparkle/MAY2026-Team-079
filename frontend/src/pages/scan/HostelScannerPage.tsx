@@ -62,7 +62,7 @@ export default function HostelScannerPage() {
 
   const scanner = useQrScanner(handleScan);
 
-  const back = { label: 'Duties', onClick: () => navigate(ROUTES.staffDuties) };
+  const back = { label: 'Dashboard', onClick: () => navigate(ROUTES.staffDuties) };
 
   if (loadError) {
     return (

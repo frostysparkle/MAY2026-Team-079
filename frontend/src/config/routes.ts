@@ -103,21 +103,34 @@ export const ROUTES = {
    */
   messMenu: '/staff/mess/:messId/menu',
   /**
-   * The duty console for reported hostel and mess faults — Story 5.4's answering
-   * half. A duty route rather than an admin one, on the same terms as `messMenu`:
-   * `GET /issues` admits anybody named on a block's or hall's team, and a Super
-   * Admin sees the whole fest through the same screen.
+   * Support — the duty desk for everything a participant has asked somebody to
+   * deal with. One route with two tabs, selected by `?tab=`:
+   *
+   *   - `questions` Stories 6.3/6.4 — answer a query, and claim it by name.
+   *   - `faults`    Story 5.4 — move a reported hostel or mess fault along.
+   *
+   * A duty route rather than an admin one, on the same terms as `messMenu`. Both
+   * endpoints behind it scope themselves to the caller: `GET /queries` admits
+   * anybody named on a block's, hall's, event's or workshop's team, `GET /issues`
+   * anybody named on a block's or hall's team, and a Super Admin sees the whole
+   * fest through either. That is also how 6.4's "help participants as POR / POC"
+   * is delivered without adding a POR/POC role — the people already named on
+   * those teams are the points of contact.
+   *
+   * These were two adjacent sections until they were not. They are one shift —
+   * one queue of questions, one of faults — and the staff rail said so in a
+   * comment while still charging a volunteer two visits to find out whether
+   * anything was waiting on them. Sharing a screen is what lets one row of
+   * figures answer that, which neither console could alone.
+   *
+   * The two old paths below still resolve; they redirect here with the matching
+   * tab, because they are linked from the overview board's alert rail, from
+   * `SupportPanel`, and from the duty list.
    */
+  staffSupport: '/staff/support',
+  /** @deprecated Redirects to `staffSupport?tab=faults`. Kept for existing links. */
   facilityIssues: '/staff/issues',
-  /**
-   * The desk where participants' questions get answered — Stories 6.3 and 6.4.
-   * A duty route on the same terms as `messMenu` and `facilityIssues`:
-   * `GET /queries` admits anybody named on a block's, hall's, event's or
-   * workshop's team, and a Super Admin sees the whole fest through it. This is
-   * how 6.4's "help participants as POR / POC" is delivered without adding a
-   * POR/POC role — the people already named on those teams are the points of
-   * contact.
-   */
+  /** @deprecated Redirects to `staffSupport?tab=questions`. Kept for existing links. */
   queryConsole: '/staff/queries',
   scanHostel: '/staff/scan/hostel/:hostelId',
   scanEvent: '/staff/scan/event/:eventId',
@@ -203,4 +216,20 @@ export type SupportTab = 'ask' | 'report' | 'contacts';
  */
 export function supportPath(tab: SupportTab): string {
   return `${ROUTES.support}?tab=${tab}`;
+}
+
+/** Which tab of the staff Support desk a link means. */
+export type StaffSupportTab = 'questions' | 'faults';
+
+/**
+ * A link straight to one tab of the staff Support desk, e.g.
+ * `staffSupportPath('faults')` → `/staff/support?tab=faults`.
+ *
+ * The staff counterpart of `supportPath`, and it exists for the same reason: the
+ * tab names are the contract between `ROUTES.staffSupport`, the redirects from
+ * `/staff/issues` and `/staff/queries`, and `useTabParam`'s fallback. A typo in a
+ * template literal would land somebody on the default tab instead of failing.
+ */
+export function staffSupportPath(tab: StaffSupportTab): string {
+  return `${ROUTES.staffSupport}?tab=${tab}`;
 }

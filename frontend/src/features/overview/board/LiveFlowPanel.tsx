@@ -85,6 +85,11 @@ export function LiveFlowPanel({
       to={ROUTES.adminAuditLogs}
       toLabel="Open audit logs"
       fill
+      // The card's height is fixed by its grid row from `xl`, so the body scrolls
+      // rather than clipping if the legend wraps or the chart cannot compress. In
+      // the ordinary case there is nothing to scroll: the chart block below takes
+      // up the slack.
+      bodyClassName="no-scrollbar overflow-y-auto"
       className={className}
     >
       {/* Per-stream totals, doubling as the chart's legend. Direct-labelled, so
@@ -117,7 +122,11 @@ export function LiveFlowPanel({
         ))}
       </ul>
 
-      <div className="min-h-0 flex-1">
+      {/* `flex-1` without `min-h-0`, deliberately: the automatic minimum size of a
+          block holding a 236px chart is 236px, so this grows into spare height but
+          never squeezes the chart into an unreadable band. When the card is too
+          short for all three blocks, the body scrolls instead. */}
+      <div className="flex-1">
         <TrendChart
           series={series}
           label="Campus activity over the last 24 hours"

@@ -134,7 +134,7 @@ export default function MessMenuPage() {
   const unpublished = !mess?.menu && preview.edited;
   const canPublish = dirty || unpublished;
 
-  const back = { label: 'Duties', onClick: () => navigate(ROUTES.staffDuties) };
+  const back = { label: 'Dashboard', onClick: () => navigate(ROUTES.staffDuties) };
 
   /** Send the whole menu up, then re-read the hall so what is shown is what is stored. */
   async function save(next: MenuOverride) {

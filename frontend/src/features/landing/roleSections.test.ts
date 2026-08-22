@@ -92,9 +92,9 @@ describe('landingSections', () => {
     ]);
   });
 
-  it('gives other staff their duty list and the public programme', () => {
+  it('gives other staff their dashboard and the public programme', () => {
     const sections = landingSections(staff('volunteer'));
-    expect(sections.find((s) => s.label === 'Duties')?.to).toBe(ROUTES.staffDuties);
+    expect(sections.find((s) => s.label === 'Dashboard')?.to).toBe(ROUTES.staffDuties);
     // No admin section leaks into a non-super-admin's landing.
     expect(sections.every((s) => !s.to.startsWith('/staff/admin'))).toBe(true);
   });

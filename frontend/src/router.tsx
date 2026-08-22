@@ -1,6 +1,12 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
-import { ROUTES, supportPath, type SupportTab } from '@/config/routes';
+import {
+  ROUTES,
+  staffSupportPath,
+  supportPath,
+  type StaffSupportTab,
+  type SupportTab,
+} from '@/config/routes';
 import { AppShell } from '@/components/layout/AppShell';
 import { StaffShell } from '@/components/layout/StaffShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -34,8 +40,7 @@ import WorkshopDetailPage from '@/pages/workshops/WorkshopDetailPage';
 
 import MessScannerPage from '@/pages/scan/MessScannerPage';
 import MessMenuPage from '@/pages/staff/MessMenuPage';
-import FacilityIssuesPage from '@/pages/staff/FacilityIssuesPage';
-import QueryConsolePage from '@/pages/staff/QueryConsolePage';
+import StaffSupportPage from '@/pages/staff/StaffSupportPage';
 import HostelScannerPage from '@/pages/scan/HostelScannerPage';
 import EventScannerPage from '@/pages/scan/EventScannerPage';
 import WorkshopScannerPage from '@/pages/scan/WorkshopScannerPage';
@@ -93,6 +98,27 @@ const SUPPORT_REDIRECTS: RouteObject[] = (
 ).map(([from, tab]) => ({
   path: from,
   element: <Navigate to={supportPath(tab)} replace />,
+}));
+
+/**
+ * `/staff/queries` and `/staff/issues` → the tab of `/staff/support` that now
+ * carries each of them.
+ *
+ * The staff counterpart of `SUPPORT_REDIRECTS`, and kept for the same reason:
+ * both paths are live in the overview board's alert rail, in `SupportPanel`'s
+ * hand-off link, and on the duty list, quite apart from whatever a volunteer has
+ * bookmarked mid-fest. Declared with absolute paths inside the staff block, so
+ * they stay behind the same `requireTokenType="staff"` guard the originals were
+ * behind rather than redirecting first and failing the guard second.
+ */
+const STAFF_SUPPORT_REDIRECTS: RouteObject[] = (
+  [
+    [ROUTES.queryConsole, 'questions'],
+    [ROUTES.facilityIssues, 'faults'],
+  ] as const satisfies readonly (readonly [string, StaffSupportTab])[]
+).map(([from, tab]) => ({
+  path: from,
+  element: <Navigate to={staffSupportPath(tab)} replace />,
 }));
 
 function Lazy({ children }: { children: React.ReactNode }) {
@@ -221,8 +247,11 @@ export const routes: RouteObject[] = [
           { path: ROUTES.staffChangePassword, element: <ChangePasswordPage /> },
           { path: ROUTES.scanMess, element: <MessScannerPage /> },
           { path: ROUTES.messMenu, element: <MessMenuPage /> },
-          { path: ROUTES.facilityIssues, element: <FacilityIssuesPage /> },
-          { path: ROUTES.queryConsole, element: <QueryConsolePage /> },
+          { path: ROUTES.staffSupport, element: <StaffSupportPage /> },
+          // The two sections Support was consolidated out of. Redirects rather
+          // than deletions: they are linked from the overview board and the duty
+          // list, and are on volunteers' bookmarks mid-fest.
+          ...STAFF_SUPPORT_REDIRECTS,
           { path: ROUTES.scanHostel, element: <HostelScannerPage /> },
           { path: ROUTES.scanEvent, element: <EventScannerPage /> },
           { path: ROUTES.scanWorkshop, element: <WorkshopScannerPage /> },

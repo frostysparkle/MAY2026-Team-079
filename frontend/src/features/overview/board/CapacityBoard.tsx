@@ -85,7 +85,13 @@ export function CapacityBoard({
       className={className}
     >
       {selected ? (
-        <CapacityDetail row={selected} />
+        /* The drill-in scrolls for the same reason the table does: the panel's
+           height is fixed by the grid row, and a narrow card wraps the gauge row
+           onto two lines, which with an unstaffed warning underneath is taller
+           than the body. Auto margins on the child still centre it when it fits. */
+        <div className="no-scrollbar -mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
+          <CapacityDetail row={selected} />
+        </div>
       ) : rows.length === 0 ? (
         <p className="my-auto text-center text-xs text-muted">
           No hostel blocks or mess halls could be read.
