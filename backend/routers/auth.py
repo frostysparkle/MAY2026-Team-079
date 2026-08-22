@@ -3,13 +3,14 @@ Authentication endpoints — registration, participant/staff login, and password
 management. Extracted from main.py so all auth-focused routes live in one
 file, matching the pattern already used by workshops, mess, events, etc.
 """
-import logging
-
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timedelta
+import os
 import re
 
 import log_config
+from jose import jwt
+from jose.exceptions import JWTError
 from models import (
     RegisterRequest, LoginRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ChangePasswordRequest
@@ -20,9 +21,12 @@ from log_redaction import safe_email
 from logger import log_audit, log_denied
 from security import (
     get_password_hash, verify_password, create_access_token,
-    generate_rsa_key_pair, ACCESS_TOKEN_EXPIRE_MINUTES
+    generate_rsa_key_pair, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 )
 from embedding_service import zero_embedding
+
+# Lifetime of a password-reset token, from issuance to expiry.
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 15
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -92,6 +96,32 @@ def _email_filter(email: str) -> dict:
     `xa@x.com`, and escaped because an address legitimately contains `.` and `+`.
     """
     return {"email": {"$regex": f"^{re.escape(normalise_email(email))}$", "$options": "i"}}
+
+
+def find_account_by_email(email: str):
+    """
+    Looks an email up across both account collections and returns
+    ``(collection, document)``, or ``(None, None)`` when nobody has it.
+
+    Callers must never let the response differ based on *which* collection
+    matched (or whether one did at all): password reset is anonymous, so the
+    endpoint's output is the account-existence oracle. Both routes below return
+    the same generic message either way — this helper exists so the lookup
+    itself can't drift apart between them.
+    """
+    email_filter = _email_filter(email)
+    for collection in (participants_collection, backend_teams_collection):
+        account = collection.find_one(email_filter)
+        if account is not None:
+            return collection, account
+    return None, None
+
+
+def invalid_reset_token() -> HTTPException:
+    """The single error every rejected reset token gets — expired, tampered,
+    wrong type, stale fingerprint, unknown email — so a caller probing tokens
+    learns nothing beyond that."""
+    return HTTPException(status_code=401, detail="Invalid or expired reset token")
 
 
 def generate_participant_id(email: str) -> str:
@@ -315,38 +345,94 @@ def admin_login(request: LoginRequest):
 
 @router.post("/password/forgot")
 def forgot_password(request: ForgotPasswordRequest):
-    # Logged at WARNING despite returning 200, because this endpoint is a stub
-    # that reports success without doing anything: no token is minted, nothing is
-    # stored, no mail is sent. Anyone debugging "the reset link never arrived"
-    # would otherwise find a successful request and no explanation — the most
-    # expensive kind of silence, since the trail actively points away from the
-    # cause.
-    log_config.log_call(
+    """
+    Starts a password reset. There is no mail service in this deployment, so
+    "sent" is aspirational — the signed reset token exists and (in development)
+    is handed straight back to the caller as `dev_reset_url`, the same field the
+    frontend has always read.
+
+    The response is deliberately identical whether or not the email exists.
+    Only when APP_ENV == "development" *and* an account matched does the extra
+    `dev_reset_url` appear; production never sees it, so account existence
+    cannot be probed through this endpoint there either.
+    """
+    collection, account = find_account_by_email(request.email)
+
+    response = {"message": "If the account exists, a reset link has been sent."}
+
+    if os.getenv("APP_ENV", "development") == "development" and account is not None:
+        # `pwd` carries a fingerprint of the current password hash at issuance.
+        # /password/reset refuses any token whose fingerprint no longer matches
+        # the stored hash, so this token dies the moment the password changes —
+        # including via a second reset — making every token single-use.
+        reset_token = create_access_token(
+            data={
+                "sub": request.email,
+                "type": "password_reset",
+                "pwd": (account.get("password_hash") or "")[:12],
+            },
+            expires_delta=timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRE_MINUTES),
+        )
+        response["dev_reset_url"] = (
+            f"http://localhost:5173/reset-password?token={reset_token}"
+        )
+
+    log_config.info(
         _log,
-        logging.WARNING,
-        "password reset requested against a stub endpoint — no email is sent and no token is issued",
+        "password reset requested",
         {
             "email_local": safe_email(request.email),
-            "reason": "stub_endpoint",
-            "endpoint": "/auth/password/forgot",
+            "account_exists": account is not None,
+            "development_token_issued": "dev_reset_url" in response,
         },
     )
-    return {
-        "message": "If the account exists, a reset link has been sent.",
-        "dev_reset_url": "http://localhost:5173/reset-password?token=mock_token_123"
-    }
+    return response
 
 
 @router.post("/password/reset")
 def reset_password(request: ResetPasswordRequest):
-    # As above, and worse: this reports a password as changed while changing
-    # nothing. A participant who "reset" their password and then cannot sign in is
-    # the predictable outcome, and this line is what connects the two.
-    log_config.log_call(
-        _log,
-        logging.WARNING,
-        "password reset accepted by a stub endpoint — no password was changed",
-        {"reason": "stub_endpoint", "endpoint": "/auth/password/reset"},
+    """
+    Completes a password reset started by /password/forgot. The JWT is decoded
+    here rather than through create_access_token's counterpart helper because
+    expiry/type/fingerprint all have to be checked against live database state,
+    and any failure is the same 401 — never a 500 from an unhandled decode.
+    """
+    try:
+        payload = jwt.decode(request.token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise invalid_reset_token()
+
+    if payload.get("type") != "password_reset":
+        raise invalid_reset_token()
+
+    email = payload.get("sub")
+    if not email:
+        raise invalid_reset_token()
+
+    collection, account = find_account_by_email(email)
+    if account is None:
+        raise invalid_reset_token()
+
+    # Single-use check: the fingerprint recorded at issuance must still match
+    # the hash on file. A consumed token fails here because its own successful
+    # use (or any later password change) rewrote `password_hash`.
+    if payload.get("pwd") != (account.get("password_hash") or "")[:12]:
+        raise invalid_reset_token()
+
+    collection.update_one(
+        {"_id": account["_id"]},
+        {"$set": {
+            "password_hash": get_password_hash(request.new_password),
+            "updated_at": datetime.utcnow(),
+        }}
+    )
+
+    account_id = account.get("paradox_id") or account.get("participant_id")
+    log_audit(
+        account,
+        "PASSWORD_RESET",
+        account_id,
+        {"account_type": "staff" if account.get("paradox_id") else "participant"},
     )
     return {"message": "Password reset successfully."}
 
