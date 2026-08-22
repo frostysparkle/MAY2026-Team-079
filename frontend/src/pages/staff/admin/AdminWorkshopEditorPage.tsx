@@ -24,6 +24,7 @@ import {
   type WorkshopShift,
 } from '@/features/workshops/workshopSlot';
 import { workshopPosterPaths, WORKSHOP_COVER } from '@/features/workshops/workshopView';
+import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
 
 /**
  * Super Admin workshop authoring — create a new workshop or edit an existing
@@ -33,7 +34,9 @@ import { workshopPosterPaths, WORKSHOP_COVER } from '@/features/workshops/worksh
  * time-slot field: two workshops sharing a slot genuinely clash, and the
  * register endpoint already refuses a second booking in the same slot. The
  * flyer is not stored at all — it is derived from the workshop id by
- * convention, so an id matching a shipped flyer picks it up automatically.
+ * convention, so a flyer named for the id picks it up automatically. Since the
+ * server assigns that id, the flyer can only be dropped in after the workshop
+ * exists; the Artwork card says as much on create.
  */
 export default function AdminWorkshopEditorPage() {
   const navigate = useNavigate();
@@ -53,6 +56,11 @@ export default function AdminWorkshopEditorPage() {
    */
   const [record, setRecord] = useState<Workshop | null>(null);
 
+  /**
+   * The workshop's id. Not an editable field — `POST /workshops` assigns it. It
+   * is held because the flyer path is derived from it, which the Artwork card
+   * previews once the workshop exists.
+   */
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [venue, setVenue] = useState('');
@@ -119,7 +127,9 @@ export default function AdminWorkshopEditorPage() {
         });
       } else {
         await api.createWorkshop({
-          workshop_id: id.trim(),
+          // Required by the schema, ignored by the handler, which generates the
+          // real id. See `serverGeneratedIdPlaceholder`.
+          workshop_id: serverGeneratedIdPlaceholder(name),
           slot_id: slotId,
           name: name.trim(),
           venue: venue.trim(),
@@ -194,16 +204,6 @@ export default function AdminWorkshopEditorPage() {
               <p className="text-xs text-muted">What the workshop is and where it runs.</p>
             </div>
 
-            {!isEdit && (
-              <TextInput
-                label="Workshop ID"
-                required
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-                placeholder="e.g. workshop-12"
-                hint="Permanent. Also selects the flyer — see Artwork."
-              />
-            )}
             <TextInput
               label="Name"
               required
@@ -288,13 +288,23 @@ export default function AdminWorkshopEditorPage() {
             <Card className="flex flex-col gap-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-ink">Artwork</h2>
-                <p className="text-xs text-muted">
-                  The flyer is not uploaded — it is looked up from the workshop id. Drop
-                  <code className="mx-1">{`${id || 'your-id'}.avif`}</code> and
-                  <code className="mx-1">{`${id || 'your-id'}-full.avif`}</code> into
-                  <code className="ml-1">public/images/workshops/</code>. Without them the catalogue
-                  artwork is used.
-                </p>
+                {isEdit ? (
+                  <p className="text-xs text-muted">
+                    The flyer is not uploaded — it is looked up from the workshop id. Drop
+                    <code className="mx-1">{`${id}.avif`}</code> and
+                    <code className="mx-1">{`${id}-full.avif`}</code> into
+                    <code className="ml-1">public/images/workshops/</code>. Without them the
+                    catalogue artwork is used.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted">
+                    The flyer is not uploaded — it is looked up from the workshop id, which is
+                    assigned when you create the workshop. Once it exists, reopen it here to see the
+                    two filenames to drop into
+                    <code className="ml-1">public/images/workshops/</code>. Until then the catalogue
+                    artwork is used.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-surface-2 ring-1 ring-line">

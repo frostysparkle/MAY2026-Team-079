@@ -24,6 +24,7 @@ import {
   type EventMetaRow,
 } from '@/features/events/eventExtras';
 import { EventTeamPanel } from '@/features/events/EventTeamPanel';
+import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
 
 /**
  * Super Admin event authoring — create a new event or edit an existing one, in
@@ -95,8 +96,7 @@ export default function AdminEventEditorPage() {
   const [saveFieldErrors, setSaveFieldErrors] = useState<FieldError[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // Basics
-  const [id, setId] = useState('');
+  // Basics. No `id` field: `POST /events` mints the event id itself.
   const [name, setName] = useState('');
   const [eventType, setEventType] = useState('technical');
   const [description, setDescription] = useState('');
@@ -171,7 +171,6 @@ export default function AdminEventEditorPage() {
       const extras = readEventExtras(event.registration);
       const window = readRegistrationWindow(event.registration);
 
-      setId(event.event_id);
       setName(event.name);
       setEventType(event.event_type);
       setDescription(event.description);
@@ -270,7 +269,9 @@ export default function AdminEventEditorPage() {
       if (isEdit && eventId) {
         await api.updateEvent(eventId, payload);
       } else {
-        await api.createEvent({ ...payload, event_id: id.trim() });
+        // `event_id` is required by the schema but ignored by the handler, which
+        // generates the real id. See `serverGeneratedIdPlaceholder`.
+        await api.createEvent({ ...payload, event_id: serverGeneratedIdPlaceholder(name) });
       }
       navigate(ROUTES.adminEvents);
     } catch (err) {
@@ -343,16 +344,6 @@ export default function AdminEventEditorPage() {
         {/* Two-column on desktop: the long-form content beside the settings. */}
         <div className="grid gap-5 lg:grid-cols-2">
           <Section title="Basics">
-            {!isEdit && (
-              <TextInput
-                label="Event ID"
-                required
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-                placeholder="e.g. hackathon-2026"
-                hint="Permanent. Used in the event's public URL."
-              />
-            )}
             <TextInput
               label="Name"
               required

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MessCreateRequest } from '@/api/types';
 import { Button, Card, Select, TextInput } from '@/components/ui';
 import { MESS_CUISINE_OPTIONS, MESS_PREFERENCES } from '@/config/constants';
+import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
 
 const PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({ value: p, label: p }));
 
@@ -22,7 +23,6 @@ export function NewMessForm({
   onCreate: (req: MessCreateRequest) => void;
   onCancel: () => void;
 }) {
-  const [messId, setMessId] = useState('');
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('100');
   const [preference, setPreference] = useState<string>(MESS_PREFERENCES[0]);
@@ -33,19 +33,13 @@ export function NewMessForm({
   return (
     <Card className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextInput
-          label="Mess ID"
-          value={messId}
-          onChange={(e) => setMessId(e.target.value)}
-          // MS01–MS03 are the seeded catalogue, so the hint points past them.
-          placeholder="e.g. MS04"
-          autoFocus
-        />
+        {/* No Mess ID box: `POST /mess` assigns the id itself. */}
         <TextInput
           label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Sahyadri"
+          autoFocus
         />
         <TextInput
           label="Capacity"
@@ -99,10 +93,10 @@ export function NewMessForm({
         <Button
           className="w-fit"
           loading={busy}
-          disabled={!messId.trim() || !name.trim()}
+          disabled={!name.trim()}
           onClick={() =>
             onCreate({
-              mess_id: messId.trim(),
+              mess_id: serverGeneratedIdPlaceholder(name),
               name: name.trim(),
               capacity: Number(capacity) || 0,
               preference,

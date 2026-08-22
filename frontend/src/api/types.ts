@@ -226,6 +226,11 @@ export interface MessStatisticsResponse {
 }
 
 export interface MessCreateRequest {
+  /**
+   * Required by the schema, but ignored: `POST /mess` generates the real id
+   * (`MESS111`…) and overwrites this. The create form does not collect it — see
+   * `lib/serverGeneratedId.ts`.
+   */
   mess_id: string;
   name: string;
   capacity: number;
@@ -465,6 +470,11 @@ export interface EventLogsResponse {
 }
 
 export interface EventCreateRequest {
+  /**
+   * Required by the schema, but ignored: `POST /events` generates the real id
+   * (`EVTEC1111`…) and overwrites this. The create form does not collect it —
+   * see `lib/serverGeneratedId.ts`.
+   */
   event_id: string;
   event_type: string;
   name: string;
@@ -524,6 +534,11 @@ export type PublicWorkshopRecord = Omit<
 };
 
 export interface WorkshopCreateRequest {
+  /**
+   * Required by the schema, but ignored: `POST /workshops` generates the real id
+   * (`WKSP111`…) and overwrites this. The create form does not collect it — see
+   * `lib/serverGeneratedId.ts`.
+   */
   workshop_id: string;
   slot_id: string;
   name: string;
