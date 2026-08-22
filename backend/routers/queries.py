@@ -13,43 +13,40 @@ cancels a hostel request). So the channel had to be new.
 
 How a query reaches a team
 --------------------------
-Routing is derived from ``category`` + ``target_id``, never from the free-text
-``assigned_team`` label:
+There is no per-category routing. Every query, regardless of ``category``
+(``hostel`` | ``mess`` | ``event`` | ``workshop`` | ``general``), is visible to
+and answerable by the same flat **query resolution team** — a roster a Super
+Admin builds in ``query_team_collection`` (see the ``/queries/team`` routes
+below), independent of the ``hostel_team``/``mess_team``/``event_team``/
+``workshop_team`` arrays those entities carry for their own purposes.
+``category`` and ``target_id`` remain on the query purely as labels: they say
+what the query is about and are still validated against a real entity at
+write time, but they no longer decide who can read or answer it.
 
-============  ======================================================
-category      who can read and answer it
-============  ======================================================
-``hostel``    the ``hostel_team`` of the named block
-``mess``      the ``mess_team`` of the named hall
-``event``     the ``event_team`` of the named event
-``workshop``  the ``workshop_team`` of the named workshop
-``general``   Super Admins only
-============  ======================================================
-
-Plus, in every case, the Super Admins and whoever the query is explicitly
-assigned to. This is the second of the two options the delivery audit put up for
-Story 6.4: the existing per-entity team arrays *are* the points of contact, so no
-``por``/``poc`` value is added to ``backend_teams.role`` and no existing guard
-moves.
+A query team member sees, and may self-claim (``PATCH`` with
+``assigned_to`` set to their own id), the entire queue — resolved queries stay
+in it too, so the roster keeps a shared history rather than losing a query the
+moment it closes. Filtering that down to "still open" is what the ``status``
+query param on ``GET /queries`` is for.
 
 What is deliberately not in a query document
 --------------------------------------------
-No email, no phone. A block's ``hostel_team`` cannot currently read
-``/hostels/{id}/statistics`` — that is Super Admin only — so denormalising
-contact details onto a row any team member can fetch would widen disclosure well
-past what answering a question needs. The reply thread is the channel back, so
-the team never needs a number. ``participant_name`` and ``participant_house`` are
-stored because a thread addressed to nobody in particular is unanswerable.
+No email, no phone. Denormalising contact details onto a row every query team
+member can fetch would widen disclosure well past what answering a question
+needs. The reply thread is the channel back, so the team never needs a number.
+``participant_name`` and ``participant_house`` are stored because a thread
+addressed to nobody in particular is unanswerable.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 import uuid
 
 from logger import log_audit
 from database import (
     queries_collection,
+    query_team_collection,
     backend_teams_collection,
     hostel_collection,
     mess_collection,
@@ -57,21 +54,24 @@ from database import (
     workshops_collection,
 )
 from dependencies import get_current_user, get_current_staff, get_current_participant
-from models import QueryCreateRequest, QueryUpdateRequest, QueryReplyRequest
+from models import QueryCreateRequest, QueryUpdateRequest, QueryReplyRequest, QueryTeamAssignRequest
 
 router = APIRouter(prefix="/queries", tags=["Queries"])
 
-# category -> (collection, readable id field, team array field)
+# category -> (collection, readable id field) — used only to validate that a
+# query's target_id names a real entity at write time. No team field is read
+# off these collections any more; who may handle a query is entirely a
+# question of query_team_collection / super_admin now.
 CATEGORY_ROUTING = {
-    "hostel": (hostel_collection, "hostel_id", "hostel_team"),
-    "mess": (mess_collection, "mess_id", "mess_team"),
-    "event": (event_collection, "event_id", "event_team"),
-    "workshop": (workshops_collection, "workshop_id", "workshop_team"),
+    "hostel": (hostel_collection, "hostel_id"),
+    "mess": (mess_collection, "mess_id"),
+    "event": (event_collection, "event_id"),
+    "workshop": (workshops_collection, "workshop_id"),
 }
 
-# `general` has no target entity, so it has no team to route to and reaches the
-# Super Admins. Listed separately rather than folded into the map above, because
-# a `general` query with a `target_id` is a category error, not a routing one.
+# `general` has no target entity, so it has no entity to validate against.
+# Listed separately rather than folded into the map above, because a `general`
+# query with a `target_id` is a category error, not a routing one.
 CATEGORIES = set(CATEGORY_ROUTING) | {"general"}
 
 STATUSES = {"open", "assigned", "resolved"}
@@ -81,52 +81,25 @@ def _is_super_admin(paradox_id: str) -> bool:
     return bool(backend_teams_collection.find_one({"paradox_id": paradox_id, "role": "super_admin"}))
 
 
-def _staff_targets(paradox_id: str) -> dict:
+def _is_query_team_member(paradox_id: str) -> bool:
+    return bool(query_team_collection.find_one({"user_id": paradox_id}))
+
+
+def _require_query_access(current_user: dict) -> str:
     """
-    The entities this staff member is named on a team for, per category.
-
-    Read from the same team arrays the scanners already authorise against, so a
-    volunteer's query queue is exactly the set of places they are already
-    trusted to work at — no new concept of membership is introduced.
+    Every staff-side query route needs the same thing: a Super Admin, or a
+    member of the flat query resolution team. Anyone else is refused outright
+    — there is no per-entity scope left to fall back to an empty result with.
     """
-    targets = {}
-    for category, (collection, id_field, team_field) in CATEGORY_ROUTING.items():
-        docs = collection.find({f"{team_field}.user_id": paradox_id}, {"_id": 0, id_field: 1})
-        targets[category] = [d[id_field] for d in docs if d.get(id_field)]
-    return targets
+    paradox_id = current_user.get("paradox_id")
+    if not (_is_super_admin(paradox_id) or _is_query_team_member(paradox_id)):
+        raise HTTPException(status_code=403, detail="Not authorized to access queries")
+    return paradox_id
 
 
-def _scope_filter(paradox_id: str) -> dict:
-    """
-    The Mongo filter for everything this non-super-admin staff member may read.
-
-    A staff member on no team at all gets ``{"query_id": None}`` rather than an
-    empty ``$or`` — an empty ``$or`` is not a valid filter, and a filter that
-    matches everything would be the exact opposite of what is meant.
-    """
-    clauses: List[dict] = []
-    for category, ids in _staff_targets(paradox_id).items():
-        if ids:
-            clauses.append({"category": category, "target_id": {"$in": ids}})
-    # Whoever a query was handed to keeps it, even if they are later taken off
-    # the team it came from. Otherwise reassignment silently loses the thread.
-    clauses.append({"assigned_to": paradox_id})
-    return {"$or": clauses}
-
-
-def _may_handle(paradox_id: str, query: dict) -> bool:
-    if _is_super_admin(paradox_id):
-        return True
-    if query.get("assigned_to") == paradox_id:
-        return True
-    routing = CATEGORY_ROUTING.get(query.get("category"))
-    if not routing or not query.get("target_id"):
-        return False
-    collection, id_field, team_field = routing
-    return bool(collection.find_one({
-        id_field: query["target_id"],
-        f"{team_field}.user_id": paradox_id,
-    }))
+def _require_super_admin(current_user: dict) -> None:
+    if not _is_super_admin(current_user.get("paradox_id")):
+        raise HTTPException(status_code=403, detail="Only Super Admins can manage the query team")
 
 
 def _public_view(query: dict) -> dict:
@@ -159,7 +132,7 @@ def raise_query(request: QueryCreateRequest, current_user: dict = Depends(get_cu
     else:
         if not target_id:
             raise HTTPException(status_code=400, detail=f"A {category} query must name a {category}")
-        collection, id_field, _ = CATEGORY_ROUTING[category]
+        collection, id_field = CATEGORY_ROUTING[category]
         if not collection.find_one({id_field: target_id}):
             raise HTTPException(status_code=404, detail=f"No {category} found with id {target_id}")
 
@@ -214,26 +187,27 @@ def list_queries(
     current_user: dict = Depends(get_current_staff),
 ):
     """
-    The staff queue — Story 6.3, and the source for the operational dashboard's
-    open-queries and hostel-issues panels (Story 9.1).
+    The shared queue — Story 6.3, and the source for the operational
+    dashboard's open-queries and hostel-issues panels (Story 9.1).
 
-    Scoped to the caller: a Super Admin sees every query including ``general``
-    ones; anybody else sees only the blocks, halls, events, and workshops they
-    are named on a team for, plus anything handed to them by name. A staff member
-    on no team gets an empty list rather than a 403 — an empty queue is a real
-    state, not an authorisation failure.
+    Not scoped by entity any more: a Super Admin and every member of the query
+    resolution team see the same unrestricted queue, across every category
+    including ``general``, resolved queries included — a query team member can
+    self-claim any of it by ``PATCH``-ing ``assigned_to`` to their own id. A
+    staff member who is on neither gets a 403; there is no per-entity scope
+    left to fall back to an empty result with.
 
     ``status`` and ``category`` filter server-side for the same reason
     ``/audit-logs`` does: ``limit`` applies before any client-side filter could.
     """
-    paradox_id = current_user.get("paradox_id")
+    _require_query_access(current_user)
 
     if status is not None and status not in STATUSES:
         raise HTTPException(
             status_code=400, detail=f"Invalid status. Must be one of: {', '.join(sorted(STATUSES))}"
         )
 
-    mongo_filter: dict = {} if _is_super_admin(paradox_id) else _scope_filter(paradox_id)
+    mongo_filter: dict = {}
     if status is not None:
         mongo_filter["status"] = status
     if category is not None:
@@ -249,14 +223,14 @@ def update_query(query_id: str, request: QueryUpdateRequest, current_user: dict 
     Set status and assignment — Story 6.3.
 
     Only the fields a request carries are written, so a screen that reassigns a
-    query cannot blank its status on the way past.
+    query cannot blank its status on the way past. A query team member sets
+    ``assigned_to`` to their own id to self-claim a query; a Super Admin may
+    assign to anyone.
     """
-    paradox_id = current_user.get("paradox_id")
+    _require_query_access(current_user)
     query = queries_collection.find_one({"query_id": query_id})
     if not query:
         raise HTTPException(status_code=404, detail="Query not found")
-    if not _may_handle(paradox_id, query):
-        raise HTTPException(status_code=403, detail="Not authorized to handle this query")
 
     update: dict = {}
     if request.status is not None:
@@ -292,10 +266,10 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
     """
     The conversation — Story 6.4, and the half of 6.2 that makes a status useful.
 
-    Takes either token type: the participant who raised it and the staff member
-    handling it write to the same thread. Nobody else can read or write it, which
-    is checked per-role rather than per-token, so a staff member who is not on
-    the owning team is refused even though their token is valid.
+    Takes either token type: the participant who raised it and a query team
+    member write to the same thread. Nobody else can read or write it, which is
+    checked per-role rather than per-token, so a staff member off the query
+    team is refused even though their token is valid.
     """
     query = queries_collection.find_one({"query_id": query_id})
     if not query:
@@ -304,7 +278,7 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
     is_staff = "paradox_id" in current_user
     if is_staff:
         author_id = current_user["paradox_id"]
-        if not _may_handle(author_id, query):
+        if not (_is_super_admin(author_id) or _is_query_team_member(author_id)):
             raise HTTPException(status_code=403, detail="Not authorized to handle this query")
         author_name = current_user.get("designation") or current_user.get("role") or "Fest team"
         author_type = "staff"
@@ -329,3 +303,74 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
     )
     log_audit(current_user, "REPLY_QUERY", query_id, {"author_type": author_type})
     return {"message": "Reply added", "reply": reply}
+
+
+# ── query resolution team roster ────────────────────────────────────────────
+#
+# A flat, Super-Admin-managed list of who may see and handle every query,
+# independent of category. Deliberately its own collection
+# (``query_team_collection``) rather than an array embedded anywhere else —
+# see database.py — so it can be queried by user_id the same way
+# ``backend_teams_collection`` is.
+
+
+def _team_member_view(row: dict) -> dict:
+    """The roster row, denormalized with a display name where one is on file —
+    the same shape `events.py` hands back for `event_team` details."""
+    staff = backend_teams_collection.find_one({"paradox_id": row["user_id"]}) or {}
+    return {
+        "user_id": row["user_id"],
+        "name": staff.get("name") or staff.get("designation"),
+        "designation": staff.get("designation"),
+        "department": staff.get("department"),
+        "added_at": row.get("added_at"),
+        "added_by": row.get("added_by"),
+    }
+
+
+@router.post("/team")
+def add_query_team_member(request: QueryTeamAssignRequest, current_user: dict = Depends(get_current_staff)):
+    """
+    Add a staff member to the query resolution team — Super Admin only.
+
+    `user_id` must already exist in `backend_teams_collection`; this roster
+    grants query access on top of an existing staff account, it does not
+    create one.
+    """
+    _require_super_admin(current_user)
+
+    if not backend_teams_collection.find_one({"paradox_id": request.user_id}):
+        raise HTTPException(status_code=404, detail="user_id must reference an existing backend_teams member")
+
+    if query_team_collection.find_one({"user_id": request.user_id}):
+        raise HTTPException(status_code=400, detail="This staff member is already on the query team")
+
+    row = {
+        "user_id": request.user_id,
+        "added_at": datetime.utcnow(),
+        "added_by": current_user.get("paradox_id"),
+    }
+    query_team_collection.insert_one(row)
+    log_audit(current_user, "ASSIGN_QUERY_TEAM", request.user_id, {})
+    return {"message": "Added to query team", "member": _team_member_view(row)}
+
+
+@router.get("/team")
+def list_query_team(current_user: dict = Depends(get_current_staff)):
+    """The current roster — Super Admin only, same as `event_team` details are staff-gated."""
+    _require_super_admin(current_user)
+    rows = query_team_collection.find({}, {"_id": 0}).sort("added_at", 1)
+    return [_team_member_view(row) for row in rows]
+
+
+@router.delete("/team/{user_id}")
+def remove_query_team_member(user_id: str, current_user: dict = Depends(get_current_staff)):
+    """Frees this person from query duty. Does not touch anything they already replied to or were assigned."""
+    _require_super_admin(current_user)
+
+    if not query_team_collection.find_one({"user_id": user_id}):
+        raise HTTPException(status_code=404, detail="user_id is not on the query team")
+
+    query_team_collection.delete_one({"user_id": user_id})
+    log_audit(current_user, "REMOVE_QUERY_TEAM_MEMBER", user_id, {})
+    return {"message": "Removed from query team"}

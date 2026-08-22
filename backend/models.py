@@ -533,6 +533,11 @@ class QueryUpdateRequest(BaseModel):
 class QueryReplyRequest(BaseModel):
     body: str = Field(..., min_length=1)
 
+class QueryTeamAssignRequest(BaseModel):
+    """Adds an existing backend_teams member to the flat query resolution
+    team roster (see routers/queries.py)."""
+    user_id: str = Field(..., min_length=1)
+
 # Admin edit of another participant's record (Story 7.3). Every field optional:
 # the route only $sets the ones a request actually carries, so a form that edits
 # one field cannot blank the rest. Validated against the same closed

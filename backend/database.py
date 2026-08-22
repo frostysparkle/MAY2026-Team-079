@@ -40,11 +40,17 @@ workshop_logs_collection = db["workshop_logs"]
 event_logs_collection = db["event_logs"]
 system_logs_collection = db["system_logs"]
 # Participant-raised queries (Epic 6). The one channel in the API by which a
-# participant writes free text that a *different* user — a member of the block,
-# hall, or event team it concerns — reads back. Every other participant-writable
-# field is either readable only by its own author or is load-bearing data a
-# query would corrupt, which is why this needed a collection of its own.
+# participant writes free text that a *different* user — a member of the
+# query resolution team — reads back. Every other participant-writable field
+# is either readable only by its own author or is load-bearing data a query
+# would corrupt, which is why this needed a collection of its own.
 queries_collection = db["queries"]
+# The query resolution team roster: a flat, category-agnostic list of staff
+# who may see and handle every query, managed by Super Admins. Deliberately a
+# collection of its own rather than an array embedded in a query or another
+# document — a roster of who-can-answer is membership data, the same kind of
+# thing `backend_teams_collection` already is, not a property of any one query.
+query_team_collection = db["query_team"]
 # Participant-reported hostel and mess faults — story 5.4. A collection of its
 # own rather than a field on the participant or the facility, because a report
 # has to be readable by somebody other than its author and writable by somebody
