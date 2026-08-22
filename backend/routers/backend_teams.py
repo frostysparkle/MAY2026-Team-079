@@ -10,8 +10,18 @@ from models import BackendTeamCreateRequest, BackendTeamUpdateRequest
 from dependencies import get_current_staff
 from database import participants_collection, backend_teams_collection
 from security import get_password_hash
+from id_generator import BackendTeamIDGenerator
 
 router = APIRouter(prefix="/backend_teams", tags=["Backend Teams"])
+
+generator = BackendTeamIDGenerator()
+
+# Roles that must be a real person the fest can already vouch for — each one
+# carries privileges (super_admin/admin) or scanning duties tied to a body
+# (volunteer), so it must resolve to an existing participant. "other" is the
+# bucket role for staff without their own participant record (e.g. hostel/mess
+# desk staff hired for the fest), so it alone may go unlinked.
+ADMIN_ID_REQUIRED_ROLES = {"super_admin", "admin", "volunteer"}
 
 
 @router.post("")
@@ -30,6 +40,30 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
     )
     admin_id_ref = participant_doc["_id"] if participant_doc else None
 
+    # super_admin / admin / volunteer must link to a real participant — an
+    # account with one of these roles and no admin_id would be unauditable
+    # (nothing in participants ties it to an actual person) and, for
+    # volunteers specifically, unable to satisfy the hostel/mess/workshop
+    # "must be a real participant" checks that key off this link elsewhere.
+    if request.role in ADMIN_ID_REQUIRED_ROLES and admin_id_ref is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"role '{request.role}' requires a registered participant with this email; "
+                "no matching participant record was found"
+            ),
+        )
+
+    # One backend_teams account per participant: a participant who already
+    # backs one staff account cannot be linked to a second. Without this, two
+    # accounts could both resolve every "is this really them" check (event
+    # team membership, hostel duty roster, etc.) back to the same person.
+    if admin_id_ref is not None and backend_teams_collection.find_one({"admin_id": admin_id_ref}):
+        raise HTTPException(
+            status_code=409,
+            detail="This participant is already linked to another backend_teams account",
+        )
+
     # A staff account had no name field at all, which is why the audit trail could
     # only ever show `BT…` ids for the people who took the actions. `admin_id`
     # already links to the participant document for staff who are also
@@ -38,8 +72,10 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
     linked_name = (participant_doc or {}).get("profile", {}).get("full_name")
     resolved_name = (request.name or "").strip() or linked_name or None
 
+    paradox_id = generator.next_id(request.role, request.department)
+
     new_team = {
-        "paradox_id": f"BT{int(datetime.utcnow().timestamp())}",
+        "paradox_id": paradox_id,
         "email": request.email,
         "name": resolved_name,
         "password_hash": get_password_hash(request.password),
@@ -69,7 +105,13 @@ def update_backend_team(paradox_id: str, request: BackendTeamUpdateRequest, curr
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can manage backend teams")
-        
+
+    if not backend_teams_collection.find_one({"paradox_id": paradox_id}):
+        raise HTTPException(status_code=404, detail="Backend team member not found")
+
+    # `role` / `department` are not on BackendTeamUpdateRequest at all, so
+    # there is nothing here that could touch either — see the model's
+    # docstring for why they're immutable after creation.
     update_data = {k: v for k, v in request.model_dump().items() if v is not None}
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
@@ -83,5 +125,9 @@ def delete_backend_team(paradox_id: str, current_user: dict = Depends(get_curren
     admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     if not admin:
         raise HTTPException(status_code=403, detail="Only Super Admins can manage backend teams")
+
+    if not backend_teams_collection.find_one({"paradox_id": paradox_id}):
+        raise HTTPException(status_code=404, detail="Backend team member not found")
+
     backend_teams_collection.delete_one({"paradox_id": paradox_id})
     return {"message": "Backend team deleted"}

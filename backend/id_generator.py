@@ -63,3 +63,44 @@ class EventIDGenerator:
         round_id = blob + str(self.current_round_id)
         self.current_round_id += 1
         return round_id
+
+
+class BackendTeamIDGenerator:
+    """
+    `paradox_id`s for backend_teams (staff) accounts: a 2-letter role code
+    plus a 2-letter department code plus one shared incrementing counter,
+    e.g. a `volunteer` in `mess` -> "VLME1111". Visually distinguishes an
+    account's role and department at a glance, the same way `EventIDGenerator`
+    encodes an event's type into `event_id`.
+
+    One counter shared across every role/department pair (not one per pair) —
+    matches how `SequentialIDGenerator` hands out a single sequence regardless
+    of sub-type for hostels/mess/workshops.
+    """
+
+    ROLE_CODES = {
+        "super_admin": "SA",
+        "admin": "AD",
+        "other": "OT",
+        "volunteer": "VL",
+    }
+
+    DEPARTMENT_CODES = {
+        "technical": "TE",
+        "sports": "SP",
+        "culturals": "CU",
+        "uhc": "UH",
+        "hostels": "HO",
+        "mess": "ME",
+        "workshops": "WO",
+    }
+
+    def __init__(self, start: int = 1111):
+        self.current_id = start
+
+    def next_id(self, role: str, department: str) -> str:
+        role_code = self.ROLE_CODES[role]
+        department_code = self.DEPARTMENT_CODES[department]
+        generated_id = role_code + department_code + str(self.current_id)
+        self.current_id += 1
+        return generated_id

@@ -221,21 +221,38 @@ class AnnouncementCreateRequest(BaseModel):
     priority: Literal["low", "mid", "high"] = "mid"
 
 # Backend Teams models
+#
+# Closed vocabularies for `role` and `department`, matching the pattern
+# already used for EVENT_TYPES / EVENT_TEAM_ROLES: a module-level tuple plus a
+# `Literal[...]` annotation on the field, rather than a Python `Enum` class.
+#
+# `department` values are deliberately lowercase and singular ("technical",
+# not "technicals") so they line up exactly with `EventCreateRequest.event_type`
+# ("technical" | "culturals" | "sports" | "others") — this is what lets
+# `events.py` compare a staff member's department straight against an event's
+# type without a translation table. "uhc" replaces the old "UpperHouseCouncil".
+BACKEND_TEAM_ROLES = ("super_admin", "admin", "other", "volunteer")
+BACKEND_TEAM_DEPARTMENTS = ("technical", "sports", "culturals", "uhc", "hostels", "mess", "workshops")
+
 class BackendTeamCreateRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
-    role: str # super_admin | admin | Other | volunteer
-    department: str # technicals | sports | culturals | UpperHouseCouncil
-    designation: str
+    role: Literal["super_admin", "admin", "other", "volunteer"]
+    department: Literal["technical", "sports", "culturals", "uhc", "hostels", "mess", "workshops"]
+    designation: str = Field(..., min_length=1)
     # Optional because staff accounts predate this field and are created in bulk
     # from a roster of emails. When it is omitted the account still gets a name:
     # see `create_backend_team`, which falls back to the linked participant.
     name: Optional[str] = None
 
 class BackendTeamUpdateRequest(BaseModel):
-    role: Optional[str] = None
-    department: Optional[str] = None
-    designation: Optional[str] = None
+    """
+    `role` and `department` are deliberately absent: both drive the
+    `paradox_id` prefix assigned at creation and are treated as immutable —
+    changing either means deleting the account and creating a new one, not
+    patching this one. See `create_backend_team` / `update_backend_team`.
+    """
+    designation: Optional[str] = Field(None, min_length=1)
     name: Optional[str] = None
 
 # Workshop models

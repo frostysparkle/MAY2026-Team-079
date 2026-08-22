@@ -51,7 +51,7 @@ class HostelCreateRequest(BaseModel):
 
 
 class HostelAssignTeamRequest(BaseModel):
-    user_id: str  # must reference an existing backend_teams member with role "Other"
+    user_id: str  # must reference an existing backend_teams member with role "other"
     role: str  # hostel_volunteer | guard
     attendance: bool = True  # whether this member may scan entries/exits
 
@@ -108,15 +108,15 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
         raise HTTPException(status_code=404, detail="Hostel not found")
 
     # `user_id` must be a real backend_teams member, and specifically one
-    # created with role "Other" — the bucket hostel_volunteer/guard staff are
+    # created with role "other" — the bucket hostel_volunteer/guard staff are
     # created under (see backend_teams.py). This stops a super_admin's own
     # paradox_id, or an admin from another department, being added as a block's
     # duty staff by mistake.
-    staff = backend_teams_collection.find_one({"paradox_id": request.user_id, "role": "Other"})
+    staff = backend_teams_collection.find_one({"paradox_id": request.user_id, "role": "other"})
     if not staff:
         raise HTTPException(
             status_code=404,
-            detail="user_id must reference an existing backend_teams member with role 'Other'"
+            detail="user_id must reference an existing backend_teams member with role 'other'"
         )
 
     existing = hostel_collection.find_one({"hostel_id": hostel_id, "hostel_team.user_id": request.user_id})
