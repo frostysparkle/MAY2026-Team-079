@@ -68,7 +68,14 @@ def register(request: RegisterRequest):
             "registered": False,
             "hostel_id": None,
             "room": None,
-            "logged_in": False
+            # Stamped automatically on the participant's first-ever entry scan;
+            # never overwritten after that. See `scan_hostel`.
+            "arrival": None,
+            # Flips with every entry/exit scan while `departure` is unset.
+            "inside": False,
+            # Stamped only by a "permanent_exit" scan — signals the participant
+            # has left the fest for good and blocks any further entry scan.
+            "departure": None
         },
         "photo": None,
         "qr_secrets": {
