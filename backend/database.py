@@ -1,9 +1,18 @@
 import os
+from pathlib import Path
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-load_dotenv("atlas-credentials.env")
+# Loaded by absolute path, resolved from this file rather than the current working
+# directory. The previous relative `load_dotenv("atlas-credentials.env")` only
+# found the file when the process happened to start inside `backend/`; anywhere
+# else it was silently skipped, which also dropped SECRET_KEY and left the JWT
+# signing key on its committed default.
+load_dotenv(Path(__file__).resolve().parent / "atlas-credentials.env")
 
+# The database now runs locally. `MONGODB_URI` in atlas-credentials.env points at
+# the local mongod; the default below is the same target so a missing env file
+# degrades to the correct host instead of a remote one.
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/paradox")
 
 if os.getenv("TESTING") == "1":
