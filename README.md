@@ -29,7 +29,7 @@ with one integrated platform, built around a single participant profile. It cove
 | Database       | **Local MongoDB** (`paradox` database, `mongodb://localhost:27017`) |
 | Authentication | Email + password (IITM domains only), bcrypt, JWT sessions          |
 | Digital ID     | Rotating QR, RSA-OAEP encrypted payload, per participant             |
-| Payments       | Mock gateway (see Project Status)                                   |
+| Payments       | Mock settlement only (`POST /mess/pay`, `POST /hostels/pay`) — no gateway; see Project Status |
 | Hosting        | Vercel (frontend) · Render (backend) — free tier                   |
 
 > **Database note:** the project ran on MongoDB Atlas earlier on, but has since
@@ -54,9 +54,9 @@ live FastAPI backend, and the staff/admin console has been built out on top of i
 | Admin console — events, workshops, mess, hostels, staff, backend teams | Built |
 | Audit trail — full log plus per-entity views | Built |
 | Fest overview board — KPIs, capacity, trends, alerts | Built |
-| Mess & hostel fee payments | **Mock gateway.** `POST /hostels/pay` and `POST /mess/pay` record a simulated settlement (fixed server-side fee, no real gateway or money involved) and the frontend now settles against these routes instead of a client-side demo ledger. |
-| Query / contact management | **Not started** |
-| Targeted announcements | **Not started** |
+| Mess & hostel fee payments | **Mock settlement only.** `POST /mess/pay` and `POST /hostels/pay` record a simulated settlement via `backend/payments.py::simulate_payment` (fixed server-side fee, always succeeds, no real gateway). The frontend settles against these routes rather than a client-side demo ledger. |
+| Query / contact management | Built — participants raise queries (`POST /queries`) with replies and status, answered by a flat query resolution team; facility faults go through the issues router (`POST /issues`) to the duty console. |
+| Targeted announcements | Built — Event Heads post audience-scoped notices on an event (`POST /events/{id}/announcements`, with poll and SSE stream), written from the admin announcements desk. |
 
 The backend gained a participant statistics endpoint, unauthenticated event and workshop
 catalogues, accommodation request/cancel routes, mess cuisine metadata, and audit-log
