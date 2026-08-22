@@ -8,25 +8,7 @@ from models import EventCreateRequest, EventUpdateRequest, EventRegistrationInpu
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
-
-class EventIDGenerator:
-    def __init__(self):
-        self.current_event_id = 1111
-        self.current_round_id = 11111
-
-    def next_event_id(self, type : str):
-        if type in ["technical", "culturals", "sports", "others"]:
-            blob = "EV" + type[:3].upper()
-        event_id = blob + str(self.current_event_id)
-        self.current_event_id += 1
-        return event_id
-
-    def next_round_id(self, type : str):
-        if type in ["technical", "culturals", "sports", "others"]:
-            blob = "RND" + type[:3].upper()
-        round_id = blob + str(self.current_round_id)
-        self.current_round_id += 1
-        return round_id
+from id_generator import EventIDGenerator
 
 generator = EventIDGenerator()
 

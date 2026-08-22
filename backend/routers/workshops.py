@@ -14,17 +14,9 @@ from models import WorkshopParticipantUpdateRequest
 from database import workshops_collection, participants_collection, backend_teams_collection, workshop_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
+from id_generator import SequentialIDGenerator
 
-class WorkshopIDGenerator:
-    def __init__(self):
-        self.current_id = 111
-
-    def next_id(self):
-        event_id = "WKSP" + str(self.current_id)
-        self.current_id += 1
-        return event_id
-
-generator = WorkshopIDGenerator()
+generator = SequentialIDGenerator("WKSP")
 
 router = APIRouter(prefix="/workshops", tags=["Workshops"])
 
