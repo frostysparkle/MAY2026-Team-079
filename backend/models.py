@@ -178,8 +178,35 @@ class RegistrationWindowUpdate(BaseModel):
 
 
 class EventRegistrationInput(BaseModel):
+    """
+    How a participant registers for an event: solo, creating a new team, or
+    joining one that already exists. Exactly one of these three — never a
+    team_name *and* a team_id together, since that would be asking to both
+    create and join in the same request.
+
+    - Leave both fields unset to register solo.
+    - Set `team_name` to create a new team and become its leader. The
+      backend assigns that team's `team_id` — the same way `event_id` and
+      `round_id` are assigned, via `id_generator.EventIDGenerator` — and
+      returns it in the response. Share that id with teammates so they can
+      join; the raw `team_name` text is never itself used as the id.
+    - Set `team_id` to the id returned when the team was created, to join
+      that existing team as a member.
+
+    Whether solo registration or team registration is required/allowed for a
+    given event is governed by that event's `team.max` and
+    `team.allow_single_registration` — enforced in the route, not here, since
+    it depends on the event being registered for.
+    """
     team_name: Optional[str] = None
+    team_id: Optional[str] = None
     registration_data: Dict[str, Any] = {}
+
+    @model_validator(mode="after")
+    def _create_xor_join(self):
+        if self.team_name and self.team_id:
+            raise ValueError("Provide team_name to create a team or team_id to join one, not both")
+        return self
 
 
 class EventCreateRequest(BaseModel):

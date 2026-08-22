@@ -42,13 +42,22 @@ def generate_room_numbers(num_rooms: int, start: int = 101):
 
 class EventIDGenerator:
     """
-    Event ids and round ids, each with their own counter and a prefix derived
-    from the event type at call time (e.g. "technical" -> "EVTEC1111").
+    Event ids, round ids, and team ids, each with their own counter and a
+    prefix derived from the event type at call time (e.g. "technical" ->
+    "EVTEC1111", "TMTEC111111" for a team).
+
+    A team id is assigned the same way as an event id or a round id: the
+    backend mints it (`next_team_id`, called from
+    `routers.events.register_for_event` when a participant creates a team)
+    and a client never supplies one — a participant who wants to join an
+    existing team is given that id by its leader out of band and sends it
+    back on `EventRegistrationInput.team_id`, they do not choose it.
     """
 
     def __init__(self):
         self.current_event_id = 1111
         self.current_round_id = 11111
+        self.current_team_id = 111111
 
     def next_event_id(self, type: str):
         if type in ["technical", "culturals", "sports", "others"]:
@@ -63,6 +72,13 @@ class EventIDGenerator:
         round_id = blob + str(self.current_round_id)
         self.current_round_id += 1
         return round_id
+
+    def next_team_id(self, type: str):
+        if type in ["technical", "culturals", "sports", "others"]:
+            blob = "TM" + type[:3].upper()
+        team_id = blob + str(self.current_team_id)
+        self.current_team_id += 1
+        return team_id
 
 
 class BackendTeamIDGenerator:

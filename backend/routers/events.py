@@ -38,6 +38,19 @@ Registration open/closed is never physically flipped by a background job:
 `_registration_open` computes it on every read, from `registration.allowed`
 (a Super Admin kill-switch) AND the current time being inside
 `[start_time, end_time]`. Both conditions must hold.
+
+A participant registers exactly one of two ways — never both at once
+(`EventRegistrationInput._create_xor_join` rejects a request naming both a
+`team_name` and a `team_id`):
+
+  * Solo: neither `team_name` nor `team_id` set. Refused with 400 if the
+    event's `team.allow_single_registration` is false and `team.max` > 1.
+  * As a team: `team_name` creates a new team and becomes its leader — its
+    `team_id` is backend-assigned via `EventIDGenerator.next_team_id`, the
+    same generator that assigns `event_id` and `round_id`, never chosen by
+    the client. `team_id` joins an existing team as a member, refused with
+    404/400 if that team does not exist for this event or is already at
+    `team.max`. See `_resolve_registration_team`.
 """
 import asyncio
 import json
@@ -398,6 +411,70 @@ def _validate_registration_data(event: dict, registration_data: dict) -> None:
         )
 
 
+def _team_size(event: dict, team_id: str) -> int:
+    """How many participants are currently registered under this team_id for
+    this event. Team membership lives only on `participants.events[]` — there
+    is no roster mirror on the event document — so counting means querying
+    the participants collection, the same source `event_capacity` and
+    `view_participation` already read from."""
+    return participants_collection.count_documents({
+        "events": {"$elemMatch": {"event_id": event["_id"], "team_id": team_id}}
+    })
+
+
+def _resolve_registration_team(event: dict, reg_input: Optional[EventRegistrationInput]) -> tuple:
+    """
+    Solo vs. team, decided once, in one place, so `register_for_event` cannot
+    drift between what it validates and what it writes.
+
+    Returns ``(team_id, team_role)`` — both ``None``/``"solo"`` for a solo
+    registration. Raises the same `HTTPException`s the route used to raise
+    inline.
+
+    A team_name and a team_id are mutually exclusive at the schema layer
+    already (`EventRegistrationInput._create_xor_join`); everything here is
+    validation that depends on *this event's* rules, which the model itself
+    has no way to see.
+    """
+    team_rules = event.get("team", {})
+    max_size = team_rules.get("max", 1)
+    allow_solo = team_rules.get("allow_single_registration", True)
+
+    team_name = reg_input.team_name if reg_input else None
+    team_id = reg_input.team_id if reg_input else None
+
+    if (team_name or team_id) and max_size <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="This event does not support team registration",
+        )
+
+    if team_name:
+        # Creating a team. The id is backend-assigned — the same way event_id
+        # and round_id are — so `team_name` is stored purely as a display
+        # label alongside it, never used as the id itself.
+        new_team_id = generator.next_team_id(event.get("event_type", "others"))
+        return new_team_id, "leader"
+
+    if team_id:
+        current_size = _team_size(event, team_id)
+        if current_size == 0:
+            raise HTTPException(status_code=404, detail="No team found with that team_id for this event")
+        if current_size >= max_size:
+            raise HTTPException(status_code=400, detail="This team is already full")
+        return team_id, "member"
+
+    # Solo — `team_role` stays "member" (no team_id) for this case, matching
+    # the label already used for anyone on a team who isn't its leader.
+    if not allow_solo and max_size > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="This event requires team registration; provide team_name to create a "
+                   "team or team_id to join one",
+        )
+    return None, "member"
+
+
 @router.post("/{event_id}/register")
 def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput] = None, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
@@ -428,10 +505,12 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
     registration_data = reg_input.registration_data if reg_input else {}
     _validate_registration_data(event, registration_data)
 
+    team_id, team_role = _resolve_registration_team(event, reg_input)
+
     registration_entry = {
-        "team_id": reg_input.team_name if reg_input and reg_input.team_name else None,
+        "team_id": team_id,
         "event_id": event["_id"],
-        "team_role": "leader" if (reg_input and reg_input.team_name) else "member",
+        "team_role": team_role,
         "registration_data": registration_data
     }
 
@@ -439,8 +518,12 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
         {"_id": current_user["_id"]},
         {"$push": {"events": registration_entry}}
     )
-    log_audit(current_user, "EVENT_REGISTER", event_id)
-    return {"message": "Registered for event successfully."}
+    log_audit(current_user, "EVENT_REGISTER", event_id, {"team_id": team_id, "team_role": team_role})
+
+    response = {"message": "Registered for event successfully.", "team_role": team_role}
+    if team_id:
+        response["team_id"] = team_id
+    return response
 
 
 @router.put("/{event_id}/register")
@@ -673,11 +756,14 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
             for i in range(0, len(players), max_size):
                 team_chunk = players[i:i+max_size]
                 if len(team_chunk) >= min_size:
-                    team_id = f"TE_HO_{datetime.utcnow().strftime('%M%S%f')}_{teams_created}"
+                    # Same `next_team_id` a participant-created team gets, so
+                    # every team_id in this event — self-formed or
+                    # auto-allocated — comes from the one counter.
+                    team_id = generator.next_team_id(event.get("event_type", "others"))
                     for p in team_chunk:
                         participants_collection.update_one(
                             {"_id": p["_id"], "events.event_id": event["_id"]},
-                            {"$set": {"events.$.team_id": team_id}}
+                            {"$set": {"events.$.team_id": team_id, "events.$.team_role": "member"}}
                         )
                     teams_created += 1
     else:
@@ -685,11 +771,11 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
         for i in range(0, len(solo_players), max_size):
             team_chunk = solo_players[i:i+max_size]
             if len(team_chunk) >= min_size:
-                team_id = f"TE_MX_{datetime.utcnow().strftime('%M%S%f')}_{teams_created}"
+                team_id = generator.next_team_id(event.get("event_type", "others"))
                 for p in team_chunk:
                     participants_collection.update_one(
                         {"_id": p["_id"], "events.event_id": event["_id"]},
-                        {"$set": {"events.$.team_id": team_id}}
+                        {"$set": {"events.$.team_id": team_id, "events.$.team_role": "member"}}
                     )
                 teams_created += 1
 
