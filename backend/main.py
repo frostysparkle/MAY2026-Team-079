@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+import os
 
 # Logging is configured before anything else is imported, so that module-level
 # logger objects created during the imports below (`embedding_service` builds one
@@ -32,10 +33,12 @@ _log = log_config.get_logger("paradox.profile")
 
 app = FastAPI(title="Paradox Connect API", lifespan=lifespan)
 
-# Add CORS middleware for the frontend
+# Browser origins allowed to call the API, as a comma-separated CORS_ORIGINS env
+# value. Defaults to the Vite dev server; "*" would also disable the credential
+# flow below, so real deployments should list their origins explicitly.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

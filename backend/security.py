@@ -28,7 +28,8 @@ if not os.getenv("SECRET_KEY"):
     )
 SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week token expiry
+# Overridable per deployment; 1 week remains the effective default when unset.
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
