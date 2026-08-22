@@ -106,18 +106,17 @@ def test_event_embedding_generated_on_create_and_regenerated_on_description_chan
     embedder = CountingEmbedder([FAKE_VECTOR_A, FAKE_VECTOR_B])
     monkeypatch.setattr(events_router, "generate_embedding", embedder)
 
-    ev_id = f"EV_EMB_{random.randint(1000, 9999)}"
     headers = {"Authorization": f"Bearer {sa_token}"}
     resp = client.post("/events", json={
-        "event_id": ev_id,
         "event_type": "technical",
         "name": "Embedding Event",
         "description": "original description",
         "team": {"min": 1, "max": 1},
-        "registration": {"start_time": "2026-01-01T00:00:00", "end_time": "2026-01-02T00:00:00"},
+        "registration": {"start_time": "2026-01-01T00:00:00Z", "end_time": "2026-12-31T00:00:00Z"},
     }, headers=headers)
     assert resp.status_code == 200
     assert embedder.calls == ["original description"]
+    ev_id = resp.json()["event_id"]
 
     doc = event_collection.find_one({"event_id": ev_id})
     assert doc["embedding"] == FAKE_VECTOR_A
@@ -135,13 +134,13 @@ def test_event_embedding_generated_on_create_and_regenerated_on_description_chan
 
 def test_event_public_response_includes_embedding(monkeypatch, sa_token):
     monkeypatch.setattr(events_router, "generate_embedding", lambda text: FAKE_VECTOR_A)
-    ev_id = f"EV_EMB2_{random.randint(1000, 9999)}"
     headers = {"Authorization": f"Bearer {sa_token}"}
-    client.post("/events", json={
-        "event_id": ev_id, "event_type": "technical", "name": "Embedding Event 2",
+    create_resp = client.post("/events", json={
+        "event_type": "technical", "name": "Embedding Event 2",
         "description": "desc", "team": {"min": 1, "max": 1},
-        "registration": {"start_time": "2026-01-01T00:00:00", "end_time": "2026-01-02T00:00:00"},
+        "registration": {"start_time": "2026-01-01T00:00:00Z", "end_time": "2026-12-31T00:00:00Z"},
     }, headers=headers)
+    ev_id = create_resp.json()["event_id"]
 
     resp = client.get("/events/public")
     assert resp.status_code == 200

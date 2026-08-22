@@ -93,26 +93,35 @@ def test_profile_completion(setup_test_users):
     assert response.json()["house"] == "Wayanad House"
 
 def test_create_and_register_event(setup_test_users):
-    # Create event as super admin
+    # Create event as super admin. event_id is backend-generated now, so it is
+    # read back from the create response rather than sent in the payload, and
+    # the registration window must cover "now" (this test does not run in
+    # 2026) — see `id_generator.EventIDGenerator` and
+    # `routers.events._registration_open`.
     sa_headers = {"Authorization": f"Bearer {setup_test_users['sa_token']}"}
+    now = datetime.utcnow()
     event_payload = {
-        "event_id": "EVT_TEST_01",
         "event_type": "technical",
         "name": "Hackathon 2026",
         "description": "24hr Hackathon",
         "poster": "base64...",
-        "team": {"min": 1, "max": 4, "house": False, "allow_single_registration": True},
+        "team": {"min": 1, "max": 4, "house_vs_house_event": False, "allow_single_registration": True},
         "prize_money": [{"position": "1st", "amount": 5000}],
-        "registration": {"start_time": "2026-08-12T00:00:00Z", "end_time": "2026-08-20T00:00:00Z"},
+        "registration": {
+            "start_time": (now - timedelta(hours=1)).isoformat() + "Z",
+            "end_time": (now + timedelta(days=30)).isoformat() + "Z",
+            "allowed": True,
+        },
         "schedule": [{"name": "Round 1", "start_time": "2026-08-12T00:00:00Z", "end_time": "2026-08-12T05:00:00Z"}],
         "registration_fields": [{"field_id": "github", "label": "GitHub", "type": "url", "required": True}]
     }
     create_resp = client.post("/events", headers=sa_headers, json=event_payload)
     assert create_resp.status_code == 200
+    ev_id = create_resp.json()["event_id"]
 
     # Register as participant
     p_headers = {"Authorization": f"Bearer {setup_test_users['p_token']}"}
-    reg_resp = client.post("/events/EVT_TEST_01/register", headers=p_headers, json={"registration_data": {"github": "https://github.com/test"}})
+    reg_resp = client.post(f"/events/{ev_id}/register", headers=p_headers, json={"registration_data": {"github": "https://github.com/test"}})
     assert reg_resp.status_code == 200
 
 def test_workshop_registration(setup_test_users):

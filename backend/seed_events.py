@@ -10,6 +10,19 @@ The catalogue itself lives in ``frontend/src/data/paradoxEvents.json``. That one
 dataset is also what the frontend's mock API seeds, so the mock and the real
 database hold the same programme.
 
+NOTE — schema migration in progress: this dataset still uses the previous
+events shape (`team.house`, a top-level `open` boolean, a client-supplied
+`event_id`, ...) and has not been updated for the restructured schema
+(`team.house_vs_house_event`, `registration.allowed` + computed
+`registration.is_open`, a backend-assigned `event_id`, `event_team` roles
+limited to event_head/member/volunteer, `announcements`). Running this script
+against the real dataset will fail Pydantic validation until that JSON file is
+updated to match — that is frontend content and is out of scope for this
+backend change. `testing/events/test_seed_events.py` exercises this script's
+*mechanics* (create/update/skip/drop-demo) against its own small in-schema
+fixture instead of this file, precisely so that dependency does not block
+verifying the script works.
+
 Usage::
 
     python seed_events.py --email admin@paradox.dev
@@ -37,8 +50,22 @@ DEFAULT_DATASET = Path(__file__).resolve().parent.parent / "frontend" / "src" / 
 # and are only removed when explicitly asked for.
 DEMO_EVENT_IDS = ("EVT_SOLO", "EVT_TEAM")
 
-# `EventUpdateRequest` has no `event_type`; an event's category is fixed at
-# creation, so it is dropped from update payloads.
+# `EventCreateRequest` has no `event_id` (it is assigned by the backend's
+# `EventIDGenerator`) — a dataset entry's `event_id`, if present, is only used
+# by this script to detect whether that event already exists, never sent to
+# `POST /events`. `EventUpdateRequest` has no `event_type` either; an event's
+# category is fixed at creation, so it is dropped from update payloads too.
+CREATE_FIELDS = (
+    "event_type",
+    "name",
+    "description",
+    "poster",
+    "team",
+    "prize_money",
+    "registration",
+    "schedule",
+    "registration_fields",
+)
 UPDATE_FIELDS = (
     "name",
     "description",
@@ -87,20 +114,33 @@ def publish_events(
     choice: the CLI passes a real ``httpx.Client``, the tests pass FastAPI's
     ``TestClient``, and both exercise the same code path.
 
+    ``event_id`` is now assigned by the backend
+    (``id_generator.EventIDGenerator``) rather than chosen by the dataset, so
+    re-running this script can no longer look an event up by the id the
+    dataset names — that id was never sent, and the backend's own id for the
+    same event can differ from one environment to the next. Matching for
+    "does this event already exist" is done by ``name`` instead, which is the
+    one field in each dataset entry that is both required and stable across
+    reruns.
+
     Returns a tally of what happened.
     """
     existing_response = client.get("/events")
     if existing_response.status_code != 200:
         raise SystemExit(f"Could not list events: {_detail(existing_response)}")
-    existing = {e["event_id"] for e in existing_response.json()}
-    log(f"{len(existing)} event(s) already in the database")
+    existing_events = existing_response.json()
+    existing_by_name = {e["name"]: e["event_id"] for e in existing_events}
+    existing_ids = {e["event_id"] for e in existing_events}
+    log(f"{len(existing_by_name)} event(s) already in the database")
 
     tally = {"created": 0, "updated": 0, "skipped": 0, "demo_deleted": 0, "failed": 0}
 
     for payload in events:
-        event_id = payload["event_id"]
+        name = payload["name"]
+        create_body = {k: v for k, v in payload.items() if k in CREATE_FIELDS}
 
-        if event_id in existing:
+        if name in existing_by_name:
+            event_id = existing_by_name[name]
             if not update:
                 tally["skipped"] += 1
                 continue
@@ -108,23 +148,23 @@ def publish_events(
             response = client.put(f"/events/{event_id}", json=body)
             if response.status_code == 200:
                 tally["updated"] += 1
-                log(f"  updated {event_id} — {payload['name']}")
+                log(f"  updated {event_id} — {name}")
             else:
                 tally["failed"] += 1
                 log(f"  FAILED  {event_id}: {_detail(response)}")
             continue
 
-        response = client.post("/events", json=payload)
+        response = client.post("/events", json=create_body)
         if response.status_code == 200:
             tally["created"] += 1
-            log(f"  created {event_id} — {payload['name']}")
+            log(f"  created {response.json().get('event_id')} — {name}")
         else:
             tally["failed"] += 1
-            log(f"  FAILED  {event_id}: {_detail(response)}")
+            log(f"  FAILED  {name}: {_detail(response)}")
 
     if drop_demo:
         for event_id in DEMO_EVENT_IDS:
-            if event_id not in existing:
+            if event_id not in existing_ids:
                 continue
             response = client.delete(f"/events/{event_id}")
             if response.status_code == 200:

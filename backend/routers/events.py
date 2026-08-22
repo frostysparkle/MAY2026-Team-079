@@ -1,10 +1,65 @@
-from fastapi import APIRouter, HTTPException, Depends
+"""
+Events — creation, registration, team management, attendance scanning, and
+announcements.
+
+Schema (restructured, no backward compatibility with the previous shape — see
+docs/events_detailed_documentation.md for the full document layout):
+
+    {
+      event_id, event_type, name, description, embedding, poster,
+      team: {min, max, house_vs_house_event, allow_single_registration},
+      prize_money: [{position, amount}],
+      registration: {start_time, end_time, allowed},
+      schedule: [{round_id, name, description, start_time, end_time, venue}],
+      registration_fields: [{field_id, label, type, required}],
+      event_team: [{user_id, role}],       # role: event_head | member | volunteer
+      announcements: [{announcement_id, message, priority, created_by, created_at}],
+      created_by, created_at, updated_at
+    }
+
+Two things that used to live on the event document do not any more:
+
+  * The registration roster mirror (the old `logs` array). Registration state
+    was already the source of truth on `participants.events[]`; the mirror
+    only ever grew, and every reader that needed a count already queried
+    `participants_collection` directly (`event_capacity`, `view_participation`).
+    Removing it does not remove any capability — it removes a second, easily
+    drifting copy of the same fact.
+  * Attendance scans and audit actions were already logged elsewhere
+    (`event_logs_collection`, `system_logs_collection` via `log_audit`) and are
+    unaffected by this file.
+
+Team membership constraint: a `backend_teams` user may sit on at most one
+event's `event_team`, enforced across the whole collection, not just within
+one event. A team member also cannot register as a participant for the event
+they are on the team of (unchanged from before, still enforced below).
+
+Registration open/closed is never physically flipped by a background job:
+`_registration_open` computes it on every read, from `registration.allowed`
+(a Super Admin kill-switch) AND the current time being inside
+`[start_time, end_time]`. Both conditions must hold.
+"""
+import asyncio
+import json
+import uuid
+from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from logger import log_audit
 from typing import Optional, List
 from datetime import datetime
 import random
 
-from models import EventCreateRequest, EventUpdateRequest, EventRegistrationInput, ScanQRRequest
+from models import (
+    EventCreateRequest,
+    EventUpdateRequest,
+    EventRegistrationInput,
+    EventTeamAssignRequest,
+    EventTeamRoleUpdateRequest,
+    AnnouncementCreateRequest,
+    ScanQRRequest,
+    parse_instant_utc,
+)
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
@@ -14,15 +69,78 @@ generator = EventIDGenerator()
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
+
+# ── shared helpers ───────────────────────────────────────────────────────────
+
+def _is_super_admin(current_user: dict) -> bool:
+    user_id = current_user.get("paradox_id")
+    return bool(
+        backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
+        or current_user.get("role") == "super_admin"
+    )
+
+
+def _require_super_admin(current_user: dict) -> None:
+    if not _is_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only Super Admins can perform this action")
+
+
+def _registration_open(event: dict) -> bool:
+    """
+    Effective open/closed state: the manual override AND the time window,
+    both required. Neither alone is authoritative — an admin can force-close
+    early with `allowed=False`, but cannot force registration open outside the
+    published window.
+    """
+    registration = event.get("registration") or {}
+    if not registration.get("allowed", True):
+        return False
+    start = registration.get("start_time")
+    end = registration.get("end_time")
+    if not start or not end:
+        return False
+    try:
+        start_dt = parse_instant_utc(start, "start_time")
+        end_dt = parse_instant_utc(end, "end_time")
+    except ValueError:
+        return False
+    now = datetime.utcnow()
+    return start_dt <= now <= end_dt
+
+
+def _with_computed_registration(event: dict) -> dict:
+    """Attaches `registration.is_open` without persisting it — it is derived,
+    never stored, so it can never drift from the fields it is derived from."""
+    registration = dict(event.get("registration") or {})
+    registration["is_open"] = _registration_open(event)
+    event = dict(event)
+    event["registration"] = registration
+    return event
+
+
+def _event_team_role(event: dict, user_id: str) -> Optional[str]:
+    for member in event.get("event_team", []):
+        if str(member.get("user_id")) == str(user_id):
+            return member.get("role")
+    return None
+
+
+def _is_event_team_member(event: dict, user_id: str) -> bool:
+    return _event_team_role(event, user_id) is not None
+
+
+def _is_event_head(event: dict, user_id: str) -> bool:
+    return _event_team_role(event, user_id) == "event_head"
+
+
+# ── create / read ────────────────────────────────────────────────────────────
+
 @router.post("")
 def create_event(request: EventCreateRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin and current_user.get("role") != "super_admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins can create events")
-        
+    _require_super_admin(current_user)
+
     schedule_data = []
-    for r_idx, rnd in enumerate(request.schedule):
+    for rnd in request.schedule:
         schedule_data.append({
             "round_id": generator.next_round_id(request.event_type),
             "name": rnd.name,
@@ -40,37 +158,34 @@ def create_event(request: EventCreateRequest, current_user: dict = Depends(get_c
         "embedding": generate_embedding(request.description),
         "poster": request.poster,
         "team": request.team.model_dump(),
-        "open": True,
         "prize_money": [pm.model_dump() for pm in request.prize_money],
-        "registration": request.registration,
+        "registration": request.registration.model_dump(),
         "schedule": schedule_data,
         "registration_fields": [rf.model_dump() for rf in request.registration_fields],
         "event_team": [],
+        "announcements": [],
         "created_by": current_user["_id"],
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
-        "logs": []
     }
     event_collection.insert_one(new_event)
     log_audit(current_user, "CREATE_EVENT", new_event["event_id"], {"event_name": new_event["name"]})
-    return {"message": "Event created"}
+    return {"message": "Event created", "event_id": new_event["event_id"]}
+
 
 @router.get("")
 def list_events(current_user: dict = Depends(get_current_user)):
-    # `created_by` holds the creating admin's raw ObjectId, which is not JSON
-    # serialisable — leaving it in makes this endpoint 500 as soon as any event
-    # has been created through POST /events. It is an internal reference with no
-    # use to a client, so it is projected out rather than converted.
-    #
-    # `logs` is projected out because it is the event's registration roster: one
-    # entry per registration, each carrying a `participant_id`. This endpoint is
-    # readable by any authenticated user, so returning it let any participant
-    # enumerate everybody registered for every event. Staff who need the roster
-    # have `GET /events/{event_id}/participation`, which is gated and returns it
-    # deliberately; a participant who needs to know how full an event is has
-    # `GET /events/{event_id}/capacity`, which returns counts and no identities.
-    events = list(event_collection.find({}, {"_id": 0, "created_by": 0, "logs": 0}))
-    return events
+    """
+    `created_by` holds the creating admin's raw ObjectId, which is not JSON
+    serialisable, so it is projected out. There is no `logs` field to project
+    out any more — the registration roster mirror was removed; the source of
+    truth is `participants.events[]`, read by `/capacity` and `/participation`.
+
+    `registration.is_open` is attached per event without being stored, so it
+    reflects `registration.allowed` and the time window at read time.
+    """
+    events = list(event_collection.find({}, {"_id": 0, "created_by": 0}))
+    return [_with_computed_registration(e) for e in events]
 
 
 # Allow-list of the fields that make up the published festival brochure.
@@ -85,7 +200,6 @@ PUBLIC_EVENT_FIELDS = {
     "embedding": 1,
     "poster": 1,
     "team": 1,
-    "open": 1,
     "prize_money": 1,
     "registration": 1,
     "schedule": 1,
@@ -99,40 +213,72 @@ def list_public_events():
 
     Deliberately unauthenticated: this is the pre-login events catalogue the
     landing page renders, and it must work for a visitor with no account. Only
-    the published fields above are returned — never `event_team` (which carries
-    staff identities), `registration_fields`, or internal bookkeeping and logs.
+    the published fields above are returned — never `event_team` (staff
+    identities), `registration_fields`, `announcements`, or internal
+    bookkeeping.
 
-    Declared before any `/{event_id}` route so the literal path is not captured
-    as an event id.
+    Declared before any `/{event_id}` route so the literal path is not
+    captured as an event id.
     """
-    return list(event_collection.find({}, PUBLIC_EVENT_FIELDS))
+    events = list(event_collection.find({}, PUBLIC_EVENT_FIELDS))
+    return [_with_computed_registration(e) for e in events]
+
+
+# ── update / delete ──────────────────────────────────────────────────────────
 
 @router.put("/{event_id}")
 def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_staff)):
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    user_id = current_user.get("paradox_id")
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
-    if not is_super_admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can edit this event")
-        
-    update_data = {k: v for k, v in request.dict().items() if v is not None}
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    _require_super_admin(current_user)
+
+    update_data = {k: v for k, v in request.model_dump(exclude_unset=True).items() if v is not None}
+
+    if "team" in update_data:
+        update_data["team"] = request.team.model_dump()
+    if "prize_money" in update_data:
+        update_data["prize_money"] = [pm.model_dump() for pm in request.prize_money]
+    if "registration" in update_data:
+        # `RegistrationWindowUpdate` is partial — merge onto what's stored so a
+        # request that only flips `allowed` cannot blank `start_time`/`end_time`.
+        merged = dict(event.get("registration") or {})
+        merged.update({k: v for k, v in request.registration.model_dump().items() if v is not None})
+        if not merged.get("start_time") or not merged.get("end_time"):
+            raise HTTPException(status_code=422, detail="registration.start_time and end_time are required")
+        if parse_instant_utc(merged["end_time"], "end_time") <= parse_instant_utc(merged["start_time"], "start_time"):
+            raise HTTPException(status_code=422, detail="registration.end_time must be after start_time")
+        update_data["registration"] = merged
+    if "schedule" in update_data:
+        update_data["schedule"] = [
+            {
+                "round_id": rnd.round_id or generator.next_round_id(event.get("event_type", "others")),
+                "name": rnd.name,
+                "description": rnd.description,
+                "start_time": rnd.start_time,
+                "end_time": rnd.end_time,
+                "venue": rnd.venue,
+            }
+            for rnd in request.schedule
+        ]
+    if "registration_fields" in update_data:
+        update_data["registration_fields"] = [rf.model_dump() for rf in request.registration_fields]
+
     if "description" in update_data and event.get("description") != update_data["description"]:
         update_data["embedding"] = generate_embedding(update_data["description"])
+
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         event_collection.update_one({"event_id": event_id}, {"$set": update_data})
     log_audit(current_user, "UPDATE_EVENT", event_id, {"fields_updated": list(update_data.keys())})
     return {"message": "Event updated successfully"}
 
+
 @router.delete("/{event_id}")
 def delete_event(event_id: str, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
-    if not is_super_admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can delete events")
-    
+    _require_super_admin(current_user)
+
     event = event_collection.find_one({"event_id": event_id})
     if event:
         participants_collection.update_many(
@@ -144,21 +290,43 @@ def delete_event(event_id: str, current_user: dict = Depends(get_current_staff))
     return {"message": "Event deleted"}
 
 
-from pydantic import BaseModel
-class EventTeamAssignRequest(BaseModel):
-    user_id: str
-    role: str # event_head | event_member | volunteer
+# ── team management ──────────────────────────────────────────────────────────
 
 @router.post("/{event_id}/team")
 def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    is_super_admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}) or current_user.get("role") == "super_admin"
-    if not is_super_admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can assign event teams")
-        
+    """
+    Add a staff member to this event's team.
+
+    A `user_id` must reference an existing `backend_teams` account — an event
+    team names people who can scan, allocate teams, and post announcements,
+    and an id nobody holds would grant those to nothing.
+
+    One person, one event: enforced by refusing the assignment if `user_id` is
+    already on *any* event's team, this one included (an existing member is
+    changed via `PATCH .../team/{user_id}`, not re-added via `POST`).
+    """
+    _require_super_admin(current_user)
+
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not backend_teams_collection.find_one({"paradox_id": request.user_id}):
+        raise HTTPException(status_code=404, detail="user_id must reference an existing backend_teams member")
+
+    existing_event = event_collection.find_one({"event_team.user_id": request.user_id})
+    if existing_event:
+        if existing_event["event_id"] == event_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Already on this event's team; use PATCH to change their role",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail=f"user_id is already on the team of event {existing_event['event_id']}; "
+                   "a person may be on only one event's team",
+        )
+
     event_collection.update_one(
         {"event_id": event_id},
         {"$push": {"event_team": {"role": request.role, "user_id": request.user_id}}}
@@ -166,17 +334,82 @@ def assign_event_team(event_id: str, request: EventTeamAssignRequest, current_us
     log_audit(current_user, "ASSIGN_EVENT_TEAM", event_id, {"assigned_user": request.user_id, "role": request.role})
     return {"message": "Team member assigned"}
 
+
+@router.patch("/{event_id}/team/{team_user_id}")
+def update_event_team_role(
+    event_id: str,
+    team_user_id: str,
+    request: EventTeamRoleUpdateRequest,
+    current_user: dict = Depends(get_current_staff),
+):
+    _require_super_admin(current_user)
+
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not _is_event_team_member(event, team_user_id):
+        raise HTTPException(status_code=404, detail="user_id is not on this event's team")
+
+    event_collection.update_one(
+        {"event_id": event_id, "event_team.user_id": team_user_id},
+        {"$set": {"event_team.$.role": request.role}}
+    )
+    log_audit(current_user, "UPDATE_EVENT_TEAM_ROLE", event_id, {"team_user_id": team_user_id, "role": request.role})
+    return {"message": "Team member role updated"}
+
+
+@router.delete("/{event_id}/team/{team_user_id}")
+def remove_event_team_member(event_id: str, team_user_id: str, current_user: dict = Depends(get_current_staff)):
+    """Frees this person up to be assigned to a different event's team."""
+    _require_super_admin(current_user)
+
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not _is_event_team_member(event, team_user_id):
+        raise HTTPException(status_code=404, detail="user_id is not on this event's team")
+
+    event_collection.update_one(
+        {"event_id": event_id},
+        {"$pull": {"event_team": {"user_id": team_user_id}}}
+    )
+    log_audit(current_user, "REMOVE_EVENT_TEAM_MEMBER", event_id, {"team_user_id": team_user_id})
+    return {"message": "Team member removed"}
+
+
+# ── registration ─────────────────────────────────────────────────────────────
+
+def _validate_registration_data(event: dict, registration_data: dict) -> None:
+    """Every `registration_fields` entry marked `required` must be present and
+    non-empty in what the participant submitted."""
+    registration_data = registration_data or {}
+    missing = []
+    for field in event.get("registration_fields", []):
+        if not field.get("required"):
+            continue
+        field_id = field.get("field_id")
+        value = registration_data.get(field_id)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(field.get("label") or field_id)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Missing required registration field(s): {', '.join(missing)}",
+        )
+
+
 @router.post("/{event_id}/register")
 def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput] = None, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can register for events")
-        
+
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    if not event.get("open", True):
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _registration_open(event):
         raise HTTPException(status_code=400, detail="Registration is closed for this event")
-    
+
     user_events = current_user.get("events", [])
     if any(str(ev.get("event_id")) == str(event["_id"]) for ev in user_events):
         raise HTTPException(status_code=409, detail="User is already registered for this event.")
@@ -186,75 +419,68 @@ def register_for_event(event_id: str, reg_input: Optional[EventRegistrationInput
     backend_member = backend_teams_collection.find_one({"admin_id": current_user["_id"]})
     if backend_member:
         paradox_id = backend_member.get("paradox_id")
-        is_event_team_member = any(
-            str(member.get("user_id")) == paradox_id
-            for member in event.get("event_team", [])
-        )
-        if is_event_team_member:
+        if _is_event_team_member(event, paradox_id):
             raise HTTPException(
                 status_code=403,
                 detail="Event team members cannot register as participants for their own event."
             )
 
+    registration_data = reg_input.registration_data if reg_input else {}
+    _validate_registration_data(event, registration_data)
 
     registration_entry = {
         "team_id": reg_input.team_name if reg_input and reg_input.team_name else None,
         "event_id": event["_id"],
         "team_role": "leader" if (reg_input and reg_input.team_name) else "member",
-        "registration_data": reg_input.registration_data if reg_input else {}
+        "registration_data": registration_data
     }
 
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$push": {"events": registration_entry}}
     )
-    event_collection.update_one(
-        {"_id": event["_id"]},
-        {"$push": {"logs": {"action": "registration", "participant_id": current_user["participant_id"], "time": datetime.utcnow()}}}
-    )
     log_audit(current_user, "EVENT_REGISTER", event_id)
     return {"message": "Registered for event successfully."}
+
 
 @router.put("/{event_id}/register")
 def edit_event_registration(event_id: str, reg_input: EventRegistrationInput, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can edit event registrations")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    if not event.get("open", True):
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not _registration_open(event):
         raise HTTPException(status_code=400, detail="Registration is closed")
 
-    participants_collection.update_one(
+    _validate_registration_data(event, reg_input.registration_data)
+
+    result = participants_collection.update_one(
         {"_id": current_user["_id"], "events.event_id": event["_id"]},
         {"$set": {"events.$.registration_data": reg_input.registration_data}}
     )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not registered for this event")
     return {"message": "Registration updated"}
+
 
 @router.delete("/{event_id}/register")
 def deregister_event(event_id: str, current_user: dict = Depends(get_current_participant)):
     if "participant_id" not in current_user:
         raise HTTPException(status_code=400, detail="Only participants can deregister")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    if not event.get("open", True):
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not _registration_open(event):
         raise HTTPException(status_code=400, detail="Registration is closed")
 
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$pull": {"events": {"event_id": event["_id"]}}}
     )
-    # The event's own `logs` array is the mirror of the participant-side roster,
-    # and registration pushes to it. Without the matching pull it only ever grew:
-    # a cancelled registration stayed counted for the rest of the fest, so the
-    # array's length overstated the real roll by every cancellation ever made.
-    # The *history* of the cancellation is not lost — it goes to the audit trail
-    # below, which is where history belongs; `logs` tracks current state.
-    event_collection.update_one(
-        {"_id": event["_id"]},
-        {"$pull": {"logs": {"action": "registration", "participant_id": current_user["participant_id"]}}}
-    )
     log_audit(current_user, "EVENT_DEREGISTER", event_id)
     return {"message": "Deregistered successfully"}
+
 
 @router.get("/my_registrations")
 def my_registrations(current_user: dict = Depends(get_current_participant)):
@@ -265,6 +491,7 @@ def my_registrations(current_user: dict = Depends(get_current_participant)):
         if "event_id" in ev and not isinstance(ev["event_id"], str):
             ev["event_id"] = str(ev["event_id"])
     return events
+
 
 def _unique_attendance_today(event: dict) -> int:
     """
@@ -331,12 +558,13 @@ def event_capacity(event_id: str, current_user: dict = Depends(get_current_user)
 def view_participation(event_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
     admin_doc = backend_teams_collection.find_one({"paradox_id": user_id})
     is_super_admin = admin_doc and admin_doc.get("role") == "super_admin"
-    is_event_team = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
-    
+    is_event_team = _is_event_team_member(event, user_id)
+
     is_uhc = admin_doc and admin_doc.get("department") == "uhc"
     is_dept_admin = admin_doc and admin_doc.get("department") == event.get("event_type")
 
@@ -344,12 +572,12 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
         raise HTTPException(status_code=403, detail="Not authorized to view participation details")
 
     participants = list(participants_collection.find({"events.event_id": event["_id"]}))
-    
+
     result = []
     for p in participants:
         ev_reg = next((ev for ev in p.get("events", []) if str(ev["event_id"]) == str(event["_id"])), None)
         prof = p.get("profile", {})
-        
+
         # UHC filtering logic
         if is_uhc and not is_super_admin and not is_event_team:
             email = admin_doc.get("email", "")
@@ -367,7 +595,6 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
             "team_role": ev_reg.get("team_role") if ev_reg else None
         })
 
-
     # Fetch event team details
     event_team_details = []
     for member in event.get("event_team", []):
@@ -379,15 +606,15 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
         member_phone = "Unknown"
         if admin:
             member_name = admin.get("designation", "Admin")
-        
+
         # Try to find participant if they have a student profile
         p_doc = participants_collection.find_one({"participant_id": admin_id})
-            
+
         if p_doc:
             prof = p_doc.get("profile", {})
             member_name = prof.get("full_name", member_name)
             member_phone = prof.get("phone", member_phone)
-            
+
         event_team_details.append({
             "user_id": str(admin_id),
             "role": member.get("role"),
@@ -395,54 +622,53 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
             "phone": member_phone
         })
 
-
     response_data = {
-        "count": len(result), 
+        "count": len(result),
         "participants": result,
         "event_team": event_team_details
     }
-    
+
     if not is_uhc:
         response_data["total_daily_scans"] = _unique_attendance_today(event)
 
     return response_data
 
+
 @router.post("/{event_id}/allocate_teams")
 def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    is_event_head = any(str(member.get("user_id")) == user_id and member.get("role") == "event_head" for member in event.get("event_team", []))
-    
-    if not is_event_head:
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _is_event_head(event, user_id):
         raise HTTPException(status_code=403, detail="Only Event Heads are authorized to allocate teams")
-        
+
     team_rules = event.get("team", {})
     min_size = team_rules.get("min", 1)
     max_size = team_rules.get("max", 1)
-    
+
     if max_size <= 1:
         return {"message": "Not a team event"}
-        
+
     participants = list(participants_collection.find({"events.event_id": event["_id"]}))
     solo_players = []
-    
+
     for p in participants:
         ev_reg = next((ev for ev in p.get("events", []) if str(ev["event_id"]) == str(event["_id"])), None)
         if ev_reg and not ev_reg.get("team_id"):
             solo_players.append(p)
-            
+
     random.shuffle(solo_players)
     teams_created = 0
-    
-    if team_rules.get("house", False):
+
+    if team_rules.get("house_vs_house_event", False):
         # Group by house
         house_groups = {}
         for sp in solo_players:
             house = sp.get("profile", {}).get("house", "Unknown")
             house_groups.setdefault(house, []).append(sp)
-            
+
         for house, players in house_groups.items():
             for i in range(0, len(players), max_size):
                 team_chunk = players[i:i+max_size]
@@ -466,25 +692,25 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
                         {"$set": {"events.$.team_id": team_id}}
                     )
                 teams_created += 1
-                
+
     log_audit(current_user, "ALLOCATE_EVENT_TEAMS", event_id, {"teams_created": teams_created})
     return {"message": f"Allocated {teams_created} teams"}
+
 
 @router.post("/{event_id}/scan")
 def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    is_team_member = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
-    
-    if not is_team_member:
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _is_event_team_member(event, user_id):
         raise HTTPException(status_code=403, detail="Not authorized to scan for this event")
-        
+
     target_user, _ = verify_qr(request)
-    
+
     is_participating = any(str(ev.get("event_id")) == str(event["_id"]) for ev in target_user.get("events", []))
-    
+
     # Log successful scan
     if is_participating:
         now = datetime.utcnow()
@@ -499,32 +725,33 @@ def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: 
         if not event_logs_collection.find_one(log_filter):
             log_entry = {**log_filter, "timestamp": now}
             event_logs_collection.insert_one(log_entry)
-            
+
     return {
         "name": target_user.get("profile", {}).get("full_name"),
         "email": target_user.get("email"),
         "is_participating": is_participating
     }
 
+
 @router.get("/{event_id}/my_daily_scans")
 def my_daily_scans(event_id: str, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    is_team_member = any(str(member.get("user_id")) == user_id for member in event.get("event_team", []))
-    
-    if not is_team_member:
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _is_event_team_member(event, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-        
+
     day_str = datetime.utcnow().strftime("%Y-%m-%d")
     count = event_logs_collection.count_documents({
         "event_id": str(event["_id"]),
         "scanned_by": user_id,
         "day": day_str
     })
-    
+
     return {"daily_unique_scans": count}
+
 
 @router.get("/{event_id}/logs")
 def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
@@ -542,10 +769,7 @@ def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
     Rows key on the event's ObjectId, not its readable ``event_id``, so the lookup
     happens here rather than being a detail every caller has to know.
     """
-    user_id = current_user.get("paradox_id")
-    admin = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    if not admin:
-        raise HTTPException(status_code=403, detail="Only Super Admins can view logs")
+    _require_super_admin(current_user)
 
     event = event_collection.find_one({"event_id": event_id})
     if not event:
@@ -558,27 +782,211 @@ def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
     )
     return {"logs": logs}
 
+
 class TeamUpdateInput(BaseModel):
     team_id: Optional[str] = None
     team_role: Optional[str] = None
+
 
 @router.put("/{event_id}/participant_teams/{participant_id}")
 def update_participant_team(event_id: str, participant_id: str, payload: TeamUpdateInput, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
-    if not event: raise HTTPException(status_code=404, detail="Event not found")
-    
-    is_event_head = any(str(member.get("user_id")) == user_id and member.get("role") == "event_head" for member in event.get("event_team", []))
-    
-    if not is_event_head:
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _is_event_head(event, user_id):
         raise HTTPException(status_code=403, detail="Only Event Heads are authorized to modify participant teams")
-        
+
     participant = participants_collection.find_one({"participant_id": participant_id, "events.event_id": event["_id"]})
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not registered for this event")
-        
+
     participants_collection.update_one(
         {"participant_id": participant_id, "events.event_id": event["_id"]},
         {"$set": {"events.$.team_id": payload.team_id, "events.$.team_role": payload.team_role}}
     )
     return {"message": "Participant team updated"}
+
+
+# ── announcements ────────────────────────────────────────────────────────────
+
+def _is_registered_for(event: dict, current_user: dict) -> bool:
+    if "participant_id" not in current_user:
+        return False
+    return any(
+        str(ev.get("event_id")) == str(event["_id"])
+        for ev in current_user.get("events", [])
+    )
+
+
+def _may_read_announcements(event: dict, current_user: dict) -> bool:
+    if _is_super_admin(current_user):
+        return True
+    paradox_id = current_user.get("paradox_id")
+    if paradox_id and _is_event_team_member(event, paradox_id):
+        return True
+    return _is_registered_for(event, current_user)
+
+
+@router.post("/{event_id}/announcements")
+def create_announcement(
+    event_id: str,
+    request: AnnouncementCreateRequest,
+    current_user: dict = Depends(get_current_staff),
+):
+    """
+    Publish a notification about this event to everybody registered for it.
+
+    Restricted to the event's own Event Head, or a Super Admin — a volunteer
+    or member on the team can scan and view participation, but broadcasting to
+    every registrant is a head-of-event decision.
+
+    Appended to `event.announcements`; delivered to participants via
+    `GET /{event_id}/announcements` (poll) or `GET /{event_id}/announcements/stream`
+    (SSE) — see below.
+    """
+    user_id = current_user.get("paradox_id")
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not (_is_super_admin(current_user) or _is_event_head(event, user_id)):
+        raise HTTPException(status_code=403, detail="Only the Event Head can post announcements for this event")
+
+    announcement = {
+        "announcement_id": f"ANN{uuid.uuid4().hex[:12].upper()}",
+        "message": request.message,
+        "priority": request.priority,
+        "created_by": user_id,
+        "created_at": datetime.utcnow(),
+    }
+    event_collection.update_one(
+        {"event_id": event_id},
+        {"$push": {"announcements": announcement}}
+    )
+    log_audit(current_user, "CREATE_ANNOUNCEMENT", event_id, {"priority": request.priority})
+    return {"message": "Announcement published", "announcement": announcement}
+
+
+@router.get("/{event_id}/announcements")
+def list_announcements(event_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Newest first. Readable by whoever the announcement is *for* — a registered
+    participant — plus whoever might have sent it: the event's own team, or a
+    Super Admin.
+    """
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _may_read_announcements(event, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to read this event's announcements")
+
+    announcements = sorted(
+        event.get("announcements", []),
+        key=lambda a: a.get("created_at") or datetime.min,
+        reverse=True,
+    )
+    return announcements
+
+
+def _serialise_announcement(announcement: dict) -> dict:
+    body = dict(announcement)
+    created_at = body.get("created_at")
+    if isinstance(created_at, datetime):
+        body["created_at"] = created_at.isoformat() + "Z"
+    return body
+
+
+async def _announcement_stream(event_id: str, event_oid, request: Request):
+    """
+    Poll the event document for announcements newer than what the client has
+    already seen, and emit each one as an SSE frame.
+
+    Implemented as DB polling rather than an in-memory pub/sub queue on
+    purpose: an in-memory queue only reaches subscribers connected to the same
+    process, which breaks the moment this API runs with more than one uvicorn
+    worker (the default for any real deployment). Polling the document is
+    slightly higher latency but correct regardless of worker count, and it
+    needs no new infrastructure (no Redis, no message broker) beyond what this
+    project already has.
+
+    Resumable via the standard `Last-Event-ID` header: a reconnecting client
+    (whether via a retrying `fetch` loop or a library that honours SSE's
+    reconnection contract) is not shown announcements it already has.
+    """
+    last_seen_id = request.headers.get("last-event-id")
+    seen_ids: set = set()
+
+    if last_seen_id:
+        # Seed `seen_ids` with every announcement up to and including the one
+        # the client already has, so a reconnect does not replay history.
+        current = event_collection.find_one({"_id": event_oid}, {"announcements": 1})
+        for ann in (current or {}).get("announcements", []):
+            seen_ids.add(ann.get("announcement_id"))
+            if ann.get("announcement_id") == last_seen_id:
+                break
+
+    heartbeat_every = 15  # seconds
+    poll_every = 3  # seconds
+    elapsed_since_heartbeat = 0.0
+
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+
+            current = event_collection.find_one({"_id": event_oid}, {"announcements": 1})
+            announcements = (current or {}).get("announcements", [])
+            new_ones = [a for a in announcements if a.get("announcement_id") not in seen_ids]
+            new_ones.sort(key=lambda a: a.get("created_at") or datetime.min)
+
+            for ann in new_ones:
+                seen_ids.add(ann.get("announcement_id"))
+                payload = json.dumps(_serialise_announcement(ann))
+                yield f"id: {ann.get('announcement_id')}\nevent: announcement\ndata: {payload}\n\n"
+                elapsed_since_heartbeat = 0.0
+
+            await asyncio.sleep(poll_every)
+            elapsed_since_heartbeat += poll_every
+            if elapsed_since_heartbeat >= heartbeat_every:
+                yield ": heartbeat\n\n"
+                elapsed_since_heartbeat = 0.0
+    except asyncio.CancelledError:
+        # Client disconnected mid-sleep; exit quietly rather than propagating.
+        return
+
+
+@router.get("/{event_id}/announcements/stream")
+async def stream_announcements(event_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """
+    Live announcements for this event, as `text/event-stream`.
+
+    Authenticated exactly like every other route in this API — an
+    `Authorization: Bearer` header via `get_current_user` — rather than a
+    `?token=` query parameter. The browser's native `EventSource` cannot send
+    a header, so a browser client must instead open this with `fetch` and read
+    `response.body` as a stream (or a small helper library such as
+    `@microsoft/fetch-event-source` that does that parsing). This keeps the
+    token out of the URL — and therefore out of server access logs, browser
+    history, and any `Referer` header — matching every other endpoint here.
+
+    Access is the same as the polling list above: the event's registered
+    participants, its team, or a Super Admin.
+    """
+    event = event_collection.find_one({"event_id": event_id})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not _may_read_announcements(event, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to read this event's announcements")
+
+    return StreamingResponse(
+        _announcement_stream(event_id, event["_id"], request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx response buffering, if ever fronted by one
+        },
+    )

@@ -1,5 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any, Union
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from typing import Optional, List, Dict, Any, Union, Literal
+from datetime import datetime, timezone
 
 # Auth models
 class RegisterRequest(BaseModel):
@@ -50,57 +51,174 @@ class ScanQRRequest(BaseModel):
     data: str
     timestamp: str
 
-# Event models matching /event schema
+# Event models — restructured schema (no backward compatibility with the
+# previous shape). See docs/events_detailed_documentation.md for the full
+# document layout and role/permission model.
+
+# The four event categories. `id_generator.EventIDGenerator` derives an event's
+# id prefix from this value, so it is validated as a closed set here rather
+# than left as a free string that generator would silently mis-prefix.
+EVENT_TYPES = ("technical", "culturals", "sports", "others")
+
+# The only roles an `event_team` entry may hold. `member` and `volunteer` are
+# both plain team members for authorization purposes (team-scoped actions like
+# scanning); only `event_head` may allocate teams, post announcements, or
+# manage the team itself.
+EVENT_TEAM_ROLES = ("event_head", "member", "volunteer")
+
+# The only priorities an announcement may be published at.
+ANNOUNCEMENT_PRIORITIES = ("low", "mid", "high")
+
+
+def parse_instant_utc(value: str, field: str) -> datetime:
+    """A permissive ISO 8601 parse, accepting a trailing 'Z', normalised to
+    naive UTC for comparison — matching how every other timestamp in this
+    codebase is stored and compared (`datetime.utcnow()`)."""
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        raise ValueError(f"{field} must be an ISO 8601 datetime, e.g. 2026-06-13T10:00:00Z")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
 class PrizeMoney(BaseModel):
-    position: str
-    amount: int
+    position: str = Field(..., min_length=1)
+    amount: int = Field(..., ge=0)
+
 
 class ScheduleRound(BaseModel):
-    round_id: Optional[str] = None
-    name: str
+    round_id: Optional[str] = None  # assigned by the backend, never accepted from a client
+    name: str = Field(..., min_length=1)
     description: Optional[str] = ""
     start_time: str
     end_time: str
     venue: Optional[str] = None  # e.g. "OAT", "Seminar Hall A", "Online - Meet Link"
 
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        start = parse_instant_utc(self.start_time, "start_time")
+        end = parse_instant_utc(self.end_time, "end_time")
+        if end <= start:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
 class RegistrationField(BaseModel):
-    field_id: str
-    label: str
+    field_id: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1)
     type: str  # text | number | email | phone | url | select | checkbox
     required: bool = True
 
+    @field_validator("type")
+    @classmethod
+    def _valid_type(cls, v):
+        allowed = {"text", "number", "email", "phone", "url", "select", "checkbox"}
+        if v not in allowed:
+            raise ValueError(f"type must be one of {sorted(allowed)}")
+        return v
+
+
 class TeamRule(BaseModel):
-    min: int = 1
-    max: int = 1
-    house: bool = False
+    min: int = Field(1, ge=1)
+    max: int = Field(1, ge=1)
+    house_vs_house_event: bool = False
     allow_single_registration: bool = True
+
+    @model_validator(mode="after")
+    def _min_le_max(self):
+        if self.min > self.max:
+            raise ValueError("team.min must not be greater than team.max")
+        return self
+
+
+class RegistrationWindow(BaseModel):
+    """
+    When an event accepts registrations, and the manual kill-switch beside it.
+
+    `allowed` is a Super Admin override, independent of the time window: the
+    effective open/closed state an API response reports is
+    ``allowed AND now within [start_time, end_time]`` (see
+    ``events._registration_open``). Neither bound is optional — an event with
+    no window has no reliable answer to "is registration open", which is the
+    ambiguity that used to be papered over by a bare ``open: bool``.
+    """
+    start_time: str
+    end_time: str
+    allowed: bool = True
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        start = parse_instant_utc(self.start_time, "start_time")
+        end = parse_instant_utc(self.end_time, "end_time")
+        if end <= start:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class RegistrationWindowUpdate(BaseModel):
+    """Same as `RegistrationWindow`, but every field optional so `PUT
+    /events/{id}` can flip just `allowed` without having to resend the window."""
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    allowed: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _end_after_start(self):
+        if self.start_time is not None and self.end_time is not None:
+            start = parse_instant_utc(self.start_time, "start_time")
+            end = parse_instant_utc(self.end_time, "end_time")
+            if end <= start:
+                raise ValueError("end_time must be after start_time")
+        return self
+
 
 class EventRegistrationInput(BaseModel):
     team_name: Optional[str] = None
     registration_data: Dict[str, Any] = {}
 
+
 class EventCreateRequest(BaseModel):
-    event_id: str
-    event_type: str  # technical | culturals | sports | others
-    name: str
-    description: str
+    # event_id is assigned by the backend (id_generator.EventIDGenerator) and
+    # is never accepted from a client.
+    event_type: Literal["technical", "culturals", "sports", "others"]
+    name: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
     poster: Optional[str] = ""
     team: TeamRule
     prize_money: List[PrizeMoney] = []
-    registration: Dict[str, str]  # start_time, end_time
+    registration: RegistrationWindow
     schedule: List[ScheduleRound] = []
     registration_fields: List[RegistrationField] = []
+
 
 class EventUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     poster: Optional[str] = None
-    open: Optional[bool] = None
     team: Optional[TeamRule] = None
     prize_money: Optional[List[PrizeMoney]] = None
-    registration: Optional[Dict[str, str]] = None
+    registration: Optional[RegistrationWindowUpdate] = None
     schedule: Optional[List[ScheduleRound]] = None
     registration_fields: Optional[List[RegistrationField]] = None
+
+
+class EventTeamAssignRequest(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    role: Literal["event_head", "member", "volunteer"]
+
+
+class EventTeamRoleUpdateRequest(BaseModel):
+    role: Literal["event_head", "member", "volunteer"]
+
+
+class AnnouncementCreateRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    priority: Literal["low", "mid", "high"] = "mid"
 
 # Backend Teams models
 class BackendTeamCreateRequest(BaseModel):

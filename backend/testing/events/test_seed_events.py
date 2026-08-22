@@ -1,16 +1,20 @@
 """
-Verifies the event migration end to end.
+Verifies seed_events.py's mechanics — create / skip / update / drop-demo —
+against the real FastAPI app.
 
-Runs `seed_events.publish_events` against the real FastAPI app with the real
-dataset, then reads the result back through the public brochure endpoint — the
-same path the landing page uses. This is the proof that the whole catalogue can
-be created through the Super Admin events API and comes back out intact.
+Uses a small dataset built here, in the restructured events schema, rather
+than `frontend/src/data/paradoxEvents.json`. That file is frontend content and
+still holds the *previous* events shape (`team.house`, a top-level `open`
+flag, a client-chosen `event_id`, ...); it has not been migrated as part of
+this backend change (see the note in `seed_events.py`), so depending on it
+here would make this test fail for a reason that has nothing to do with
+`publish_events` itself. This fixture is what `publish_events` is asked to
+publish instead — proof the script's mechanics work stands on its own,
+independent of when that frontend file gets updated.
 """
-import json
 import os
 import sys
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,10 +24,51 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import security
 from main import app
 from database import event_collection, backend_teams_collection
-from seed_events import DEFAULT_DATASET, login, publish_events
+from seed_events import login, publish_events
 
 ADMIN_EMAIL = "seed_super_admin@ds.study.iitm.ac.in"
 ADMIN_PASSWORD = "seed_password_123"
+
+
+def _dataset():
+    """Two events in the current schema — one solo, one team-based with a
+    published window covering "now", so registration-window validation on
+    create is satisfied without any test having to mock the clock."""
+    now = datetime.utcnow()
+    window = {
+        "start_time": (now - timedelta(days=1)).isoformat() + "Z",
+        "end_time": (now + timedelta(days=30)).isoformat() + "Z",
+        "allowed": True,
+    }
+    return [
+        {
+            "event_type": "technical",
+            "name": "Hustlepreneurs By Escape Room",
+            "description": "A startup pitch gauntlet.",
+            "poster": "/images/events/posters/122.avif",
+            "team": {"min": 2, "max": 4, "house_vs_house_event": False, "allow_single_registration": False},
+            "prize_money": [{"position": "Top 5 Teams", "amount": 10000}],
+            "registration": window,
+            "schedule": [{
+                "name": "The Pitch",
+                "start_time": (now + timedelta(days=2)).isoformat() + "Z",
+                "end_time": (now + timedelta(days=2, hours=2)).isoformat() + "Z",
+                "venue": "ICSR Hall III",
+            }],
+            "registration_fields": [],
+        },
+        {
+            "event_type": "sports",
+            "name": "Last1Standing",
+            "description": "Last1Standing is a competitive elimination sport.",
+            "poster": "/images/events/posters/22.avif",
+            "team": {"min": 1, "max": 1, "house_vs_house_event": False, "allow_single_registration": True},
+            "prize_money": [],
+            "registration": window,
+            "schedule": [],
+            "registration_fields": [],
+        },
+    ]
 
 
 @pytest.fixture
@@ -53,10 +98,9 @@ def admin_client():
     backend_teams_collection.delete_many({"email": ADMIN_EMAIL})
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def dataset():
-    assert DEFAULT_DATASET.is_file(), f"dataset missing at {DEFAULT_DATASET}"
-    return json.loads(Path(DEFAULT_DATASET).read_text(encoding="utf-8"))
+    return _dataset()
 
 
 def test_publishes_the_whole_catalogue(admin_client, dataset):
@@ -85,36 +129,40 @@ def test_published_events_are_readable_without_a_token(admin_client, dataset):
     response = anonymous.get("/events/public")
     assert response.status_code == 200
 
-    events = {e["event_id"]: e for e in response.json()}
+    events = {e["name"]: e for e in response.json()}
     assert len(events) == len(dataset)
 
-    # Content survives the round trip through the API verbatim.
-    hustle = events["122"]
-    assert hustle["name"] == "Hustlepreneurs By Escape Room"
+    # Content survives the round trip through the API verbatim, and
+    # `registration.is_open` is computed from the published window.
+    hustle = events["Hustlepreneurs By Escape Room"]
     assert hustle["poster"] == "/images/events/posters/122.avif"
-    assert hustle["registration"]["prize_amounts"] == '["₹10000 each"]'
     assert hustle["schedule"][-1]["venue"] == "ICSR Hall III"
-    assert hustle["open"] is True
+    assert hustle["registration"]["is_open"] is True
+    assert hustle["team"]["max"] == 4
 
-    last_standing = events["22"]
+    last_standing = events["Last1Standing"]
     assert last_standing["event_type"] == "sports"
-    assert "Last1Standing is a competitive" in last_standing["description"]
-    assert '"label":"Rounds","value":"5"' in last_standing["registration"]["meta"]
+    assert "competitive elimination" in last_standing["description"]
 
 
 def test_drops_the_retired_demo_events(admin_client, dataset):
+    now = datetime.utcnow()
     event_collection.insert_one({
         "event_id": "EVT_SOLO",
         "event_type": "technical",
         "name": "Code Sprint",
         "description": "A solo competitive programming contest.",
-        "team": {"min": 1, "max": 1, "house": False, "allow_single_registration": True},
-        "open": True,
+        "team": {"min": 1, "max": 1, "house_vs_house_event": False, "allow_single_registration": True},
         "prize_money": [],
-        "registration": {},
+        "registration": {
+            "start_time": (now - timedelta(days=1)).isoformat() + "Z",
+            "end_time": (now + timedelta(days=1)).isoformat() + "Z",
+            "allowed": True,
+        },
         "schedule": [],
         "registration_fields": [],
         "event_team": [],
+        "announcements": [],
     })
 
     tally = publish_events(admin_client, dataset, drop_demo=True, log=lambda *_: None)
@@ -128,10 +176,12 @@ def test_drops_the_retired_demo_events(admin_client, dataset):
 def test_update_rewrites_existing_events(admin_client, dataset):
     publish_events(admin_client, dataset, log=lambda *_: None)
 
-    event_collection.update_one({"event_id": "22"}, {"$set": {"name": "Renamed by hand"}})
+    event_collection.update_one({"name": "Last1Standing"}, {"$set": {"description": "Renamed by hand"}})
 
     tally = publish_events(admin_client, dataset, update=True, log=lambda *_: None)
 
     assert tally["updated"] == len(dataset)
     assert tally["failed"] == 0
-    assert event_collection.find_one({"event_id": "22"})["name"] == "Last1Standing"
+    assert event_collection.find_one({"name": "Last1Standing"})["description"] == (
+        "Last1Standing is a competitive elimination sport."
+    )

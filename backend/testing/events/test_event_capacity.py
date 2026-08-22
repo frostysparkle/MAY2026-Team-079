@@ -14,7 +14,7 @@ import json
 import os
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -90,23 +90,26 @@ def ctx():
     sa_id, sa_token = _make_staff("super_admin")
     sa_headers = {"Authorization": f"Bearer {sa_token}"}
 
-    ev_id = f"EVT_CAP_{random.randint(1000, 9999)}"
-    client.post("/events", json={
-        "event_id": ev_id,
+    now = datetime.utcnow()
+    ev_id = client.post("/events", json={
         "event_type": "technical",
         "name": "Capacity Test",
         "description": "An event with a published limit",
-        "team": {"min": 1, "max": 1, "house": False, "allow_single_registration": True},
-        # `capacity` rides in the free-form registration map — see the frontend's
-        # `eventExtras.ts`. The backend stores and returns it verbatim.
-        "registration": {"start_time": "2026-08-12T00:00:00Z", "capacity": "200"}
-    }, headers=sa_headers)
+        "team": {"min": 1, "max": 1, "house_vs_house_event": False, "allow_single_registration": True},
+        # The registration window covers "now" so registration is open for
+        # this fixture's whole lifetime, and `allowed` is the manual override.
+        "registration": {
+            "start_time": (now - timedelta(hours=1)).isoformat() + "Z",
+            "end_time": (now + timedelta(days=30)).isoformat() + "Z",
+            "allowed": True,
+        },
+    }, headers=sa_headers).json()["event_id"]
 
     # Two scanners on the same gate, which is the case that inflated attendance.
     client.post(f"/events/{ev_id}/team", json={"user_id": sa_id, "role": "event_head"},
                 headers=sa_headers)
-    vol_id, vol_token = _make_staff("event_member")
-    client.post(f"/events/{ev_id}/team", json={"user_id": vol_id, "role": "event_member"},
+    vol_id, vol_token = _make_staff("volunteer")
+    client.post(f"/events/{ev_id}/team", json={"user_id": vol_id, "role": "member"},
                 headers=sa_headers)
 
     p_id, p_token = _make_participant()
@@ -126,9 +129,11 @@ def ctx():
 
 def test_list_events_does_not_expose_the_registration_roster(ctx):
     """
-    `logs` holds one entry per registration, each with a `participant_id`. This
-    endpoint is readable by any authenticated user, so returning it let any
-    participant enumerate everybody registered for every event.
+    The old `logs` field held one entry per registration, each with a
+    `participant_id`; it has been removed entirely (the roster mirror was
+    dropped — `participants.events[]` is the sole source of truth). This
+    endpoint is readable by any authenticated user, so a residual roster field
+    would let any participant enumerate everybody registered for every event.
     """
     resp = client.get("/events", headers=ctx["p_headers"])
     assert resp.status_code == 200
@@ -142,10 +147,10 @@ def test_list_events_still_carries_what_the_app_needs(ctx):
     """The fix is a projection, not a rewrite: everything else still arrives."""
     event = next(e for e in client.get("/events", headers=ctx["p_headers"]).json()
                  if e["event_id"] == ctx["ev_id"])
-    # The published capacity a participant compares the crowd against.
-    assert event["registration"]["capacity"] == "200"
+    # `registration.is_open` is computed from `allowed` + the time window.
+    assert event["registration"]["is_open"] is True
     for field in ("event_id", "name", "description", "team", "schedule",
-                  "registration_fields", "event_team", "open"):
+                  "registration_fields", "event_team"):
         assert field in event
 
 
@@ -157,24 +162,26 @@ def test_no_participant_id_reaches_a_participant_from_the_events_list(ctx):
 
 # ── deregistration stops being counted ──────────────────────────────────────
 
-def test_deregistration_removes_the_registration_from_the_event_roster(ctx):
+def test_deregistration_removes_the_registration_from_the_participant_record(ctx):
     """
-    Registration pushed to `event.logs`; nothing ever pulled. A cancelled
-    registration stayed counted for the rest of the fest.
+    Registration lives only on `participants.events[]` now (the event-side
+    `logs` roster mirror was removed entirely), so deregistering must pull it
+    from there — checked directly against the participants collection.
     """
     ev_id = ctx["ev_id"]
+    event_oid = event_collection.find_one({"event_id": ev_id})["_id"]
     p_id, p_token = _make_participant()
     headers = {"Authorization": f"Bearer {p_token}"}
 
     client.post(f"/events/{ev_id}/register", headers=headers, json={"registration_data": {}})
-    roster = event_collection.find_one({"event_id": ev_id})["logs"]
-    assert any(entry["participant_id"] == p_id for entry in roster)
+    participant = participants_collection.find_one({"participant_id": p_id})
+    assert any(str(ev.get("event_id")) == str(event_oid) for ev in participant.get("events", []))
 
     resp = client.delete(f"/events/{ev_id}/register", headers=headers)
     assert resp.status_code == 200
 
-    roster = event_collection.find_one({"event_id": ev_id})["logs"]
-    assert not any(entry["participant_id"] == p_id for entry in roster)
+    participant = participants_collection.find_one({"participant_id": p_id})
+    assert not any(str(ev.get("event_id")) == str(event_oid) for ev in participant.get("events", []))
 
 
 def test_cancelled_registrations_are_not_counted_as_registered(ctx):

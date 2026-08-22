@@ -209,19 +209,20 @@ def ctx():
     )
 
     # ── Event ────────────────────────────────────────────────────────────────
-    ev_id = f"EVT_TD{random.randint(1000,9999)}"
-    client.post(
+    # event_id is now assigned by the backend (id_generator.EventIDGenerator),
+    # so it is read back from the create response rather than chosen here.
+    ev_create_resp = client.post(
         "/events",
         json={
-            "event_id": ev_id,
             "event_type": "technical",
             "name": "Domain Hackathon",
             "description": "24hr Hackathon",
-            "team": {"min": 1, "max": 4, "house": False, "allow_single_registration": True},
+            "team": {"min": 1, "max": 4, "house_vs_house_event": False, "allow_single_registration": True},
             "prize_money": [{"position": "1st", "amount": 10000}],
             "registration": {
                 "start_time": "2026-08-01T00:00:00Z",
                 "end_time": "2026-08-31T00:00:00Z",
+                "allowed": True,
             },
             "schedule": [
                 {
@@ -236,6 +237,7 @@ def ctx():
         },
         headers=sa_hdr,
     )
+    ev_id = ev_create_resp.json()["event_id"]
     # Assign SA to event team so they can scan
     client.post(
         f"/events/{ev_id}/team",
@@ -285,14 +287,14 @@ def test_TC105_event_create_forbidden_for_participant(ctx):
     resp = client.post(
         "/events",
         json={
-            "event_id": "EVT_FORBIDDEN",
             "event_type": "technical",
             "name": "Forbidden Event",
             "description": "Should fail",
-            "team": {"min": 1, "max": 1, "house": False, "allow_single_registration": True},
+            "team": {"min": 1, "max": 1, "house_vs_house_event": False, "allow_single_registration": True},
             "registration": {
                 "start_time": "2026-08-01T00:00:00Z",
                 "end_time": "2026-08-31T00:00:00Z",
+                "allowed": True,
             },
         },
         headers=p_hdr,

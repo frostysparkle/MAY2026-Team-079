@@ -28,10 +28,12 @@ def published_event():
         "name": "Hustlepreneurs By Escape Room",
         "description": "A startup pitch gauntlet.",
         "poster": "/images/events/posters/122.avif",
-        "team": {"min": 2, "max": 4, "house": False, "allow_single_registration": False},
-        "open": True,
+        "team": {"min": 2, "max": 4, "house_vs_house_event": False, "allow_single_registration": False},
         "prize_money": [{"position": "Top 5 Teams", "amount": 10000}],
         "registration": {
+            "start_time": "2026-01-01T00:00:00Z",
+            "end_time": "2026-12-31T00:00:00Z",
+            "allowed": True,
             "meta": '[{"label":"Team Size","value":"2 – 4"}]',
             "prize_amounts": '["₹10000 each"]',
         },
@@ -46,10 +48,11 @@ def published_event():
         # None of the following may reach an anonymous caller.
         "registration_fields": [{"field_id": "team_size", "label": "Team size", "type": "select", "required": True}],
         "event_team": [{"user_id": "SA123456", "role": "event_head"}],
+        "announcements": [{"announcement_id": "ANN1", "message": "hi", "priority": "low",
+                            "created_by": "SA123456", "created_at": datetime.utcnow()}],
         "created_by": "internal-object-id",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
-        "logs": [{"action": "registration", "participant_id": "DS23F1000001"}],
     })
     yield
     event_collection.delete_many({})
@@ -66,7 +69,7 @@ def test_public_events_readable_without_a_token(published_event):
     assert event["event_id"] == "122"
     assert event["name"] == "Hustlepreneurs By Escape Room"
     assert event["poster"] == "/images/events/posters/122.avif"
-    assert event["open"] is True
+    assert event["registration"]["is_open"] is True
     assert event["team"]["max"] == 4
     assert event["prize_money"] == [{"position": "Top 5 Teams", "amount": 10000}]
     # The display overlay rides along in the registration map.
@@ -78,7 +81,7 @@ def test_public_events_readable_without_a_token(published_event):
 def test_public_events_withholds_private_fields(published_event):
     event = client.get("/events/public").json()[0]
 
-    for field in ("event_team", "registration_fields", "created_by", "logs", "_id",
+    for field in ("event_team", "registration_fields", "announcements", "created_by", "_id",
                   "created_at", "updated_at"):
         assert field not in event, f"{field} must not be public"
 

@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import os
 import sys
@@ -45,18 +45,22 @@ def setup_data():
     sa_login = client.post("/auth/admin/login", json={"email": a_email, "password": "secure_password"})
     sa_token = sa_login.json()["access_token"]
 
-    ev_id = f"EVT_TEST_{random.randint(1000, 9999)}"
-    
+    now = datetime.utcnow()
     ev_payload = {
-        "event_id": ev_id,
         "event_type": "technical",
         "name": "Hackathon",
         "description": "24 hours hackathon",
-        "team": {"min": 2, "max": 4, "house": False, "allow_single_registration": True},
-        "registration": {"start_time": "2026-08-12T00:00:00Z", "end_time": "2026-08-30T00:00:00Z"}
+        "team": {"min": 2, "max": 4, "house_vs_house_event": False, "allow_single_registration": True},
+        "registration": {
+            "start_time": (now - timedelta(hours=1)).isoformat() + "Z",
+            "end_time": (now + timedelta(days=30)).isoformat() + "Z",
+            "allowed": True,
+        },
     }
-    
-    client.post("/events", json=ev_payload, headers={"Authorization": f"Bearer {sa_token}"})
+
+    ev_id = client.post(
+        "/events", json=ev_payload, headers={"Authorization": f"Bearer {sa_token}"}
+    ).json()["event_id"]
 
     # Being a Super Admin is not by itself authority over an event: allocating
     # teams needs an event_head, and scanning needs any event_team member. The
@@ -89,8 +93,21 @@ def test_event_registration(setup_data):
 
 def test_event_team_assignment(setup_data):
     sa_headers = {"Authorization": f"Bearer {setup_data['sa_token']}"}
-    
-    resp = client.post(f"/events/{setup_data['ev_id']}/team", headers=sa_headers, json={"user_id": "VO123", "role": "event_member"})
+
+    # `user_id` must reference an existing backend_teams member (Task 4:
+    # one-person-one-event enforcement needs a real staff record to check).
+    backend_teams_collection.insert_one({
+        "paradox_id": "VO123",
+        "email": f"vo123_{random.randint(1000,9999)}@ds.study.iitm.ac.in",
+        "password_hash": security.get_password_hash("secure_password"),
+        "role": "volunteer",
+        "department": "technicals",
+        "designation": "Volunteer",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    })
+
+    resp = client.post(f"/events/{setup_data['ev_id']}/team", headers=sa_headers, json={"user_id": "VO123", "role": "member"})
     assert resp.status_code == 200
 
 def test_event_participation_view(setup_data):
