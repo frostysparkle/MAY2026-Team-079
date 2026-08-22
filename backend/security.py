@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 from jose import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -7,8 +8,25 @@ import base64
 import json
 import bcrypt
 
-# In a production app, SECRET_KEY should be securely stored in the env
-SECRET_KEY = os.getenv("SECRET_KEY", "paradox-super-secret-jwt-key")
+from dotenv import load_dotenv
+
+# security.py can be imported before database.py (or without it at all), so it
+# loads the env file itself instead of assuming someone else already did.
+# load_dotenv never overrides variables already set in the environment, so this
+# is safe no matter the import order.
+load_dotenv(Path(__file__).resolve().parent / "atlas-credentials.env")
+
+# The JWT signing key must come from the environment. The previous committed
+# fallback ("paradox-super-secret-jwt-key") meant any deployment that had not set
+# SECRET_KEY signed tokens with a public string, so anyone could forge them.
+# Missing it now refuses to boot rather than silently degrading to that key.
+if not os.getenv("SECRET_KEY"):
+    raise RuntimeError(
+        "SECRET_KEY is not set. Add SECRET_KEY=<64 hex chars> to "
+        "backend/atlas-credentials.env. Generate one with: "
+        'python -c "import secrets; print(secrets.token_hex(32))"'
+    )
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week token expiry
 
