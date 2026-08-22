@@ -129,6 +129,12 @@ class WorkshopCreateRequest(BaseModel):
     venue: str
     capacity: int
     instructions: str
+    # ISO 8601 UTC datetime string, e.g. "2026-06-12T10:00:00".
+    # Drives the scanning and change windows enforced by
+    # POST /workshops/{id}/attendance and PATCH /workshops/{id}/participants/{pid}.
+    # Optional so workshops created before this field was introduced keep working;
+    # those workshops simply have no time-window guard (all scans pass through).
+    start_time: Optional[str] = None
 
 class WorkshopUpdateRequest(BaseModel):
     name: Optional[str] = None
@@ -136,6 +142,9 @@ class WorkshopUpdateRequest(BaseModel):
     venue: Optional[str] = None
     capacity: Optional[int] = None
     instructions: Optional[str] = None
+    # Updatable post-creation so a corrected schedule can be pushed before
+    # the window guard would otherwise lock out all scanners.
+    start_time: Optional[str] = None
 
 class WorkshopAssignVolunteerRequest(BaseModel):
     user_id: str
