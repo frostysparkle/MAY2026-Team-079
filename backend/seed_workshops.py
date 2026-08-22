@@ -47,8 +47,9 @@ DEMO_WORKSHOP_IDS = ("WS1", "WS2")
 
 # `WorkshopUpdateRequest` has no `slot_id`: a workshop's time slot is fixed at
 # creation because participants' bookings reference it, so it is dropped from
-# update payloads.
-UPDATE_FIELDS = ("name", "description", "venue", "capacity", "instructions")
+# update payloads.  `start_time` IS updatable so a corrected schedule can be
+# pushed without recreating the workshop and losing all bookings.
+UPDATE_FIELDS = ("name", "description", "venue", "capacity", "instructions", "start_time")
 
 
 def login(client: httpx.Client, email: str, password: str) -> str:

@@ -46,6 +46,10 @@ def create_workshop(request: WorkshopCreateRequest, current_user: dict = Depends
         "registration_count": 0,
         "participant_count": 0,
         "instructions": request.instructions,
+        # ISO 8601 UTC string supplied by the caller, or None when omitted.
+        # None disables the time-window guard on attendance and change routes,
+        # so existing workshops created before this field was added keep working.
+        "start_time": request.start_time,
         "workshop_team": [],
         "created_by": current_user["_id"],
         "created_at": datetime.utcnow(),
@@ -83,6 +87,10 @@ PUBLIC_WORKSHOP_FIELDS = {
     "capacity": 1,
     "registration_count": 1,
     "instructions": 1,
+    # Exposed so the frontend and any unauthenticated visitor can display when
+    # the workshop runs and so the time-window a volunteer will face is not a
+    # surprise.
+    "start_time": 1,
 }
 
 
@@ -123,7 +131,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
     for entry in current_user.get("workshops", []):
         workshop = workshops_collection.find_one(
             {"_id": entry.get("workshop_id")},
-            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "embedding": 1, "venue": 1, "capacity": 1, "instructions": 1},
+            {"_id": 0, "workshop_id": 1, "name": 1, "description": 1, "embedding": 1, "venue": 1, "capacity": 1, "instructions": 1, "start_time": 1},
         )
         if not workshop:
             # A workshop deleted after booking leaves an entry with nothing to
@@ -135,6 +143,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
                 "description": None,
                 "embedding": None,
                 "venue": None,
+                "start_time": None,
                 "booking_type": entry.get("booking_type"),
                 "attended": entry.get("attended", False),
             })
@@ -146,6 +155,7 @@ def my_workshop_registrations(current_user: dict = Depends(get_current_participa
             "description": workshop.get("description"),
             "embedding": workshop.get("embedding"),
             "venue": workshop.get("venue"),
+            "start_time": workshop.get("start_time"),
             "booking_type": entry.get("booking_type"),
             "attended": entry.get("attended", False),
         })
@@ -338,7 +348,11 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
         
     if not volunteer.get("attendance", True):
         raise HTTPException(status_code=403, detail="Scanning disabled for this volunteer")
-        
+
+    # Time-window guard: pre-registered opens 30 min before start; on-spot
+    # opens 15 min before start.  Both close 30 min after start.
+    # Workshops with no start_time stored are unguarded (backward compat).
+    _assert_scan_window(workshop, scan_type)
 
     target_user, payload = verify_qr(request)
     ws_doc_id = workshop["_id"]
@@ -491,6 +505,83 @@ def _is_super_admin(user_id) -> bool:
     return bool(backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}))
 
 
+# ---------------------------------------------------------------------------
+# Workshop time-window enforcement
+#
+# All three windows share the same hard close: 30 minutes after start_time.
+# Before that point, different operations have different open times:
+#
+#   pre-registered scan   start_time − 30 min  (volunteers arrive before doors open)
+#   on-spot scan          start_time − 15 min  (walk-in queue forms later)
+#   manual changes        start_time            (corrections only make sense once
+#                                               the session is actually running)
+#
+# Workshops created without a start_time (i.e. the field is None) bypass this
+# check entirely, preserving full backward compatibility.
+# ---------------------------------------------------------------------------
+
+# How many minutes before start scanning / changes are permitted.
+_WINDOW_OPEN_MINUTES = {
+    "pre-registered": 30,
+    "on-spot":        15,
+    "changes":        0,   # must be >= start_time
+}
+
+# All windows close this many minutes after start.
+_WINDOW_CLOSE_MINUTES = 30
+
+
+def _assert_scan_window(workshop: dict, operation: str) -> None:
+    """
+    Raise 403 if ``now`` is outside the permitted window for ``operation``.
+
+    ``operation`` must be one of ``"pre-registered"``, ``"on-spot"``, or
+    ``"changes"``.  Workshops without a ``start_time`` are always permitted.
+    """
+    raw = workshop.get("start_time")
+    if not raw:
+        # No start_time stored — window guard disabled for this workshop.
+        return
+
+    try:
+        # Accept both naive ("2026-06-12T10:00:00") and offset-aware strings.
+        start = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        # Normalise to naive UTC for comparison against datetime.utcnow().
+        if start.tzinfo is not None:
+            from datetime import timezone as _tz
+            start = start.astimezone(_tz.utc).replace(tzinfo=None)
+    except ValueError:
+        # Unparseable start_time — fail open to avoid locking out all scanners
+        # due to a bad seed value.
+        return
+
+    now = datetime.utcnow()
+    open_delta  = timedelta(minutes=_WINDOW_OPEN_MINUTES[operation])
+    close_delta = timedelta(minutes=_WINDOW_CLOSE_MINUTES)
+
+    opens_at  = start - open_delta
+    closes_at = start + close_delta
+
+    if now < opens_at:
+        opens_in = int((opens_at - now).total_seconds() // 60)
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Scanning window not yet open. "
+                f"Opens {_WINDOW_OPEN_MINUTES[operation]} min before start "
+                f"(in ~{opens_in} min)."
+            ),
+        )
+    if now >= closes_at:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Scanning window closed. "
+                f"It closes {_WINDOW_CLOSE_MINUTES} min after the workshop starts."
+            ),
+        )
+
+
 def _workshop_team_member(workshop: dict, user_id) -> Optional[dict]:
     """This user's entry on `workshop_team`, or None if they are not on it."""
     if user_id is None:
@@ -638,6 +729,7 @@ def workshop_participation(workshop_id: str, current_user: dict = Depends(get_cu
         "name": workshop.get("name"),
         "venue": workshop.get("venue"),
         "slot_id": workshop.get("slot_id"),
+        "start_time": workshop.get("start_time"),
         "capacity": workshop.get("capacity", 0),
         # The workshop's own counters, returned alongside the roster so a client
         # never has to choose which to trust: `count` is what this response
@@ -697,6 +789,14 @@ def update_workshop_participant(
         raise HTTPException(status_code=403, detail="Not authorized to update this workshop's participants")
     if not is_super_admin and not member.get("attendance", True):
         raise HTTPException(status_code=403, detail="Scanning disabled for this volunteer")
+
+    # Time-window guard for manual attendance changes: the window opens at
+    # start_time (corrections only make sense once the session is running)
+    # and closes 30 min after start_time.  Super Admins are also bound — a
+    # correction made hours later is indistinguishable from a fabrication, and
+    # the audit trail is the right place to escalate those cases.
+    # Workshops with no start_time stored are unguarded (backward compat).
+    _assert_scan_window(workshop, "changes")
 
     if request.attended is None and request.booking_type is None:
         raise HTTPException(status_code=400, detail="Nothing to update")
