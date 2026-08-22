@@ -33,6 +33,17 @@ export interface StaffRow {
   designation: string;
   /** True when either descriptive field is blank. */
   incomplete: boolean;
+  /**
+   * Whether this account is tied to a participant record.
+   *
+   * `POST /backend_teams` sets `admin_id` when the email it was given also
+   * belongs to a participant, and nothing can change it afterwards. It is not
+   * decoration: it is the link the backend follows to decide that somebody
+   * registering for an event is on that event's team, and therefore to refuse the
+   * registration. An unlinked account is a staff member the event-team check
+   * cannot see, which is worth being able to spot from the list.
+   */
+  linkedToParticipant: boolean;
 }
 
 export function buildStaffRows(team: BackendTeamMember[]): StaffRow[] {
@@ -54,6 +65,7 @@ export function buildStaffRows(team: BackendTeamMember[]): StaffRow[] {
       department,
       designation,
       incomplete: department === '' || designation === '',
+      linkedToParticipant: Boolean(member.admin_id),
     };
   });
 }

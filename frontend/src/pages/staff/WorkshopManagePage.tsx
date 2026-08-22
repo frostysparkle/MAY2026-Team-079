@@ -10,7 +10,8 @@ import {
   UserMinus,
   Users,
 } from 'lucide-react';
-import { api, ApiClientError } from '@/api';
+import { api } from '@/api';
+import { reportApiError } from '@/api/report';
 import { path, ROUTES } from '@/config/routes';
 import { isSuperAdmin } from '@/stores/authStore';
 import { downloadCsv, toCsv } from '@/lib/csv';
@@ -136,9 +137,7 @@ export default function WorkshopManagePage() {
       await api.updateWorkshopParticipant(workshopId, entry.participantId, { attended });
       roster.reload();
     } catch (e) {
-      setActionError(
-        e instanceof ApiClientError ? e.message : 'Could not update that participant.',
-      );
+      setActionError(reportApiError(e, 'Could not update that participant.'));
     } finally {
       setSaving(null);
     }

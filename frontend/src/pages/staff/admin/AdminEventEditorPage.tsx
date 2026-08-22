@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, PrizeMoney, RegistrationField, ScheduleRound } from '@/api/types';
@@ -9,11 +9,13 @@ import {
   Button,
   Card,
   ErrorState,
+  FieldErrors,
   ResultBanner,
   Select,
   Spinner,
   TextInput,
 } from '@/components/ui';
+import type { FieldError } from '@/api/errors';
 import {
   readEventExtras,
   readRegistrationWindow,
@@ -21,6 +23,7 @@ import {
   type EventFaq,
   type EventMetaRow,
 } from '@/features/events/eventExtras';
+import { EventTeamPanel } from '@/features/events/EventTeamPanel';
 
 /**
  * Super Admin event authoring — create a new event or edit an existing one, in
@@ -73,12 +76,23 @@ interface RoundDraft extends ScheduleRound {
 
 export default function AdminEventEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { eventId } = useParams<{ eventId?: string }>();
   const isEdit = Boolean(eventId);
+
+  /**
+   * The action menu's "Event team" entry navigates here with
+   * `state: { focus: 'team' }`, because the panel sits below a long form. Without
+   * this the admin lands at the top of the editor with no sign of what they asked
+   * for.
+   */
+  const teamRef = useRef<HTMLDivElement | null>(null);
+  const wantsTeam = (location.state as { focus?: string } | null)?.focus === 'team';
 
   const [loading, setLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveFieldErrors, setSaveFieldErrors] = useState<FieldError[]>([]);
   const [busy, setBusy] = useState(false);
 
   // Basics
@@ -125,6 +139,16 @@ export default function AdminEventEditorPage() {
    */
   const [announcementsRaw, setAnnouncementsRaw] = useState<string | undefined>(undefined);
 
+  /**
+   * The saved record, held alongside the form's own fields.
+   *
+   * The form is the *draft*; this is what the server currently holds. The team
+   * panel below needs the latter — `event_team` is written by its own route, not
+   * by this form's save, so it must not be mixed into the draft or a save would
+   * try to round-trip it.
+   */
+  const [record, setRecord] = useState<Event | null>(null);
+
   useEffect(() => {
     if (!eventId) return;
     api
@@ -135,6 +159,7 @@ export default function AdminEventEditorPage() {
           setLoadError('That event no longer exists.');
           return;
         }
+        setRecord(found);
         hydrate(found);
       })
       .catch((e) =>
@@ -250,9 +275,29 @@ export default function AdminEventEditorPage() {
       navigate(ROUTES.adminEvents);
     } catch (err) {
       setSaveError(err instanceof ApiClientError ? err.message : 'Could not save the event.');
+      // A 422 names the fields it rejected — worth listing on a form this long,
+      // where "the request was invalid" leaves an admin hunting.
+      setSaveFieldErrors(err instanceof ApiClientError ? err.fieldErrors : []);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Once the form has rendered, take the admin to the panel they asked for.
+  // Guarded because `scrollIntoView` is not implemented in jsdom, where every
+  // test that renders this page would otherwise throw.
+  useEffect(() => {
+    if (!wantsTeam || loading) return;
+    teamRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [wantsTeam, loading]);
+
+  /** Re-reads the record only — the form keeps whatever is typed into it. */
+  function refreshRecord() {
+    if (!eventId) return;
+    api
+      .listEvents()
+      .then((all) => setRecord(all.find((e) => e.event_id === eventId) ?? null))
+      .catch(() => undefined);
   }
 
   const back = { label: 'Events', onClick: () => navigate(ROUTES.adminEvents) };
@@ -288,7 +333,10 @@ export default function AdminEventEditorPage() {
       <form onSubmit={save} className="flex flex-col gap-5">
         {saveError && (
           <ResultBanner variant="error" title="Could not save">
-            {saveError}
+            <div className="flex flex-col gap-2">
+              <p>{saveError}</p>
+              <FieldErrors errors={saveFieldErrors} />
+            </div>
           </ResultBanner>
         )}
 
@@ -645,6 +693,26 @@ export default function AdminEventEditorPage() {
           </Button>
         </div>
       </form>
+
+      {/* Outside the form on purpose: assigning a team member is its own route,
+          not part of the event's draft, and a submit button inside a form would
+          save the event as a side effect of assigning somebody. Only on edit — an
+          event must exist before anybody can be put on it. */}
+      {isEdit && eventId && (
+        <div ref={teamRef} className="mt-8 flex flex-col gap-4">
+          <p className="text-sm text-muted">
+            The Event Head assigned here is the only person who can run team allocation or move a
+            participant between teams — not even a Super Admin can do it for them. Everybody on the
+            team gets the attendance scanner for this event.
+          </p>
+          <EventTeamPanel
+            eventId={eventId}
+            team={record?.event_team}
+            canManage
+            onChanged={refreshRecord}
+          />
+        </div>
+      )}
     </FestivalScreen>
   );
 }

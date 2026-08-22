@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Home } from 'lucide-react';
+import { ChevronRight, Home, Phone } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { MyHostelResponse } from '@/api/types';
 import { ROUTES } from '@/config/routes';
@@ -13,6 +13,10 @@ import {
   Skeleton,
   StatusBadge,
 } from '@/components/ui';
+import { contactCountLabel, hostelContacts, telHref } from '@/features/stay/dutyContacts';
+
+/** Rows shown inline before deferring the rest to Accommodation & Mess. */
+const MAX_CONTACTS = 3;
 
 /**
  * Hostel panel for the participant dashboard.
@@ -56,6 +60,7 @@ export function HostelWidget() {
   if (error) return <PanelNote>{error}</PanelNote>;
 
   if (data?.assigned_hostel) {
+    const contacts = hostelContacts(data);
     return (
       // `Card`, as in `MessWidget` — both used to retype `Card`'s own surface.
       <Card className="flex flex-col gap-3">
@@ -70,13 +75,42 @@ export function HostelWidget() {
           </StatusBadge>
         </div>
 
-        {/* Count only. `volunteers` carries names and phone numbers, and this panel
-            has never shown them; surfacing staff contact details is a disclosure
-            decision, not a styling one — Accommodation & Mess is where the block's
-            details belong. */}
+        {/* The block's duty contacts, on the dashboard.
+            `GET /hostels/my_hostel` masks these server-side to a name and a phone
+            before they leave the backend, so what is shown here is already the
+            disclosure the API decided on — and a resident who needs the warden at
+            2am should not have to find a second screen first. Read through
+            `hostelContacts`, which drops the rows the backend filled with the role
+            word and the literal "N/A". Capped at three, with the rest on the Stay
+            screen, so a large team cannot push the panel off the dashboard. */}
+        {contacts.length > 0 && (
+          <ul className="flex flex-col gap-1.5 border-t border-line pt-3">
+            {contacts.slice(0, MAX_CONTACTS).map((contact) => (
+              <li key={`${contact.name}-${contact.phone}`} className="flex items-center gap-2">
+                <Phone size={12} strokeWidth={2.5} className="shrink-0 text-muted" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                  {contact.name}
+                </span>
+                {contact.phone && (
+                  <a
+                    href={telHref(contact.phone)}
+                    className="shrink-0 text-xs font-semibold text-brand underline"
+                  >
+                    {contact.phone}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
           <p className="text-xs text-muted">
-            {data.volunteers.length} contact{data.volunteers.length === 1 ? '' : 's'} on duty
+            {contacts.length === 0
+              ? 'No duty contacts published for this block yet'
+              : contacts.length > MAX_CONTACTS
+                ? `${contacts.length - MAX_CONTACTS} more on duty`
+                : contactCountLabel(contacts.length)}
           </p>
           <Link to={ROUTES.accommodation} className="w-fit">
             <Button variant="ghost" size="sm">

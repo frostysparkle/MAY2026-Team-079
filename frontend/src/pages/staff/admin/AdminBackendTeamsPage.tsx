@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Briefcase, LayoutGrid, List, Plus, Trash2 } from 'lucide-react';
+import { Briefcase, Download, LayoutGrid, List, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { BackendTeamCreateRequest, BackendTeamMember } from '@/api/types';
+import { reportApiError } from '@/api/report';
+import type {
+  BackendTeamCreateRequest,
+  BackendTeamMember,
+  BackendTeamUpdateRequest,
+} from '@/api/types';
 import {
   ANY,
   Button,
@@ -25,6 +30,8 @@ import {
   type ViewOption,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { exportStaffDirectory } from '@/features/staff/analyticsExport';
+import { EditStaffForm } from '@/features/staff/EditStaffForm';
 import { NewStaffForm } from '@/features/staff/NewStaffForm';
 import { StaffCards } from '@/features/staff/StaffCards';
 import { StaffSummaryCards } from '@/features/staff/StaffSummaryCards';
@@ -74,6 +81,8 @@ export default function AdminBackendTeamsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<StaffRow | null>(null);
+  /** The account being amended, for `PUT /backend_teams/{paradox_id}`. */
+  const [editing, setEditing] = useState<BackendTeamMember | null>(null);
 
   // The create form is collapsed until asked for: the list of accounts is what an
   // admin comes here to read. Its fields live in the form itself, so closing it is
@@ -104,7 +113,23 @@ export default function AdminBackendTeamsPage() {
       setShowCreate(false);
       load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not create staff member.');
+      setActionError(reportApiError(e, 'Could not create staff member.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveEdit(req: BackendTeamUpdateRequest) {
+    if (!editing) return;
+    setActionError(null);
+    setBusy(true);
+    try {
+      await api.updateBackendTeam(editing.paradox_id, req);
+      // Only on success, so a failed save keeps the form open with the edits in it.
+      setEditing(null);
+      load();
+    } catch (e) {
+      setActionError(reportApiError(e, 'Could not update staff member.'));
     } finally {
       setBusy(false);
     }
@@ -118,7 +143,7 @@ export default function AdminBackendTeamsPage() {
       setPendingDelete(null);
       load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not delete staff member.');
+      setActionError(reportApiError(e, 'Could not delete staff member.'));
     } finally {
       setBusy(false);
     }
@@ -174,6 +199,17 @@ export default function AdminBackendTeamsPage() {
 
   const actionsFor = useCallback(
     (row: StaffRow): ActionMenuItem[] => [
+      // Before Remove, and offered first, because correcting a record is the far
+      // commoner intent — and deleting to fix a typo drops the person off every
+      // team they were named on, since those store the `paradox_id`.
+      {
+        label: 'Edit',
+        icon: Pencil,
+        onSelect: () => {
+          setShowCreate(false);
+          setEditing(row.member);
+        },
+      },
       {
         label: 'Remove',
         icon: Trash2,
@@ -223,12 +259,27 @@ export default function AdminBackendTeamsPage() {
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <SectionHeading title="Accounts" meta={summary === null ? undefined : `${total}`} />
-          {/* Hidden while the form is open — Cancel closes it from in there. */}
-          {!showCreate && (
-            <Button onClick={() => setShowCreate(true)} className="shrink-0 gap-1.5">
-              <Plus size={15} strokeWidth={2.5} /> New Staff Account
+          {/* Hidden while either form is open — Cancel closes it from in there,
+              and two open forms above one list is ambiguous about what Save
+              applies to. */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Journey E.10. `password_hash` is projected out of
+                `GET /backend_teams` server-side, so there is nothing sensitive to
+                strip — see `analyticsExport.exportStaffDirectory` for the columns. */}
+            <Button
+              variant="secondary"
+              className="gap-1.5"
+              disabled={visible.length === 0}
+              onClick={() => exportStaffDirectory(visible.map((r) => r.member))}
+            >
+              <Download size={14} /> Export CSV
             </Button>
-          )}
+            {!showCreate && editing === null && (
+              <Button onClick={() => setShowCreate(true)} className="gap-1.5">
+                <Plus size={15} strokeWidth={2.5} /> New Staff Account
+              </Button>
+            )}
+          </div>
         </div>
 
         {showCreate && (
@@ -236,6 +287,15 @@ export default function AdminBackendTeamsPage() {
             busy={busy}
             onCreate={(req) => void create(req)}
             onCancel={() => setShowCreate(false)}
+          />
+        )}
+
+        {editing && (
+          <EditStaffForm
+            member={editing}
+            busy={busy}
+            onSave={(req) => void saveEdit(req)}
+            onCancel={() => setEditing(null)}
           />
         )}
 

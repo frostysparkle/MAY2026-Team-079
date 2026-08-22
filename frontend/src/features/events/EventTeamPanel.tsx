@@ -1,0 +1,397 @@
+import { useEffect, useState } from 'react';
+import { Crown, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { api, ApiClientError } from '@/api';
+import type { BackendTeamMember, EventTeamMember } from '@/api/types';
+import {
+  Button,
+  Card,
+  ResultBanner,
+  SectionHeading,
+  Select,
+  StatusBadge,
+  TextInput,
+} from '@/components/ui';
+import { cn } from '@/lib/cn';
+import {
+  EVENT_TEAM_ROLES,
+  EVENT_VOLUNTEER_ROLE,
+  eventTeamRoleLabel,
+  isEventHeadRole,
+  type EventTeamRole,
+} from './eventTeam';
+
+/**
+ * An event's staff: who runs it, who works the gate, and — crucially — who holds
+ * the Event Head role.
+ *
+ * This panel is the only way in the app to populate `event_team`, and that array
+ * is what three other screens read to decide what to offer:
+ *
+ *   - `EventTeamsPage` gates team allocation and participant-team edits on
+ *     `role === "event_head"`, matching the backend.
+ *   - `EventScannerPage` admits any member of `event_team` to the scanner.
+ *   - `EventRegistrationForm` refuses to let a member register as a participant
+ *     for their own event, because the backend does.
+ *
+ * Assignment is Super Admin work — `POST /events/{id}/team` answers everybody
+ * else with `403 "Only Super Admins can assign event teams"` — so `canManage`
+ * drives whether the write controls render at all.
+ *
+ * Two API shapes worth knowing:
+ *
+ *   - The backend `$push`es without checking for an existing entry, so assigning
+ *     the same person twice creates a duplicate member. The picker therefore
+ *     excludes anybody already on the team, and `assign()` refuses a duplicate id
+ *     before it reaches the network.
+ *   - There is no route that removes an event team member, and events have no
+ *     per-member scanning switch. So unlike the workshop panel this one offers
+ *     neither, and says so rather than showing a control that cannot work.
+ */
+export function EventTeamPanel({
+  eventId,
+  team,
+  canManage,
+  onChanged,
+}: {
+  eventId: string;
+  /**
+   * `undefined` while the event is still loading. Members carry a name and phone
+   * when the list came from `GET /events/{id}/participation`, and not when it
+   * came from `event_team` on the `GET /events` record — which is only
+   * `{ user_id, role }`.
+   */
+  team: EventTeamMember[] | undefined;
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  const [staffAccounts, setStaffAccounts] = useState<BackendTeamMember[] | null>(null);
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState<EventTeamRole>(EVENT_VOLUNTEER_ROLE);
+  /** `existing` picks somebody out of the staff directory; `new` creates them. */
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // The staff directory turns "type a BT id" into "pick a person". Super
+  // Admin-only, like this panel's write side, and never blocking: a failed fetch
+  // falls back to the free-text field below.
+  useEffect(() => {
+    if (!canManage) return;
+    api
+      .listBackendTeams()
+      .then(setStaffAccounts)
+      .catch(() => setStaffAccounts([]));
+  }, [canManage]);
+
+  const members = team ?? [];
+  const headCount = members.filter((member) => isEventHeadRole(member.role)).length;
+
+  /** Runs one write, reports it, and refreshes the record. `true` on success. */
+  async function run(
+    action: () => Promise<unknown>,
+    failure: string,
+    success: string,
+  ): Promise<boolean> {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+      setNotice(success);
+      onChanged();
+      return true;
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : failure);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assign() {
+    const id = userId.trim();
+    if (!id) return;
+    // The backend pushes blind, so a second assignment of the same person would
+    // silently duplicate them on the team. Caught here because no status code
+    // comes back to react to.
+    if (members.some((member) => member.user_id === id)) {
+      setNotice(null);
+      setError(`${id} is already on this event's team. Assign somebody else.`);
+      return;
+    }
+    const ok = await run(
+      () => api.assignEventTeam(eventId, { user_id: id, role }),
+      'Could not assign this member.',
+      `${id} assigned as ${eventTeamRoleLabel(role)}`,
+    );
+    // The field is cleared only once the assignment landed, so a failed attempt
+    // can be retried without retyping the id.
+    if (ok) setUserId('');
+  }
+
+  /**
+   * Create a staff login and put it on this event in one go — two calls, because
+   * that is how the API is shaped: `POST /backend_teams` mints the account and
+   * hands back its `paradox_id`, and `POST /events/{id}/team` is what actually
+   * grants the event.
+   *
+   * If the second call fails the first has still happened, so the error names the
+   * new id rather than pretending nothing occurred: the account exists and can be
+   * attached from the picker without being created twice.
+   */
+  async function createAndAssign() {
+    const label = eventTeamRoleLabel(role);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let newId: string | null = null;
+    try {
+      const created = await api.createBackendTeam({
+        email: email.trim(),
+        password,
+        // `backend_teams.role` is the account's fest-wide role and a separate
+        // vocabulary from the per-event designation below. `volunteer` is the
+        // non-privileged value: an Event Head's authority comes from being named
+        // on `event_team`, not from their account role, so minting a
+        // `super_admin` here would hand out far more than this panel is for.
+        role: 'volunteer',
+        department: 'events',
+        designation: designation.trim() || label,
+      });
+      newId = created.paradox_id;
+      await api.assignEventTeam(eventId, { user_id: created.paradox_id, role });
+      setNotice(`${email.trim()} created as ${label} (${created.paradox_id})`);
+      setEmail('');
+      setPassword('');
+      setDesignation('');
+      // Refresh the directory too, so the new account shows in the picker.
+      api
+        .listBackendTeams()
+        .then(setStaffAccounts)
+        .catch(() => undefined);
+      onChanged();
+    } catch (e) {
+      const detail = e instanceof ApiClientError ? e.message : 'Could not create the account.';
+      setError(
+        newId
+          ? `Account ${newId} was created but could not be assigned to this event: ${detail}`
+          : detail,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const assignable = (staffAccounts ?? []).filter(
+    (account) => !members.some((member) => member.user_id === account.paradox_id),
+  );
+
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionHeading
+        title="Event team"
+        meta={team === undefined ? undefined : `${members.length} assigned`}
+      />
+
+      {error && (
+        <ResultBanner variant="error" title="Action failed">
+          {error}
+        </ResultBanner>
+      )}
+      {notice && <ResultBanner variant="success" title={notice} />}
+
+      {/* An event with no head is the failure this panel exists to prevent:
+          nobody can allocate teams, and a Super Admin cannot do it for them. */}
+      {team !== undefined && members.length > 0 && headCount === 0 && (
+        <ResultBanner variant="warning" title="This event has no Event Head">
+          Team allocation and participant-team edits are restricted to an Event Head, and a Super
+          Admin cannot run them instead. Assign one below.
+        </ResultBanner>
+      )}
+
+      {team === undefined ? (
+        <Card>
+          <p className="text-sm text-muted">Loading this event’s team…</p>
+        </Card>
+      ) : members.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">
+            Nobody is assigned yet. An event needs an Event Head before teams can be allocated, and
+            at least one team member before anybody can scan attendance at the gate.
+          </p>
+        </Card>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {members.map((member) => (
+            <li key={`${member.user_id}-${member.role}`}>
+              <Card className="flex flex-wrap items-center gap-3">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                    isEventHeadRole(member.role)
+                      ? 'bg-brand-100 text-brand-700'
+                      : 'bg-surface-2 text-muted',
+                  )}
+                >
+                  {isEventHeadRole(member.role) ? (
+                    <Crown size={16} strokeWidth={2.25} />
+                  ) : (
+                    <Users size={16} strokeWidth={2.25} />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {member.name || member.user_id}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {[member.name ? member.user_id : null, member.phone]
+                      .filter(Boolean)
+                      .join(' · ') || 'No contact details on this record'}
+                  </p>
+                </div>
+                <StatusBadge tone={isEventHeadRole(member.role) ? 'info' : 'neutral'}>
+                  {eventTeamRoleLabel(member.role)}
+                </StatusBadge>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canManage && (
+        <Card className="flex flex-col gap-3">
+          {/* Staffing an event is either "somebody who already has a login" or
+              "somebody who does not yet" — the second is a new account plus an
+              assignment, and doing it here rather than sending the admin to the
+              Staff screen and back is the whole point of the panel. */}
+          <div className="flex gap-2 rounded-xl bg-surface-2 p-1">
+            {(
+              [
+                { key: 'existing', label: 'Assign existing staff' },
+                { key: 'new', label: 'Create new staff' },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => {
+                  setMode(option.key);
+                  setError(null);
+                  setNotice(null);
+                }}
+                aria-pressed={mode === option.key}
+                className={cn(
+                  'tap flex-1 rounded-lg py-2 text-sm font-semibold',
+                  mode === option.key ? 'bg-surface text-brand shadow-card' : 'text-muted',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <Select
+            label="Role on this event"
+            value={role}
+            onChange={(e) => setRole(e.target.value as EventTeamRole)}
+            options={EVENT_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+            hint={EVENT_TEAM_ROLES.find((r) => r.value === role)?.blurb}
+          />
+
+          {mode === 'existing' ? (
+            <>
+              {assignable.length > 0 ? (
+                <Select
+                  label="Staff account"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  placeholder="Choose a staff account"
+                  options={assignable.map((account) => ({
+                    value: account.paradox_id,
+                    label: `${account.email} · ${account.designation || account.role || 'staff'}`,
+                  }))}
+                />
+              ) : (
+                <TextInput
+                  label="Staff ID"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  placeholder="e.g. BT1000000003"
+                  hint={
+                    staffAccounts === null
+                      ? 'The paradox_id of an account created under Staff.'
+                      : 'Every staff account is already on this team — create a new one, or use the Staff screen.'
+                  }
+                />
+              )}
+
+              <Button
+                type="button"
+                size="sm"
+                className="w-fit"
+                loading={busy}
+                disabled={busy || !userId.trim()}
+                onClick={() => void assign()}
+              >
+                <UserPlus size={14} /> Assign
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextInput
+                  label="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="head@paradox.in"
+                  hint="They sign in at /admin/login with this."
+                />
+                <TextInput
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  hint="At least 8 characters."
+                />
+                <TextInput
+                  label="Designation on record"
+                  value={designation}
+                  onChange={(e) => setDesignation(e.target.value)}
+                  placeholder={eventTeamRoleLabel(role)}
+                  hint="Shown on the staff directory. Defaults to the role above."
+                />
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                className="w-fit"
+                loading={busy}
+                disabled={busy || !email.trim() || password.length < 8}
+                onClick={() => void createAndAssign()}
+              >
+                <UserPlus size={14} /> Create and assign
+              </Button>
+            </>
+          )}
+
+          <p className="flex items-start gap-1.5 text-xs text-muted">
+            <ShieldCheck size={14} className="mt-px shrink-0" strokeWidth={2.25} />
+            <span>
+              Every member can scan attendance for this event from the moment they are assigned;
+              events have no per-member scanning switch. There is also no route that takes somebody
+              off an event team, so assign deliberately.
+            </span>
+          </p>
+        </Card>
+      )}
+    </section>
+  );
+}

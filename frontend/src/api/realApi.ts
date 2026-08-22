@@ -4,6 +4,7 @@
  */
 import type { ApiClient } from './ApiClient';
 import { ApiClientError } from './ApiClient';
+import { parseApiError } from './errors';
 import type {
   FastApiErrorBody,
   RegisterRequest,
@@ -50,6 +51,30 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
   return s ? `?${s}` : '';
 }
 
+/**
+ * Called once per rejected token, before the error is thrown.
+ *
+ * Registered from outside rather than imported, because `realApi` must not depend
+ * on the auth store: the store already imports from `@/api` transitively, and the
+ * request layer has no business knowing what a session is. `main.tsx` wires the
+ * two together — see `onUnauthorized`.
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+/**
+ * Register what to do when the backend rejects the token we sent.
+ *
+ * A 401 means the JWT is expired or invalid. Without this the session stayed in
+ * `localStorage`, so `ProtectedRoute` saw a session, kept the user inside the
+ * app, and every panel rendered "Invalid authentication credentials" with no
+ * route back to sign-in. Clearing the session turns that into the redirect the
+ * guard already knows how to do — to `/login` for a participant and
+ * `/admin/login` for staff.
+ */
+export function onUnauthorized(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
   const res = await fetch(`${env.apiBaseUrl}${path}`, {
@@ -61,14 +86,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
-    let message = res.statusText;
+    let body: unknown = null;
     try {
-      const body = (await res.json()) as FastApiErrorBody;
-      message = body.detail ?? message;
+      body = (await res.json()) as FastApiErrorBody;
     } catch {
-      /* non-JSON error body */
+      /* non-JSON error body — a proxy's HTML page, or no body at all */
     }
-    throw new ApiClientError(res.status, message);
+    const { message, fieldErrors } = parseApiError(body, res.statusText);
+
+    // Only when a token was actually sent. A 401 from `/auth/login` means "wrong
+    // password", not "your session died" — clearing state there would be both
+    // pointless and confusing, since there is no session to clear.
+    if (res.status === 401 && token) unauthorizedHandler?.();
+
+    throw new ApiClientError(res.status, message, fieldErrors);
   }
   // Some 200s have no body (rare here, but be defensive).
   const text = await res.text();

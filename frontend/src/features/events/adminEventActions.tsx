@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, LockOpen, Pencil, Trash2, Users } from 'lucide-react';
+import { Lock, LockOpen, Pencil, Trash2, UserCog, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import { ConfirmDialog, type ActionMenuItem } from '@/components/ui';
+import { eventHeads } from './eventTeam';
 
 /**
  * The four things a Super Admin does to an event — edit it, look at who
@@ -68,6 +69,17 @@ export function useAdminEventActions({
         label: 'View participants',
         icon: Users,
         onSelect: () => navigate(path(ROUTES.eventParticipation, { eventId: event.event_id })),
+      },
+      // Its own entry rather than leaving it buried at the foot of the editor:
+      // naming an Event Head is the one thing that has to happen before team
+      // allocation works at all, and nothing else in the app can do it.
+      {
+        label: eventHeads(event.event_team).length === 0 ? 'Assign Event Head' : 'Event team',
+        icon: UserCog,
+        onSelect: () =>
+          navigate(path(ROUTES.adminEventEdit, { eventId: event.event_id }), {
+            state: { focus: 'team' },
+          }),
       },
       {
         label: event.open ? 'Close' : 'Reopen',

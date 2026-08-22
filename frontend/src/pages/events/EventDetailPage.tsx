@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Pencil } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
+import { reportApiError } from '@/api/report';
 import type { Event, MyEventRegistration } from '@/api/types';
 import { readEventExtras } from '@/features/events/eventExtras';
 import { ROUTES } from '@/config/routes';
@@ -47,6 +48,8 @@ export default function EventDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Whether the amend-answers form is open, for `PUT /events/{id}/register`. */
+  const [editing, setEditing] = useState(false);
   // The published capacity is read from the event the page already holds, so the
   // parsing rule lives in one place — see `eventExtras.parseCapacity`.
   const capacity = event ? readEventExtras(event.registration).capacity : undefined;
@@ -92,9 +95,7 @@ export default function EventDetailPage() {
       await api.cancelEventRegistration(eventId);
       refresh();
     } catch (e) {
-      setActionError(
-        e instanceof ApiClientError ? e.message : 'Could not cancel your registration.',
-      );
+      setActionError(reportApiError(e, 'Could not cancel your registration.'));
     } finally {
       setBusy(false);
     }
@@ -159,10 +160,43 @@ export default function EventDetailPage() {
                   ? `Team ${registration.team_id} · ${registration.team_role}`
                   : 'Solo entry'}
               </ResultBanner>
+
+              {/* The answers as submitted, and — while entries are open — the way
+                  to change them. `PUT /events/{id}/register` has been in the client
+                  all along with nothing calling it, so a mistyped answer could
+                  only be fixed by cancelling and re-entering, which for a team
+                  entry also threw away the team. */}
+              <RegistrationAnswers event={event} registration={registration} />
+
               {event.open ? (
-                <Button variant="danger" loading={busy} onClick={cancel} className="w-fit">
-                  Cancel registration
-                </Button>
+                editing ? (
+                  <EventRegistrationForm
+                    event={event}
+                    mode="edit"
+                    initialAnswers={registration.registration_data}
+                    onRegistered={() => {
+                      setEditing(false);
+                      refresh();
+                    }}
+                    onCancel={() => setEditing(false)}
+                  />
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {hasAnswerableFields(event) && (
+                      <Button
+                        variant="secondary"
+                        className="w-fit"
+                        onClick={() => setEditing(true)}
+                      >
+                        <Pencil size={BUTTON_ICON.md} strokeWidth={BUTTON_ICON_STROKE} /> Edit
+                        answers
+                      </Button>
+                    )}
+                    <Button variant="danger" loading={busy} onClick={cancel} className="w-fit">
+                      Cancel registration
+                    </Button>
+                  </div>
+                )
               ) : (
                 <p className="text-sm text-muted">
                   Registration has closed, so this can no longer be edited or cancelled.
@@ -178,4 +212,58 @@ export default function EventDetailPage() {
       />
     </FestivalScreen>
   );
+}
+
+/* --------------------------------------------------------------- helpers --- */
+
+/** Does this event ask anything an amendment could change? */
+function hasAnswerableFields(event: Event): boolean {
+  return (event.registration_fields ?? []).length > 0;
+}
+
+/**
+ * The answers this participant submitted, read back.
+ *
+ * `GET /events/my_registrations` has always returned `registration_data` and no
+ * screen showed it, so a participant could not check what they had entered — let
+ * alone tell whether it needed correcting. Labelled with the event's own field
+ * labels rather than the raw `field_id` keys, and questions left blank are named
+ * as unanswered instead of omitted, since a missing answer is the thing most
+ * worth noticing here.
+ */
+function RegistrationAnswers({
+  event,
+  registration,
+}: {
+  event: Event;
+  registration: MyEventRegistration;
+}) {
+  const fields = event.registration_fields ?? [];
+  if (fields.length === 0) return null;
+
+  return (
+    <dl className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
+      {fields.map((field) => {
+        const raw = registration.registration_data?.[field.field_id];
+        const answered = raw !== undefined && raw !== null && String(raw).trim() !== '';
+        return (
+          <div key={field.field_id} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+            <dt className="text-xs font-semibold uppercase tracking-wider text-muted">
+              {field.label}
+            </dt>
+            <dd className={answered ? 'text-sm font-medium text-ink' : 'text-sm italic text-muted'}>
+              {answered ? formatAnswer(raw) : 'Not answered'}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+/** `"true"` and `true` both read as Yes — the form writes the string form. */
+function formatAnswer(value: unknown): string {
+  if (value === true || value === 'true') return 'Yes';
+  if (value === false || value === 'false') return 'No';
+  return String(value);
 }

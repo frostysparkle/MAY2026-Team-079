@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Users } from 'lucide-react';
+import { Pencil, ShieldAlert, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, RegistrationField } from '@/api/types';
 import { Button, ResultBanner, Select, TextInput } from '@/components/ui';
+import { currentParticipant } from '@/stores/authStore';
 import { optionsForField, readEventExtras } from './eventExtras';
+import { eventTeamRoleLabel, eventTeamRoleOf } from './eventTeam';
+import { readEventRegisterFailure, type EventRegisterFailure } from './registerOutcome';
 
 /**
  * Registration form for a live event, built from the `registration_fields` the
@@ -14,24 +17,67 @@ import { optionsForField, readEventExtras } from './eventExtras';
  * in-app event page renders a "you're registered" banner and a cancel control, so
  * it has to re-read the registration list once this succeeds. The public brochure
  * passes nothing and keeps the local success banner below.
+ *
+ * In `mode="edit"` the same fields become the amendment form for
+ * `PUT /events/{id}/register`, seeded from the answers already stored. One
+ * component for both, because the questions, their types and their dropdown
+ * choices all come from the same `registration_fields` — a second form would be
+ * the same rendering logic with a different verb, free to drift from it.
+ *
+ * The team name is create-only: the PUT route sets `registration_data` and
+ * nothing else, so offering the field on an edit would show a change that is
+ * silently discarded.
  */
 export function EventRegistrationForm({
   event,
+  mode = 'create',
+  initialAnswers,
   onRegistered,
+  onCancel,
 }: {
   event: Event;
+  /** `create` registers; `edit` amends the answers already submitted. */
+  mode?: 'create' | 'edit';
+  /** `registration_data` as stored, for `mode="edit"`. */
+  initialAnswers?: Record<string, unknown>;
   onRegistered?: () => void;
+  /** Offered in `mode="edit"` so the participant can back out. */
+  onCancel?: () => void;
 }) {
   const extras = readEventExtras(event.registration);
   const fields = event.registration_fields ?? [];
   const team = event.team ?? { min: 1, max: 1, house: false, allow_single_registration: true };
-  const isTeamEvent = team.max > 1;
+  const isEdit = mode === 'edit';
+  const isTeamEvent = team.max > 1 && !isEdit;
 
   const [teamName, setTeamName] = useState('');
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(() =>
+    seedAnswers(fields, initialAnswers),
+  );
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<EventRegisterFailure | null>(null);
   const [done, setDone] = useState(false);
+
+  /**
+   * Is this participant visibly on the event's team?
+   *
+   * The backend refuses the registration in that case, so the button should be
+   * disabled rather than inviting a certain 403. How far this can be checked
+   * up front is limited by the contract, and deliberately not overstated:
+   *
+   * `GET /events` carries `event_team[].user_id`, and the backend resolves that
+   * id against *either* `backend_teams.paradox_id` *or*
+   * `participants.participant_id`. When a participant id was assigned directly,
+   * the comparison below catches it. When the entry is a `BT…` staff id linked to
+   * this participant through `backend_teams.admin_id`, nothing in a participant's
+   * session exposes that link — there is no endpoint that returns it — so the
+   * refusal is only knowable from the 403. `readEventRegisterFailure` handles that
+   * case, and `blocked` below folds it back into the same disabled state, so the
+   * button is never live twice for the same doomed attempt.
+   */
+  const participant = currentParticipant();
+  const myTeamRole = eventTeamRoleOf(event.event_team, participant?.id);
+  const blocked = myTeamRole !== undefined || failure?.kind === 'on-event-team';
 
   function setAnswer(fieldId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
@@ -39,28 +85,81 @@ export function EventRegistrationForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setFailure(null);
     setBusy(true);
     try {
-      await api.registerForEvent(event.event_id, {
-        team_name: isTeamEvent && teamName.trim() ? teamName.trim() : undefined,
-        registration_data: answers,
-      });
+      if (isEdit) {
+        await api.editEventRegistration(event.event_id, { registration_data: answers });
+      } else {
+        await api.registerForEvent(event.event_id, {
+          team_name: isTeamEvent && teamName.trim() ? teamName.trim() : undefined,
+          registration_data: answers,
+        });
+      }
       setDone(true);
       onRegistered?.();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Could not register.');
+      const outcome = readEventRegisterFailure(
+        err instanceof ApiClientError ? err.status : undefined,
+        err instanceof ApiClientError
+          ? err.message
+          : isEdit
+            ? 'Could not save.'
+            : 'Could not register.',
+      );
+      setFailure(outcome);
+      // An existing registration is not a failure to recover from — hand the host
+      // the same signal a fresh success gives it, so the page swaps in the
+      // registered state and its cancel control. Never in edit mode: the
+      // registration is the premise there, not the news.
+      if (!isEdit && outcome.kind === 'already-registered') setDone(true);
+      if (outcome.refreshEvent) onRegistered?.();
     } finally {
       setBusy(false);
     }
   }
 
   if (!event.open) {
-    return <ResultBanner variant="warning" title="Registration is closed for this event" />;
+    return (
+      <ResultBanner
+        variant="warning"
+        title={
+          isEdit
+            ? 'Registration has closed, so answers can no longer be changed'
+            : 'Registration is closed for this event'
+        }
+      />
+    );
   }
 
   if (done) {
-    return <ResultBanner variant="success" title="You're registered for this event" />;
+    return (
+      <ResultBanner
+        variant="success"
+        title={isEdit ? 'Your answers have been updated' : "You're registered for this event"}
+      />
+    );
+  }
+
+  // Rendered instead of the form, not over it: filling in answers that cannot be
+  // submitted is worse than not being offered the fields at all. Not in edit mode,
+  // where holding a registration already proves the participant is not on the team.
+  if (blocked && !isEdit) {
+    return (
+      <ResultBanner variant="warning" title="You’re on this event’s team">
+        <div className="flex flex-col gap-1">
+          <p>
+            {myTeamRole
+              ? `You are this event's ${eventTeamRoleLabel(myTeamRole)}, and team members cannot enter their own event as participants.`
+              : 'Staff and volunteers running an event cannot enter it as participants.'}
+          </p>
+          <p className="flex items-center gap-1.5 font-medium">
+            <ShieldAlert size={13} strokeWidth={2.25} className="shrink-0" />
+            You can still scan attendance for it from the staff area.
+          </p>
+        </div>
+      </ResultBanner>
+    );
   }
 
   return (
@@ -69,13 +168,29 @@ export function EventRegistrationForm({
       className="flex flex-col gap-3 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-line/70"
     >
       <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-        <Users size={15} strokeWidth={2.25} className="text-brand" />
-        {isTeamEvent ? `Team of ${team.min}–${team.max}` : 'Individual entry'}
+        {isEdit ? (
+          <>
+            <Pencil size={15} strokeWidth={2.25} className="text-brand" />
+            Update your answers
+          </>
+        ) : (
+          <>
+            <Users size={15} strokeWidth={2.25} className="text-brand" />
+            {isTeamEvent ? `Team of ${team.min}–${team.max}` : 'Individual entry'}
+          </>
+        )}
       </p>
 
-      {error && (
-        <ResultBanner variant="error" title="Could not register">
-          {error}
+      {isEdit && fields.length === 0 && (
+        <p className="text-sm text-muted">
+          This event asks no registration questions, so there is nothing to change. Your entry is
+          confirmed as it stands.
+        </p>
+      )}
+
+      {failure && (
+        <ResultBanner variant={failure.tone} title={failure.title}>
+          {failure.description}
         </ResultBanner>
       )}
 
@@ -99,11 +214,53 @@ export function EventRegistrationForm({
         />
       ))}
 
-      <Button type="submit" fullWidth loading={busy}>
-        Register
-      </Button>
+      {/* Disabled after a refusal that another attempt cannot fix, so a closed
+          event or a duplicate entry is not offered a second doomed submit. */}
+      <div className={isEdit ? 'flex flex-wrap gap-2' : undefined}>
+        <Button
+          type="submit"
+          fullWidth={!isEdit}
+          loading={busy}
+          disabled={busy || (failure !== null && !failure.retryable)}
+        >
+          {isEdit ? 'Save answers' : 'Register'}
+        </Button>
+        {isEdit && onCancel && (
+          <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+      </div>
     </form>
   );
+}
+
+/**
+ * The stored `registration_data` as form state.
+ *
+ * Values come back as `unknown` — the backend stores whatever was sent — so each
+ * is narrowed to the string an input can hold. A checkbox field round-trips as
+ * `"true"`/`"false"` because that is what this form writes for it, and only keys
+ * the event still asks about are kept: a question the admin has since removed
+ * should not be resubmitted invisibly.
+ */
+function seedAnswers(
+  fields: readonly RegistrationField[],
+  stored: Record<string, unknown> | undefined,
+): Record<string, string> {
+  if (!stored) return {};
+  const seeded: Record<string, string> = {};
+  for (const field of fields) {
+    const value = stored[field.field_id];
+    if (value === undefined || value === null) continue;
+    seeded[field.field_id] =
+      typeof value === 'string'
+        ? value
+        : typeof value === 'boolean'
+          ? String(value)
+          : String(value);
+  }
+  return seeded;
 }
 
 /** One admin-configured field. `select` renders a dropdown when choices exist. */

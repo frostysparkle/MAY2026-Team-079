@@ -8,6 +8,7 @@ import { AuthLayout } from '@/features/auth/AuthLayout';
 import { MIN_PASSWORD_LENGTH } from '@/features/auth/PasswordField';
 import { ImpossibleTriangle } from '@/features/landing/ParadoxHeadline';
 import { ResultBanner, Spinner } from '@/components/ui';
+import { IITM_EMAIL_DOMAINS, IITM_EMAIL_PATTERN } from '@/config/constants';
 import { cn } from '@/lib/cn';
 
 /**
@@ -29,6 +30,8 @@ type Mode = 'login' | 'register';
 /** Seed account surfaced in the mock dev quick-fill for local testing. */
 
 const FORM_ID = 'auth-form';
+/** Ties the domain-rule message to the email box for screen readers. */
+const EMAIL_HINT_ID = 'auth-email-hint';
 
 /* --------------------------------------------------------------- icons --- */
 
@@ -178,6 +181,19 @@ export default function LoginPage({ initialMode }: { initialMode?: Mode }) {
 
   const isRegister = mode === 'register';
 
+  /**
+   * The IITM domain rule, checked here as well as on the backend.
+   *
+   * `POST /auth/register` enforces `^[^@]+@[a-z]+\.study\.iitm\.ac\.in$` and
+   * `IITM_EMAIL_PATTERN` has mirrored it in `config/constants.ts` all along — it
+   * simply had no importer, so a student typing a personal address learned about
+   * the rule from a server error after submitting a password. Only applied while
+   * registering: sign-in must accept whatever is on the account, since the rule
+   * could change and existing logins have to keep working.
+   */
+  const emailTyped = email.trim();
+  const emailDomainWrong = isRegister && emailTyped !== '' && !IITM_EMAIL_PATTERN.test(emailTyped);
+
   /** Switching tabs clears the error and password but keeps the email typed. */
   function switchMode(next: Mode) {
     setMode(next);
@@ -309,11 +325,23 @@ export default function LoginPage({ initialMode }: { initialMode?: Mode }) {
                   placeholder="example@ds.study.iitm.ac.in"
                   autoComplete="email"
                   required
+                  aria-invalid={emailDomainWrong || undefined}
+                  aria-describedby={emailDomainWrong ? EMAIL_HINT_ID : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border border-input bg-surface py-2 pl-10 pr-3 text-sm outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  className={cn(
+                    'w-full rounded-xl border bg-surface py-2 pl-10 pr-3 text-sm outline-none transition-colors focus:ring-2',
+                    emailDomainWrong
+                      ? 'border-danger focus:border-danger focus:ring-danger/30'
+                      : 'border-input focus:border-brand focus:ring-brand/30',
+                  )}
                 />
               </div>
+              {emailDomainWrong && (
+                <p id={EMAIL_HINT_ID} className="text-xs font-medium text-danger">
+                  Use your IITM student address — {IITM_EMAIL_DOMAINS.join(', ')}.
+                </p>
+              )}
             </div>
 
             {/* Password */}
@@ -372,7 +400,7 @@ export default function LoginPage({ initialMode }: { initialMode?: Mode }) {
             {/* Submit */}
             <button
               type="submit"
-              disabled={!email.trim() || !password || loading}
+              disabled={!email.trim() || !password || loading || emailDomainWrong}
               className="tap group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand to-accent py-2.5 text-sm font-semibold text-white shadow-fab transition hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <Spinner size={16} />}

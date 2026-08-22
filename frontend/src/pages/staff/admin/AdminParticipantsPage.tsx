@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BedDouble,
+  Download,
   Pencil,
   Save,
   Search,
@@ -12,6 +13,7 @@ import {
 import { api, ApiClientError } from '@/api';
 import type { ParticipantRecord, ParticipantStatisticsResponse } from '@/api/types';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { exportParticipants } from '@/features/staff/analyticsExport';
 import {
   Button,
   Card,
@@ -376,6 +378,19 @@ export default function AdminParticipantsPage() {
     <FestivalScreen
       title="Participants"
       subtitle="Every registered participant, and the one place a record can be corrected."
+      /* Journey E.10. Exports the sorted set currently loaded, so a search the
+         admin typed is honoured — "unfiltered" in the guide means the view is not
+         pre-filtered for this role, not that their own narrowing is ignored. */
+      actions={
+        <Button
+          variant="secondary"
+          className="gap-1.5"
+          disabled={sorted.length === 0}
+          onClick={() => exportParticipants(sorted)}
+        >
+          <Download size={14} /> Export CSV
+        </Button>
+      }
     >
       {saved && (
         <ResultBanner variant="success" title="Saved">

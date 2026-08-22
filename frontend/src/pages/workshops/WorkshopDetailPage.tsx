@@ -16,7 +16,15 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
-import { rememberWorkshopRegistration, slotStatus } from '@/features/workshops/registrationCache';
+import {
+  loadMyWorkshopBookings,
+  rememberWorkshopRegistration,
+} from '@/features/workshops/registrationCache';
+import { useMyWorkshopBookings } from '@/features/workshops/useMyWorkshopBookings';
+import {
+  readWorkshopRegisterFailure,
+  type WorkshopRegisterFailure,
+} from '@/features/workshops/registerOutcome';
 import { useLiveSeats } from '@/features/workshops/useLiveSeats';
 import { workshopView, WORKSHOP_COVER } from '@/features/workshops/workshopView';
 import { shiftLabel } from '@/features/workshops/workshopSlot';
@@ -35,9 +43,14 @@ export default function WorkshopDetailPage() {
   const navigate = useNavigate();
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  /** The last refusal, classified — see `features/workshops/registerOutcome.ts`. */
+  const [failure, setFailure] = useState<WorkshopRegisterFailure | null>(null);
   const [registered, setRegistered] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // The slots this participant already holds. Shared with the catalogue, so a
+  // booking made here greys out the rest of the shift there without a refetch.
+  const bookings = useMyWorkshopBookings();
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -88,14 +101,14 @@ export default function WorkshopDetailPage() {
   }
 
   const view = workshopView(workshop);
-  const status = slotStatus(workshop.slot_id, workshop.workshop_id);
+  const status = bookings.slotStatus(workshop.slot_id, workshop.workshop_id);
   const alreadyOwn = registered || status === 'own';
   const clashes = status === 'conflict';
   const soldOut = seats !== null && seats.remaining_seats <= 0;
   const taken = seats ? seats.capacity - seats.remaining_seats : null;
 
   async function register() {
-    setSubmitError(null);
+    setFailure(null);
     setBusy(true);
     try {
       await api.registerForWorkshop(workshopId);
@@ -104,7 +117,20 @@ export default function WorkshopDetailPage() {
       // The seat count just changed for everyone, including this page's fallback.
       load();
     } catch (e) {
-      setSubmitError(e instanceof ApiClientError ? e.message : 'Could not register.');
+      const outcome = readWorkshopRegisterFailure(
+        e instanceof ApiClientError ? e.message : 'Could not register.',
+      );
+      setFailure(outcome);
+      // Act on what the refusal told us rather than only printing it: the server
+      // knows something this page did not, and leaving the screen unchanged is
+      // what let a participant keep tapping Register after being told they were
+      // already on the list.
+      if (outcome.kind === 'already-registered') {
+        rememberWorkshopRegistration(workshop!.slot_id, workshopId);
+        setRegistered(true);
+      }
+      if (outcome.refreshSeats) load();
+      if (outcome.refreshBookings) void loadMyWorkshopBookings({ force: true });
     } finally {
       setBusy(false);
     }
@@ -155,12 +181,22 @@ export default function WorkshopDetailPage() {
         </FactList>
 
         {seats && (
-          <ProgressBar
-            value={seats.capacity - seats.remaining_seats}
-            max={seats.capacity}
-            tone={soldOut ? 'danger' : 'brand'}
-            label={`${view.name} seats taken`}
-          />
+          <div className="flex flex-col gap-1">
+            <ProgressBar
+              value={seats.capacity - seats.remaining_seats}
+              max={seats.capacity}
+              tone={soldOut ? 'danger' : 'brand'}
+              label={`${view.name} seats taken`}
+            />
+            {/* Says so when the live stream has dropped, rather than presenting a
+                frozen number as current. Registration still works — the seat count
+                is a hint and the server is the gate. */}
+            {!seats.live && (
+              <p className="text-xs text-muted">
+                Live seat updates are reconnecting — this count may be a moment behind.
+              </p>
+            )}
+          </div>
         )}
 
         {view.instructions && (
@@ -169,9 +205,12 @@ export default function WorkshopDetailPage() {
           </p>
         )}
 
-        {submitError && (
-          <ResultBanner variant="error" title="Could not register">
-            {submitError}
+        {/* Suppressed once the page has corrected itself: an
+            "already registered" refusal is followed by the success banner below,
+            and showing both would say the same thing twice in two tones. */}
+        {failure && failure.kind !== 'already-registered' && (
+          <ResultBanner variant={failure.tone} title={failure.title}>
+            {failure.description}
           </ResultBanner>
         )}
 
@@ -186,8 +225,17 @@ export default function WorkshopDetailPage() {
           // the participant area — the change-password form, the stay picker, the
           // payment screen. `w-full sm:w-fit sm:px-8` made this the one panel CTA
           // that changed shape at `sm` and carried its own horizontal padding.
-          <Button fullWidth loading={busy} disabled={soldOut} onClick={register}>
-            {soldOut ? 'Workshop full' : 'Register'}
+          //
+          // Held until the held-slots read lands: until then this page cannot
+          // know whether the shift is already taken, and offering the booking
+          // anyway is how a participant walks into the clash 400.
+          <Button
+            fullWidth
+            loading={busy || !bookings.ready}
+            disabled={soldOut || !bookings.ready}
+            onClick={register}
+          >
+            {soldOut ? 'Workshop full' : !bookings.ready ? 'Checking your bookings…' : 'Register'}
           </Button>
         )}
       </DetailPanel>

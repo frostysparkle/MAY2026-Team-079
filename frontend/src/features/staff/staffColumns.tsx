@@ -39,7 +39,14 @@ export function useStaffColumns({
             />
             <div className="min-w-0">
               <p className="truncate font-semibold text-ink">{row.email}</p>
-              <p className="truncate text-xs text-muted">{row.id}</p>
+              <p className="truncate text-xs text-muted">
+                {row.id}
+                {/* The `admin_id` link, which decides whether the event-team check
+                    recognises this person when they sign in as a participant. */}
+                {row.linkedToParticipant && (
+                  <span title="Linked to a participant record"> · linked</span>
+                )}
+              </p>
             </div>
           </div>
         ),

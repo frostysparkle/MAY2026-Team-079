@@ -84,6 +84,7 @@ import type {
   AuditLogSummary,
   MessageResponse,
 } from './types';
+import type { FieldError } from './errors';
 
 export interface ApiClient {
   // ---- auth ----
@@ -297,9 +298,25 @@ export interface ApiClient {
 export class ApiClientError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  /**
+   * Per-field problems, for a 422 only. Empty for every other status.
+   *
+   * FastAPI reports request-validation failures as a list of `{loc, msg}`, which
+   * is the only error shape in this API that identifies *which input* is wrong.
+   * Carrying it here lets a form mark that input instead of printing one
+   * sentence above the whole thing.
+   */
+  fieldErrors: FieldError[];
+
+  constructor(status: number, message: string, fieldErrors: FieldError[] = []) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
+    this.fieldErrors = fieldErrors;
+  }
+
+  /** The problem reported for one field, if the server named it. */
+  fieldError(field: string): string | undefined {
+    return this.fieldErrors.find((error) => error.field === field)?.message;
   }
 }

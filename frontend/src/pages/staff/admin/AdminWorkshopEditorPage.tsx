@@ -9,11 +9,13 @@ import {
   Button,
   Card,
   ErrorState,
+  FieldErrors,
   ResultBanner,
   Select,
   Spinner,
   TextInput,
 } from '@/components/ui';
+import type { FieldError } from '@/api/errors';
 import {
   formatSlotId,
   parseSlotId,
@@ -41,6 +43,7 @@ export default function AdminWorkshopEditorPage() {
   const [loading, setLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveFieldErrors, setSaveFieldErrors] = useState<FieldError[]>([]);
   const [busy, setBusy] = useState(false);
   /**
    * The stored record, kept alongside the form fields for the team panel below —
@@ -127,6 +130,7 @@ export default function AdminWorkshopEditorPage() {
       navigate(ROUTES.adminWorkshops);
     } catch (err) {
       setSaveError(err instanceof ApiClientError ? err.message : 'Could not save the workshop.');
+      setSaveFieldErrors(err instanceof ApiClientError ? err.fieldErrors : []);
     } finally {
       setBusy(false);
     }
@@ -176,7 +180,10 @@ export default function AdminWorkshopEditorPage() {
       <form onSubmit={save} className="flex flex-col gap-5">
         {saveError && (
           <ResultBanner variant="error" title="Could not save">
-            {saveError}
+            <div className="flex flex-col gap-2">
+              <p>{saveError}</p>
+              <FieldErrors errors={saveFieldErrors} />
+            </div>
           </ResultBanner>
         )}
 

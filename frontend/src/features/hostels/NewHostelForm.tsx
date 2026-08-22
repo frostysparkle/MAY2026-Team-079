@@ -26,6 +26,18 @@ export function NewHostelForm({
   // Starts unchosen so a block is never silently filed as men's. Allocation
   // matches this against a participant's own gender, so it has to be deliberate.
   const [gender, setGender] = useState('');
+  /**
+   * The block's coordinator — who a resident rings first.
+   *
+   * `coordinator` used to be sent as a hardcoded `{}`, with no inputs for it
+   * anywhere, so the "Coordinator" line on a participant's Accommodation & Mess
+   * screen (`dutyContacts.coordinatorContact`, reading `coordinator.name` and
+   * `coordinator.phone`) was permanently blank for every block created here.
+   * Optional, because the backend types it as a free map and a block can be set up
+   * before its coordinator is decided.
+   */
+  const [coordinatorName, setCoordinatorName] = useState('');
+  const [coordinatorPhone, setCoordinatorPhone] = useState('');
 
   return (
     <Card className="flex flex-col gap-3">
@@ -57,6 +69,21 @@ export function NewHostelForm({
           value={gender}
           onChange={(e) => setGender(e.target.value)}
         />
+        <TextInput
+          label="Coordinator name"
+          value={coordinatorName}
+          onChange={(e) => setCoordinatorName(e.target.value)}
+          placeholder="e.g. Anitha Raman"
+          hint="Optional. Shown to residents as this block's first point of contact."
+        />
+        <TextInput
+          label="Coordinator phone"
+          type="tel"
+          value={coordinatorPhone}
+          onChange={(e) => setCoordinatorPhone(e.target.value)}
+          placeholder="e.g. 9876543210"
+          hint="Optional. Offered to residents as a tap-to-call link."
+        />
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -71,7 +98,13 @@ export function NewHostelForm({
               name: name.trim(),
               capacity: Number(capacity) || 0,
               gender,
-              coordinator: {},
+              // Only the keys actually filled in. `coordinatorContact` treats a
+              // blank string as absent anyway, but storing one would make the
+              // record claim a contact it does not have.
+              coordinator: {
+                ...(coordinatorName.trim() ? { name: coordinatorName.trim() } : {}),
+                ...(coordinatorPhone.trim() ? { phone: coordinatorPhone.trim() } : {}),
+              },
             })
           }
         >

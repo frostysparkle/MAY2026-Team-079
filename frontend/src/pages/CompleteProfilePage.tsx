@@ -23,6 +23,7 @@ import { AuthLayout } from '@/features/auth/AuthLayout';
 import {
   Avatar,
   Button,
+  FieldErrors,
   IconTile,
   ProgressRing,
   ResultBanner,
@@ -30,6 +31,7 @@ import {
   StatusBadge,
   TextInput,
 } from '@/components/ui';
+import type { FieldError } from '@/api/errors';
 import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
 import { cn } from '@/lib/cn';
@@ -88,6 +90,29 @@ type FormValues = {
   emergency_relation: string;
   emergency_phone: string;
 };
+
+/**
+ * The inputs on this form, as the names the backend uses for them.
+ *
+ * Used to route a 422's field errors: a rejection naming one of these is marked
+ * on its own input, and anything else (`emergency_contact.phone`, or a field this
+ * form does not collect) is listed under the banner instead of being silently
+ * dropped.
+ */
+const FORM_FIELDS = [
+  'full_name',
+  'dob',
+  'house',
+  'gender',
+  'phone',
+  'address',
+  'program',
+  'course_stage',
+] as const satisfies readonly (keyof FormValues)[];
+
+function isFormField(field: string): field is (typeof FORM_FIELDS)[number] {
+  return (FORM_FIELDS as readonly string[]).includes(field);
+}
 
 /**
  * The three emergency-contact inputs as the API's object, or `null` when none of
@@ -442,6 +467,7 @@ export default function CompleteProfilePage() {
     handleSubmit,
     control,
     getValues,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
@@ -471,6 +497,8 @@ export default function CompleteProfilePage() {
     emergency?: string;
   }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /** Field-level problems from a 422, for the ones with no input on this form. */
+  const [submitFieldErrors, setSubmitFieldErrors] = useState<FieldError[]>([]);
 
   // Session is required to complete a profile.
   if (!participant) {
@@ -554,6 +582,19 @@ export default function CompleteProfilePage() {
       setSubmitError(
         e instanceof ApiClientError ? e.message : 'Could not save your profile. Please try again.',
       );
+      // A 422 names the fields it rejected. Attach each one to its own input
+      // where the name matches this form's, so the reader is taken to the box to
+      // fix rather than left to work it out from a sentence at the top. Anything
+      // that does not map to a field on screen (a nested `emergency_contact.*`,
+      // say) stays in the list below the banner.
+      setSubmitFieldErrors(e instanceof ApiClientError ? e.fieldErrors : []);
+      if (e instanceof ApiClientError) {
+        for (const fieldError of e.fieldErrors) {
+          if (isFormField(fieldError.field)) {
+            setError(fieldError.field, { type: 'server', message: fieldError.message });
+          }
+        }
+      }
     }
   }
 
@@ -568,7 +609,12 @@ export default function CompleteProfilePage() {
     >
       {submitError && (
         <ResultBanner variant="error" title="Could not save">
-          {submitError}
+          <div className="flex flex-col gap-2">
+            <p>{submitError}</p>
+            {/* Only the rejections with no box on this form; the rest are marked
+                on their own inputs by `setError` above. */}
+            <FieldErrors errors={submitFieldErrors.filter((e) => !isFormField(e.field))} />
+          </div>
         </ResultBanner>
       )}
 

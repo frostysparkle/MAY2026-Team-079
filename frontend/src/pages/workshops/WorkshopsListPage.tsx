@@ -19,7 +19,10 @@ import {
   EventGridSkeleton,
   EventPosterCard,
 } from '@/features/events/EventPosterCard';
-import { slotStatus } from '@/features/workshops/registrationCache';
+import {
+  useMyWorkshopBookings,
+  type MyWorkshopBookings,
+} from '@/features/workshops/useMyWorkshopBookings';
 import { useLiveSeats } from '@/features/workshops/useLiveSeats';
 import { sortWorkshops, workshopView, WORKSHOP_COVER } from '@/features/workshops/workshopView';
 import { shiftLabel, workshopDayLabel } from '@/features/workshops/workshopSlot';
@@ -47,6 +50,11 @@ export default function WorkshopsListPage() {
   const navigate = useNavigate();
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // The slots this participant already holds, read from
+  // `GET /workshops/my_registrations` — so a clash stays greyed out after a
+  // reload and for a booking made on another device.
+  const bookings = useMyWorkshopBookings();
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -98,7 +106,11 @@ export default function WorkshopsListPage() {
       subtitle={
         workshops === null
           ? 'Loading the programme…'
-          : `${workshops.length} workshop${workshops.length === 1 ? '' : 's'} · ${seatsLeft.toLocaleString()} seats left · one booking per shift`
+          : `${workshops.length} workshop${workshops.length === 1 ? '' : 's'} · ${seatsLeft.toLocaleString()} seats left · ${
+              bookings.count === 0
+                ? 'one booking per shift'
+                : `${bookings.count} shift${bookings.count === 1 ? '' : 's'} booked`
+            }`
       }
       // Carries its glyph now, like the "Schedule" button on the event catalogue
       // and the "Fest schedule" one on an event's own page. It was the only
@@ -126,7 +138,7 @@ export default function WorkshopsListPage() {
           >
             <ul className={EVENT_GRID_CLASS}>
               {section.views.map((view) => (
-                <WorkshopPosterCard key={view.id} view={view} />
+                <WorkshopPosterCard key={view.id} view={view} bookings={bookings} />
               ))}
             </ul>
           </SectionBlock>
@@ -142,7 +154,13 @@ export default function WorkshopsListPage() {
  * A component of its own because `useLiveSeats` opens one SSE subscription per
  * workshop, and a hook cannot be called inside the grid's `map`.
  */
-function WorkshopPosterCard({ view }: { view: ReturnType<typeof workshopView> }) {
+function WorkshopPosterCard({
+  view,
+  bookings,
+}: {
+  view: ReturnType<typeof workshopView>;
+  bookings: MyWorkshopBookings;
+}) {
   const seats = useLiveSeats(
     view.id,
     view.seatsLeft === undefined
@@ -153,7 +171,7 @@ function WorkshopPosterCard({ view }: { view: ReturnType<typeof workshopView> })
   // The raw `slot_id` off the record, not one rebuilt from the parsed day and
   // shift: a hand-typed slot id parses to nothing, and the conflict cache is
   // keyed on whatever string the backend actually enforces the rule against.
-  const status = slotStatus(view.workshop?.slot_id ?? '', view.id);
+  const status = bookings.slotStatus(view.workshop?.slot_id ?? '', view.id);
   const clashes = status === 'conflict';
   const soldOut = seats !== null && seats.remaining_seats <= 0;
 

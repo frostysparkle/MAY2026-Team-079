@@ -1105,7 +1105,28 @@ export interface MessageResponse {
 
 /* -------------------------------------------------------------- errors --- */
 
-/** FastAPI's actual error body shape — every non-2xx response looks like this. */
+/**
+ * One entry from FastAPI's request-validation error list.
+ *
+ * `loc` is the path to the offending value, e.g. `["body", "team", "min"]` — the
+ * first element is the request part and the rest names the field, which is why
+ * the formatter drops the head before showing it to a user.
+ */
+export interface FastApiValidationError {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+}
+
+/**
+ * FastAPI's actual error body shape.
+ *
+ * `detail` is **not** always a string. A hand-raised `HTTPException` sets it to
+ * one, which is every deliberate 400/401/403/404/409 in this backend — but a
+ * 422 from request validation sets it to an array of `FastApiValidationError`.
+ * Typing it as `string` (as this did) meant a 422 handed a non-string to
+ * `new ApiClientError(...)` and the user was shown `[object Object]`.
+ */
 export interface FastApiErrorBody {
-  detail: string;
+  detail?: string | FastApiValidationError[];
 }

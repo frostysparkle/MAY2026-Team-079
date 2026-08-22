@@ -10,7 +10,8 @@ import {
   Shuffle,
   UtensilsCrossed,
 } from 'lucide-react';
-import { api, ApiClientError } from '@/api';
+import { api } from '@/api';
+import { reportApiError } from '@/api/report';
 import type { MessCreateRequest } from '@/api/types';
 import {
   ANY,
@@ -147,7 +148,7 @@ export default function AdminMessPage() {
       await work();
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : fallback);
+      setActionError(reportApiError(e, fallback));
     } finally {
       setBusy(false);
     }
@@ -162,7 +163,7 @@ export default function AdminMessPage() {
       setShowCreate(false);
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not create mess.');
+      setActionError(reportApiError(e, 'Could not create mess.'));
     } finally {
       setBusy(false);
     }
@@ -176,7 +177,7 @@ export default function AdminMessPage() {
       // Allocation moves participants into halls, so every figure just changed.
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not allocate.');
+      setActionError(reportApiError(e, 'Could not allocate.'));
     } finally {
       setBusy(false);
     }
@@ -358,9 +359,9 @@ export default function AdminMessPage() {
           loading={inventory.loading}
           busy={busy}
           onClose={() => setDetailId(null)}
-          onAssignTeam={(userId) =>
+          onAssignTeam={(userId, role) =>
             void run(
-              () => api.assignMessTeam(detailRow.id, { user_id: userId, role: 'other' }),
+              () => api.assignMessTeam(detailRow.id, { user_id: userId, role }),
               'Could not assign team member.',
             )
           }

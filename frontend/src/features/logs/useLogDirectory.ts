@@ -31,8 +31,16 @@ import {
  * publishes as a total now comes from `GET /audit-logs/summary`, which counts
  * server-side over the whole trail — so a fest with more history than this limit
  * no longer reports the limit as its total.
+ *
+ * The default, not the only option: `GET /audit-logs?limit=` takes any value, and
+ * the screen offers the choices below. It matters because `limit` is applied
+ * *before* any client-side filter could run, so searching a fest with more history
+ * than the window searches only the window.
  */
 export const TRAIL_LIMIT = 1000;
+
+/** Row windows the audit screen offers, smallest first. */
+export const TRAIL_LIMIT_OPTIONS = [200, 1000, 5000] as const;
 
 export interface LogDirectoryEntity {
   id: string;
@@ -53,7 +61,7 @@ export interface LogDirectoryEntity {
   lastActivity: string | null;
 }
 
-export function useLogDirectory() {
+export function useLogDirectory(limit: number = TRAIL_LIMIT) {
   const [trail, setTrail] = useState<AuditLogEntry[] | null>(null);
   const [summary, setSummary] = useState<AuditLogSummary | null>(null);
   const [entities, setEntities] = useState<LogDirectoryEntity[] | null>(null);
@@ -62,7 +70,7 @@ export function useLogDirectory() {
   const load = useCallback(
     () =>
       Promise.all([
-        api.auditLogs(TRAIL_LIMIT),
+        api.auditLogs(limit),
         // Exact counts over the whole trail. Non-fatal on its own: losing it drops
         // the figures back to counting the fetched page, which is what they used
         // to do, rather than failing the screen.
@@ -139,7 +147,9 @@ export function useLogDirectory() {
         .catch((e) =>
           setError(e instanceof ApiClientError ? e.message : 'Could not load the audit trail.'),
         ),
-    [],
+    // Re-reads when the window changes, which is the point of making it a
+    // parameter — widening it has to fetch the wider page.
+    [limit],
   );
 
   useEffect(() => {
@@ -205,7 +215,9 @@ export function useLogDirectory() {
     /** Whether `total` and `perDomain` are fest-wide totals rather than floors. */
     exact: summary !== null,
     /** The table is showing a capped slice of a longer trail. */
-    truncated: (trail?.length ?? 0) >= TRAIL_LIMIT,
+    truncated: (trail?.length ?? 0) >= limit,
+    /** The window that produced `trail`, so a screen can offer to widen it. */
+    limit,
     error,
     loading: entities === null,
     load,

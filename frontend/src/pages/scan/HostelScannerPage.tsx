@@ -6,13 +6,24 @@ import { currentStaff } from '@/stores/authStore';
 import { ROUTES } from '@/config/routes';
 import { useQrScanner } from '@/features/scan/useQrScanner';
 import { ScannerViewfinder } from '@/features/scan/ScannerViewfinder';
-import { Button, ErrorState, ResultBanner, Spinner } from '@/components/ui';
+import { Button, ErrorState, ResultBanner, Spinner, StatusBadge } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import {
+  readHostelScanFailure,
+  readHostelScanSuccess,
+  type HostelScanOutcome,
+} from '@/features/stay/hostelScanOutcome';
 import { cn } from '@/lib/cn';
 
-type Outcome = { kind: 'success' | 'error'; message: string; action?: 'entry' | 'exit' } | null;
-
-/** Hostel scanner: single Entry/Exit toggle, no slot/day concept. */
+/**
+ * Hostel scanner: single Entry/Exit toggle, no slot/day concept.
+ *
+ * Each of the route's four 400s gets its own state rather than one red banner
+ * (`features/stay/hostelScanOutcome.ts`). "Already inside" and "already outside"
+ * matter most: they are not somebody to turn away, they are the desk having
+ * pressed the wrong side of the toggle — and they carry the participant's actual
+ * state, which is what the guard needs to see.
+ */
 export default function HostelScannerPage() {
   const { hostelId = '' } = useParams();
   const navigate = useNavigate();
@@ -20,7 +31,7 @@ export default function HostelScannerPage() {
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [action, setAction] = useState<'entry' | 'exit'>('entry');
-  const [outcome, setOutcome] = useState<Outcome>(null);
+  const [outcome, setOutcome] = useState<HostelScanOutcome | null>(null);
   /** A code has been read and the log is in flight — the camera is already down. */
   const [pending, setPending] = useState(false);
 
@@ -39,12 +50,11 @@ export default function HostelScannerPage() {
     setPending(true);
     try {
       const res = await api.scanHostel(hostelId, action, qr);
-      setOutcome({ kind: 'success', message: res.message, action });
+      setOutcome(readHostelScanSuccess(action, res.message));
     } catch (e) {
-      setOutcome({
-        kind: 'error',
-        message: e instanceof ApiClientError ? e.message : 'Scan failed.',
-      });
+      setOutcome(
+        readHostelScanFailure(action, e instanceof ApiClientError ? e.message : 'Scan failed.'),
+      );
     } finally {
       setPending(false);
     }
@@ -119,18 +129,38 @@ export default function HostelScannerPage() {
 
       {outcome && (
         <>
-          <ResultBanner
-            variant={outcome.kind === 'success' ? 'success' : 'error'}
-            title={
-              outcome.kind === 'success'
-                ? outcome.action === 'entry'
-                  ? 'Now Inside'
-                  : 'Now Outside'
-                : outcome.message
-            }
-          >
-            {outcome.message}
+          <ResultBanner variant={outcome.tone} title={outcome.title}>
+            {outcome.description}
           </ResultBanner>
+
+          {/* Where they are now, stated plainly and separately from what the scan
+              did — a guard reads this before they read the sentence above it. Shown
+              for a refusal too, because "already inside" is itself the answer to
+              "where is this person?". */}
+          {outcome.state !== 'unknown' && (
+            <p className="flex items-center justify-center gap-2 text-sm font-semibold text-ink">
+              <StatusBadge tone={outcome.state === 'inside' ? 'success' : 'neutral'}>
+                {outcome.state === 'inside' ? 'Inside the block' : 'Outside the block'}
+              </StatusBadge>
+            </p>
+          )}
+
+          {/* Offered only where flipping the toggle is the actual fix, so the
+              obvious next move is one tap rather than a re-scan on the wrong side. */}
+          {(outcome.kind === 'already-inside' || outcome.kind === 'already-outside') && (
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setAction(outcome.kind === 'already-inside' ? 'exit' : 'entry');
+                setOutcome(null);
+                scanner.retry();
+              }}
+            >
+              Switch to {outcome.kind === 'already-inside' ? 'Exit' : 'Entry'} and scan again
+            </Button>
+          )}
+
           <Button
             fullWidth
             onClick={() => {

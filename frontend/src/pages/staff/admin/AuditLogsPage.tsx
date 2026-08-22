@@ -19,7 +19,9 @@ import {
   ErrorState,
   IconTile,
   ListToolbar,
+  ResultBanner,
   SectionHeading,
+  Select,
   Skeleton,
   StatCard,
   StatusBadge,
@@ -42,7 +44,7 @@ import {
   type LogDomain,
   type LogKind,
 } from '@/features/logs/logModel';
-import { useLogDirectory } from '@/features/logs/useLogDirectory';
+import { TRAIL_LIMIT, TRAIL_LIMIT_OPTIONS, useLogDirectory } from '@/features/logs/useLogDirectory';
 import { downloadCsv, toCsv } from '@/lib/csv';
 
 /**
@@ -83,7 +85,14 @@ type Mode = 'activity' | 'entities';
 const PAGE_SIZE = 20;
 
 export default function AuditLogsPage() {
-  const directory = useLogDirectory();
+  /**
+   * How many rows to pull. `GET /audit-logs?limit=` applies this *before* any
+   * filter here could run, so on a fest with more history than the window a search
+   * only searches the window — which is why widening it has to be offered rather
+   * than fixed at a constant.
+   */
+  const [limit, setLimit] = useState<number>(TRAIL_LIMIT);
+  const directory = useLogDirectory(limit);
   const [mode, setMode] = useState<Mode>('activity');
 
   /* ------------------------------------------------------- all activity --- */
@@ -360,7 +369,39 @@ export default function AuditLogsPage() {
               shown={visibleEntries.length}
               total={trailEntries.length}
               noun="log entries"
+              // Beside the filters rather than up in the header, because it is one
+              // of them in effect: `limit` decides what there is to filter. The
+              // `GET /audit-logs?limit=` parameter had no control at all before.
+              trailing={
+                <div className="w-40 shrink-0">
+                  <Select
+                    label="Rows"
+                    value={String(limit)}
+                    onChange={(e) => setLimit(Number(e.target.value))}
+                    options={TRAIL_LIMIT_OPTIONS.map((option) => ({
+                      value: String(option),
+                      label: `Newest ${option.toLocaleString()}`,
+                    }))}
+                  />
+                </div>
+              }
             />
+
+            {/* `truncated` has always been computed here and never shown, so a
+                filter that found nothing looked like "it never happened" when it
+                could equally have been "it happened before this window". Says which,
+                and offers the wider window when there is one. */}
+            {directory.truncated && (
+              <ResultBanner
+                variant="warning"
+                title={`Showing the newest ${limit.toLocaleString()} of ${
+                  directory.exact ? directory.total.toLocaleString() : 'more'
+                } recorded actions`}
+              >
+                Filters and search apply to this window only — the server trims the trail before
+                they run. {nextLimit(limit) !== null && 'Load more to search further back.'}
+              </ResultBanner>
+            )}
 
             {/* Explains the rows that lead with a code instead of a name, once, at
                 the top — rather than leaving a reader to wonder row by row why
@@ -510,4 +551,9 @@ function DomainTab({
       <span className={active ? 'text-white/80' : 'text-muted'}>{count}</span>
     </button>
   );
+}
+
+/** The next larger row window, or `null` at the widest one offered. */
+function nextLimit(current: number): number | null {
+  return TRAIL_LIMIT_OPTIONS.find((option) => option > current) ?? null;
 }

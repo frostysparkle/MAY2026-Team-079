@@ -168,13 +168,21 @@ function Group({ title, entries }: { title: string; entries: Entry[] }) {
                   ? `Team ${registration.team_id} · ${registration.team_role}`
                   : 'Solo entry'
               }
+              // Every tile here *is* a registration, so "Registered" is the
+              // constant and the closure is the news. Previously the two were
+              // alternatives, which made a closed entry read as though the
+              // registration had lapsed — and used wording the catalogue did not.
               badge={
-                <StatusBadge
-                  tone={event.open ? 'success' : 'neutral'}
-                  className="shadow-card ring-1 ring-line"
-                >
-                  {event.open ? 'Registered' : 'Closed'}
-                </StatusBadge>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <StatusBadge tone="success" className="shadow-card ring-1 ring-line">
+                    Registered
+                  </StatusBadge>
+                  {!event.open && (
+                    <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
+                      Registration Closed
+                    </StatusBadge>
+                  )}
+                </span>
               }
             />
           );

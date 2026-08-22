@@ -3,27 +3,41 @@ import { ROUTES } from '@/config/routes';
 import { homeRoute } from '@/features/landing/roleSections';
 
 /**
- * Where a user lands after a successful sign-in: their Landing Page.
+ * Where a user lands after a successful sign-in.
  *
- * Signing in does not switch the app into a different kind of interface. It puts
- * the user on the same PARADOX portal a visitor sees, with the sections around
- * the wordmark filtered to what their role may open — so `/` → `/app` → `/staff`
- * are one experience, not three.
+ * Signing in does not switch the app into a different kind of interface — the
+ * PARADOX portal at `homeRoute` remains every session's Home, reachable from the
+ * wordmark on every screen. What this decides is narrower: the first screen worth
+ * putting somebody on, which the guide words as routing "to the correct dashboard
+ * after login" using `token_type` and, for staff, `role`.
  *
  * Participants with an incomplete profile (`full_name === null`, the backend's
  * "profile is {}" signal) always go to Complete Your Profile first.
  *
- * There is no role branch left here. It used to send a Super Admin to the
- * fest-wide control board and everyone else to their personal duty list, because
- * a Super Admin is on none of those teams and would arrive at a near-empty page.
- * Both are now sections *on* the staff landing — Overview for a Super Admin,
- * Duties for everyone else — chosen by `landingSections`, so the entry point
- * itself no longer needs to know. There is still no static role hierarchy driving
- * what a staffer can *see*; the backend enforces that.
+ * For staff the destination is the work, not the portal:
+ *
+ * | Who | Lands on | Why |
+ * |---|---|---|
+ * | `role: "super_admin"` | Fest Control Board | Fest-wide figures. They are on no entity team, so a duty list would be empty. |
+ * | Everybody else | Duties | Their scanners, menu desks, participation views and answering queues — the whole reason they have an account. |
+ *
+ * There is deliberately no branch for `event_head`, UHC or a domain admin beyond
+ * that. All three are recognised — `isEventHead`, `isUhc`, `isDomainAdminFor` —
+ * but recognised *per entity*, from the team arrays the catalogue routes return,
+ * which is not knowable at the moment of signing in without fetching every event.
+ * `StaffHomePage` does that fetch and is what builds each of them their own
+ * board: an Event Head sees Allocate/Edit Teams for their events, a UHC member and
+ * a domain admin see Participation & Reports for the events they may read. So one
+ * destination genuinely serves all three, and it is the right one.
+ *
+ * A previous revision sent every staff session to the portal instead. That was a
+ * defensible reading of the portal-as-landing design, but it made signing in cost
+ * an extra hop for every volunteer and put nobody in front of their work.
  */
 export function postLoginRoute(session: Session): string {
-  if (session.token_type === 'participant' && session.full_name === null) {
-    return ROUTES.completeProfile;
+  if (session.token_type === 'participant') {
+    if (session.full_name === null) return ROUTES.completeProfile;
+    return homeRoute(session);
   }
-  return homeRoute(session);
+  return session.role === 'super_admin' ? ROUTES.adminOverview : ROUTES.staffDuties;
 }

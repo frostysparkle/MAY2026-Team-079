@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   Phone,
   QrCode,
+  RefreshCw,
   Ticket,
   User,
   Wrench,
@@ -22,6 +23,7 @@ import {
   BUTTON_ICON_STROKE,
   Card,
   CardRow,
+  ProgressBar,
   ResultBanner,
   SectionBlock,
   Skeleton,
@@ -30,6 +32,8 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
+import { EntryQrCard } from '@/features/qr/EntryQrCard';
+import { QR_REFRESH_SECONDS, useLiveQr } from '@/features/qr/useLiveQr';
 import { PanelMasonry } from '@/components/layout/PanelMasonry';
 import { MessWidget } from '@/features/mess/MessWidget';
 import { HostelWidget } from '@/features/hostel/HostelWidget';
@@ -409,11 +413,17 @@ export default function DashboardPage() {
         </Panel>
 
         <Panel title="My Pass">
+          {/* The live pass itself, on the dashboard the guide names — not just a
+              link to it. Smaller than the full-screen card on My QR, since this is
+              a glance rather than the thing being held up at a gate, but the same
+              component encrypting the same payload on the same 45 s cycle, with
+              the countdown beside it so a participant can see it is current. */}
+          <QrPass />
           <Link to={ROUTES.myQr}>
             <CardRow
               icon={QrCode}
-              title="My Digital ID"
-              subtitle="Show your QR at any checkpoint"
+              title="Open full screen"
+              subtitle="Bigger code, easier to scan at a checkpoint"
             />
           </Link>
           <Link to={ROUTES.profile}>
@@ -454,5 +464,42 @@ function Panel({
     <SectionBlock title={title} meta={meta}>
       <div className="flex flex-col gap-3">{children}</div>
     </SectionBlock>
+  );
+}
+
+/**
+ * The participant's live entry pass, inline on the dashboard.
+ *
+ * A component of its own so `useLiveQr`'s timers mount and unmount with the panel
+ * rather than with the whole page, and so the dashboard's own data loading is not
+ * re-rendered by the one-second countdown tick.
+ *
+ * `EntryQrCard` and the countdown are the same ones My QR uses — one encryption
+ * cycle, one refresh window, one visual object. The card is smaller here because
+ * this is a glance; the row underneath opens the full-screen version for actually
+ * presenting at a gate.
+ */
+function QrPass() {
+  const qr = useLiveQr();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <EntryQrCard qr={qr} size={150} />
+      {qr.status === 'ready' && (
+        <div className="flex flex-col gap-1.5">
+          <span className="flex items-center justify-between gap-2 text-xs tabular-nums text-muted">
+            <span className="flex items-center gap-1.5">
+              <RefreshCw size={11} strokeWidth={2.5} aria-hidden /> Refreshes automatically
+            </span>
+            <span>in {qr.secondsRemaining}s</span>
+          </span>
+          <ProgressBar
+            value={qr.secondsRemaining}
+            max={QR_REFRESH_SECONDS}
+            label="Seconds until this QR code refreshes"
+          />
+        </div>
+      )}
+    </div>
   );
 }

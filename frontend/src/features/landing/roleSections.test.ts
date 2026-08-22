@@ -115,18 +115,27 @@ describe('landingSections', () => {
 });
 
 describe('postLoginRoute', () => {
-  it('lands every role on their own Landing Page', () => {
+  it('lands a participant on their Landing Page', () => {
     expect(postLoginRoute(participant())).toBe(ROUTES.home);
-    expect(postLoginRoute(staff('super_admin'))).toBe(ROUTES.staffHome);
-    expect(postLoginRoute(staff('volunteer'))).toBe(ROUTES.staffHome);
   });
 
   it('still diverts an unfinished participant profile', () => {
     expect(postLoginRoute(participant({ full_name: null }))).toBe(ROUTES.completeProfile);
   });
 
-  it('no longer drops a Super Admin straight into the control board', () => {
-    // Overview is a section *on* their landing now, not the entry point.
-    expect(postLoginRoute(staff('super_admin'))).not.toBe(ROUTES.adminOverview);
+  it('routes staff by role, as the guide asks', () => {
+    // A Super Admin is on no entity team, so a duty list would be empty for them;
+    // the fest-wide board is the only thing that reads.
+    expect(postLoginRoute(staff('super_admin'))).toBe(ROUTES.adminOverview);
+    // Everybody else lands on their work rather than on the portal.
+    expect(postLoginRoute(staff('volunteer'))).toBe(ROUTES.staffDuties);
+    expect(postLoginRoute(staff('event_head'))).toBe(ROUTES.staffDuties);
+    expect(postLoginRoute(staff('other'))).toBe(ROUTES.staffDuties);
+  });
+
+  it('never sends staff into the participant tree, or a participant into the staff tree', () => {
+    expect(postLoginRoute(staff('super_admin')).startsWith('/app')).toBe(false);
+    expect(postLoginRoute(staff('volunteer')).startsWith('/app')).toBe(false);
+    expect(postLoginRoute(participant()).startsWith('/staff')).toBe(false);
   });
 });

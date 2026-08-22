@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Eye, LayoutGrid, List, Plus, RefreshCw, ScanLine, Shuffle } from 'lucide-react';
-import { api, ApiClientError } from '@/api';
+import { api } from '@/api';
+import { reportApiError } from '@/api/report';
 import type { HostelCreateRequest } from '@/api/types';
 import {
   ANY,
@@ -119,7 +120,7 @@ export default function AdminHostelsPage() {
       await work();
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : fallback);
+      setActionError(reportApiError(e, fallback));
     } finally {
       setBusy(false);
     }
@@ -134,7 +135,7 @@ export default function AdminHostelsPage() {
       setShowCreate(false);
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not create hostel.');
+      setActionError(reportApiError(e, 'Could not create hostel.'));
     } finally {
       setBusy(false);
     }
@@ -148,7 +149,7 @@ export default function AdminHostelsPage() {
       // Allocation moves participants into blocks, so every figure just changed.
       await inventory.load();
     } catch (e) {
-      setActionError(e instanceof ApiClientError ? e.message : 'Could not allocate.');
+      setActionError(reportApiError(e, 'Could not allocate.'));
     } finally {
       setBusy(false);
     }
@@ -324,9 +325,9 @@ export default function AdminHostelsPage() {
           loading={inventory.loading}
           busy={busy}
           onClose={() => setDetailId(null)}
-          onAssignTeam={(userId) =>
+          onAssignTeam={(userId, role) =>
             void run(
-              () => api.assignHostelTeam(detailRow.id, { user_id: userId, role: 'other' }),
+              () => api.assignHostelTeam(detailRow.id, { user_id: userId, role }),
               'Could not assign team member.',
             )
           }

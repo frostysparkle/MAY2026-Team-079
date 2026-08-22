@@ -1,8 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
-import { ToggleLeft, ToggleRight, UserPlus, Users, UtensilsCrossed, X } from 'lucide-react';
+import {
+  Download,
+  ToggleLeft,
+  ToggleRight,
+  UserPlus,
+  Users,
+  UtensilsCrossed,
+  X,
+} from 'lucide-react';
 import type { MessStatisticsResponse } from '@/api/types';
-import { Button, EmptyState, ProgressRing, Spinner, StatusBadge, TextInput } from '@/components/ui';
+import {
+  Button,
+  EmptyState,
+  ProgressRing,
+  Select,
+  Spinner,
+  StatusBadge,
+  TextInput,
+} from '@/components/ui';
 import { OCCUPANCY_STATUS, occupancyTone } from '@/features/occupancy';
+import { exportMessRoster } from '@/features/staff/analyticsExport';
+import {
+  FACILITY_TEAM_ROLES,
+  FACILITY_VOLUNTEER_ROLE,
+  facilityRoleLabel,
+  type FacilityTeamRole,
+} from '@/features/stay/facilityTeam';
 import { type MessRow } from './messOccupancy';
 
 /**
@@ -29,10 +52,11 @@ export function MessDetailDialog({
   /** An action is in flight; disables the controls that would race it. */
   busy: boolean;
   onClose: () => void;
-  onAssignTeam: (userId: string) => void;
+  onAssignTeam: (userId: string, role: FacilityTeamRole) => void;
   onToggleScan: (userId: string, logging: boolean) => void;
 }) {
   const [teamUserId, setTeamUserId] = useState('');
+  const [teamRole, setTeamRole] = useState<FacilityTeamRole>(FACILITY_VOLUNTEER_ROLE);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -141,7 +165,7 @@ export function MessDetailDialog({
                         {member.name ?? member.user_id}
                       </p>
                       <p className="truncate text-xs text-muted">
-                        {member.role}
+                        {facilityRoleLabel(member.role)}
                         {member.phone ? ` · ${member.phone}` : ''}
                       </p>
                     </div>
@@ -166,13 +190,23 @@ export function MessDetailDialog({
                 onChange={(e) => setTeamUserId(e.target.value)}
                 placeholder="e.g. BT1000000003"
               />
+              {/* The role used to be hardcoded `other`, so a student volunteer was
+                  filed as staff and the duty list said so. Both values scan from
+                  assignment, so this records what somebody is, not what they may do. */}
+              <Select
+                label="Role on this hall"
+                value={teamRole}
+                onChange={(e) => setTeamRole(e.target.value as FacilityTeamRole)}
+                options={FACILITY_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                hint={FACILITY_TEAM_ROLES.find((r) => r.value === teamRole)?.blurb}
+              />
               <Button
                 size="sm"
                 variant="secondary"
                 className="w-fit"
                 disabled={busy || !teamUserId.trim()}
                 onClick={() => {
-                  onAssignTeam(teamUserId.trim());
+                  onAssignTeam(teamUserId.trim(), teamRole);
                   setTeamUserId('');
                 }}
               >
@@ -183,9 +217,18 @@ export function MessDetailDialog({
 
           {/* ---- roster ---- */}
           <section className="flex flex-col gap-3">
-            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink">
-              <UtensilsCrossed size={15} strokeWidth={2.25} aria-hidden /> Allotted participants
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink">
+                <UtensilsCrossed size={15} strokeWidth={2.25} aria-hidden /> Allotted participants
+              </h3>
+              {/* Journey E.10. Reaching this roster off-screen used to mean reading
+                  it off the dialog row by row. */}
+              {stat && stat.allotted_participants.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={() => exportMessRoster(row.id, stat)}>
+                  <Download size={14} /> Export CSV
+                </Button>
+              )}
+            </div>
 
             {loading ? (
               <div className="flex justify-center py-6">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DoorOpen, Download, ScanLine, Ticket, Users } from 'lucide-react';
+import { DoorOpen, Download, Phone, ScanLine, Ticket, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, EventParticipationResponse } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
@@ -8,6 +8,12 @@ import { isUhc, uhcHouse } from '@/stores/authStore';
 import { toCsv, downloadCsv } from '@/lib/csv';
 import { ADMITTED_NOTE, readEventCapacity } from '@/features/events/eventCapacity';
 import { readEventExtras } from '@/features/events/eventExtras';
+import {
+  eventTeamRoleLabel,
+  isEventHeadRole,
+  isReachablePhone,
+  orderEventTeam,
+} from '@/features/events/eventTeam';
 import {
   Avatar,
   Button,
@@ -205,20 +211,54 @@ export default function EventParticipationPage() {
         </section>
       )}
 
+      {/* A directory, not a list of names.
+          `event_team` is the only place in the API where an Event Head's and a
+          volunteer's phone number is readable, and it is exactly what the guide
+          wants UHC to have here — but the number came back on every row and was
+          never rendered, so this section could name the person to ring and not
+          how to ring them. Heads sort first, since they are who a house officer
+          or a domain admin actually needs. */}
       {data.event_team.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.12em] text-ink">Event team</h2>
-          <div className="flex flex-wrap gap-2">
-            {data.event_team.map((member) => (
-              <span
-                key={member.user_id}
-                className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm font-semibold text-ink shadow-card ring-1 ring-line"
-              >
-                {member.name || member.user_id}
-                <StatusBadge tone="info">{member.role.replace(/_/g, ' ')}</StatusBadge>
-              </span>
-            ))}
-          </div>
+          <h2 className="text-sm font-black uppercase tracking-[0.12em] text-ink">
+            Event team{' '}
+            <span className="font-semibold normal-case tracking-normal text-muted">
+              · who to contact
+            </span>
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {orderEventTeam(data.event_team).map((member) => {
+              const reachable = isReachablePhone(member.phone);
+              return (
+                <li key={`${member.user_id}-${member.role}`}>
+                  <Card className="flex items-center gap-3">
+                    <Avatar name={member.name || member.user_id} size={36} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">
+                        {member.name || member.user_id}
+                      </p>
+                      {reachable ? (
+                        <a
+                          href={`tel:${member.phone}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-brand underline"
+                        >
+                          <Phone size={11} strokeWidth={2.5} />
+                          {member.phone}
+                        </a>
+                      ) : (
+                        // The backend substitutes the literal "Unknown" when the
+                        // member has no participant profile to read a phone from.
+                        <p className="text-xs text-muted">No number on record</p>
+                      )}
+                    </div>
+                    <StatusBadge tone={isEventHeadRole(member.role) ? 'info' : 'neutral'}>
+                      {eventTeamRoleLabel(member.role)}
+                    </StatusBadge>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 
@@ -242,6 +282,17 @@ export default function EventParticipationPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-ink">{p.name || p.participant_id}</p>
                     <p className="truncate text-xs text-muted">{p.email}</p>
+                    {/* The number was already in the CSV and nowhere on screen,
+                        so reaching one participant meant exporting all of them. */}
+                    {isReachablePhone(p.phone) && (
+                      <a
+                        href={`tel:${p.phone}`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand underline"
+                      >
+                        <Phone size={11} strokeWidth={2.5} />
+                        {p.phone}
+                      </a>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     {p.house && <StatusBadge tone="neutral">{p.house}</StatusBadge>}

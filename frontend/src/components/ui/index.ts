@@ -6,6 +6,7 @@ export { Select } from './Select';
 export type { SelectOption } from './Select';
 export { ResultBanner } from './ResultBanner';
 export type { BannerVariant } from './ResultBanner';
+export { FieldErrors } from './FieldErrors';
 export { Spinner } from './Spinner';
 export { Skeleton } from './Skeleton';
 export { EmptyState } from './EmptyState';

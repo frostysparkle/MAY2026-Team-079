@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ParticipantLoginResponse, StaffLoginResponse } from '@/api/types';
+import { resetWorkshopBookings } from '@/features/workshops/registrationCache';
 
 export type ParticipantSession = ParticipantLoginResponse;
 export type StaffSession = StaffLoginResponse;
@@ -68,6 +69,11 @@ export const useAuthStore = create<AuthState>()(
       clear: () => {
         safeStorage.remove();
         set({ session: null });
+        // Per-session caches keyed to *this* participant have to go with the
+        // session, or the next person to sign in on this device inherits their
+        // workshop clashes. Done here rather than at the six sign-out buttons, so
+        // a seventh cannot forget.
+        resetWorkshopBookings();
       },
     }),
     { name: 'pc_auth_v2' },

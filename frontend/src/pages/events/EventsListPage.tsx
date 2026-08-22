@@ -163,18 +163,24 @@ export default function EventsListPage() {
                   poster={event.poster}
                   fallbackImage={section.image}
                   meta={metaFor(event)}
+                  // Both facts when both apply. The ternary this replaces hid the
+                  // closed state from anybody already registered, so the one
+                  // person who most needs to know that entries are shut — because
+                  // it is also when they can no longer cancel — was the one told
+                  // nothing. "Registration Closed" in full, as the guide words it.
                   badge={
-                    registeredIds.has(event.event_id) ? (
-                      <StatusBadge tone="success" className="shadow-card ring-1 ring-line">
-                        Registered
-                      </StatusBadge>
-                    ) : (
-                      !event.open && (
-                        <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
-                          Closed
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {registeredIds.has(event.event_id) && (
+                        <StatusBadge tone="success" className="shadow-card ring-1 ring-line">
+                          Registered
                         </StatusBadge>
-                      )
-                    )
+                      )}
+                      {!event.open && (
+                        <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
+                          Registration Closed
+                        </StatusBadge>
+                      )}
+                    </span>
                   }
                 />
               ))}

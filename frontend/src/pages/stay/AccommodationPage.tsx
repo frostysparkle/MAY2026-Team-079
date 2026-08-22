@@ -18,7 +18,8 @@ import {
   UtensilsCrossed,
   Wallet,
 } from 'lucide-react';
-import { api, ApiClientError } from '@/api';
+import { api } from '@/api';
+import { reportApiError } from '@/api/report';
 import type {
   Hostel,
   Mess,
@@ -192,9 +193,7 @@ export default function AccommodationPage() {
       try {
         updateParticipantProfile(await api.completeProfile(payload));
       } catch (e) {
-        setActionError(
-          e instanceof ApiClientError ? e.message : 'Could not save your meal preference.',
-        );
+        setActionError(reportApiError(e, 'Could not save your meal preference.'));
         return;
       } finally {
         setBusy(false);
@@ -236,9 +235,7 @@ export default function AccommodationPage() {
       updateParticipantProfile(await api.completeProfile(payload));
       await reload();
     } catch (e) {
-      setActionError(
-        e instanceof ApiClientError ? e.message : 'Could not save your meal preference.',
-      );
+      setActionError(reportApiError(e, 'Could not save your meal preference.'));
     } finally {
       setBusy(false);
     }
@@ -276,9 +273,7 @@ export default function AccommodationPage() {
       setEditing(true);
       await reload();
     } catch (e) {
-      setActionError(
-        e instanceof ApiClientError ? e.message : 'Could not withdraw your current selection.',
-      );
+      setActionError(reportApiError(e, 'Could not withdraw your current selection.'));
     } finally {
       setBusy(false);
     }
