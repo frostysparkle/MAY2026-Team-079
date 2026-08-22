@@ -29,7 +29,7 @@ import log_config
 from database import participants_collection, backend_teams_collection
 from log_redaction import fingerprint, safe_email
 from logger import log_denied
-from security import SECRET_KEY, ALGORITHM, decrypt_qr_data
+from security import SECRET_KEY, ALGORITHM, decrypt_private_key, decrypt_qr_data
 
 security = HTTPBearer()
 
@@ -290,7 +290,7 @@ def verify_qr(request, actor: Any = None, domain: Optional[str] = None, target_i
         )
 
     try:
-        decrypted_payload = decrypt_qr_data(private_key, request.data)
+        decrypted_payload = decrypt_qr_data(decrypt_private_key(private_key), request.data)
     except Exception as exc:
         # The most valuable of the five. `decrypt_qr_data` fails for reasons that
         # demand completely different responses — a truncated scan, a payload

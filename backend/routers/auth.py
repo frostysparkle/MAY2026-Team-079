@@ -21,7 +21,8 @@ from log_redaction import safe_email
 from logger import log_audit, log_denied
 from security import (
     get_password_hash, verify_password, create_access_token,
-    generate_rsa_key_pair, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
+    generate_rsa_key_pair, encrypt_private_key, ACCESS_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY, ALGORITHM,
 )
 from embedding_service import zero_embedding
 
@@ -220,7 +221,11 @@ def register(request: RegisterRequest):
         },
         "photo": None,
         "qr_secrets": {
-            "private_key": private_key,
+            # Stored envelope-encrypted (AES-256-GCM under QR_MASTER_KEY) —
+            # this PEM *is* the participant's digital identity, so a DB dump
+            # must not read as a keyring. decrypt_private_key() unwraps it at
+            # every scanner call-site; the public half stays plaintext.
+            "private_key": encrypt_private_key(private_key),
             "public_key": public_key
         },
         "embedding": {
