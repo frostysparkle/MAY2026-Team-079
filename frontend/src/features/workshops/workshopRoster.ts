@@ -1,4 +1,5 @@
 import type { Workshop, WorkshopLogRow, WorkshopParticipationRow } from '@/api/types';
+import { parseParticipantId, PROGRAM_LABEL } from '@/features/participants/participantId';
 
 /**
  * Who booked a workshop, who turned up, and who did not — derived from the only
@@ -65,44 +66,13 @@ export interface RosterEntry {
   source: RosterSource;
 }
 
-/** The four BS programmes, keyed by the prefix `participant_id` carries. */
-export const PROGRAM_LABEL: Record<string, string> = {
-  DS: 'Data Science',
-  ES: 'Electronic Systems',
-  MS: 'Management & Data Science',
-  AE: 'Aeronautics & Space Tech',
-};
-
 /**
- * `DS23F3001726` → programme `DS`, entry year 2023.
- *
- * The id is `generate_participant_id`'s output: the programme letters from the
- * email domain followed by the uppercased roll number, which the dataset
- * guarantees to be `YYF<term><six digits>`. An id that does not match — a staff
- * account, or a participant who registered with a non-IITM address — yields
- * nulls rather than a guess.
- *
- * Note what is *not* here: the academic level (Foundation / Diploma / Degree).
- * It lives in `profile.course_stage` and `profile.academic_level`, and no
- * endpoint returns either for anybody but the signed-in participant themselves,
- * so it cannot be derived from an id. Entry year is the closest real signal the
- * id carries, and it is a cohort, not a level.
+ * The roll-number derivations now live in `features/participants/participantId`,
+ * because the event roster reads them too and neither module owns them. Re-exported
+ * so this module's own call sites — and the tests that cover them here — keep
+ * reaching them from where they have always been.
  */
-export function parseParticipantId(participantId: string): {
-  program: string | null;
-  entryYear: number | null;
-} {
-  const match = /^([A-Z]{2})(\d{2})[A-Z]\d{7}$/.exec(participantId.trim().toUpperCase());
-  if (!match) return { program: null, entryYear: null };
-  const program = match[1];
-  const year = Number.parseInt(match[2], 10);
-  return {
-    program: program in PROGRAM_LABEL ? program : null,
-    // Two-digit years in this dataset are all 20xx: the earliest programme
-    // opened in 2020 and the fest runs in 2026.
-    entryYear: Number.isFinite(year) ? 2000 + year : null,
-  };
-}
+export { PROGRAM_LABEL, parseParticipantId } from '@/features/participants/participantId';
 
 function blankEntry(participantId: string, source: RosterSource): RosterEntry {
   const { program, entryYear } = parseParticipantId(participantId);

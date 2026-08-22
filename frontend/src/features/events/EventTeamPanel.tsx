@@ -46,6 +46,15 @@ import {
  *   - There is no route that removes an event team member, and events have no
  *     per-member scanning switch. So unlike the workshop panel this one offers
  *     neither, and says so rather than showing a control that cannot work.
+ *
+ * One dropdown, not two fields. Staffing somebody used to ask for a role on the
+ * event *and* a free-text "Designation on record" for their staff account, the
+ * second pre-filled from the first. The scopes really do differ — `event_team[].role`
+ * is per-event and enforced by the backend, `backend_teams.designation` is one
+ * unenforced display string per account — but this panel only ever creates an
+ * account for this event, so the two always agreed and the labels read as
+ * synonyms. The role now supplies both, and `EditStaffForm` under Staff is where a
+ * designation gets a title broader than one event's role.
  */
 export function EventTeamPanel({
   eventId,
@@ -71,7 +80,6 @@ export function EventTeamPanel({
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [designation, setDesignation] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -155,20 +163,34 @@ export function EventTeamPanel({
         email: email.trim(),
         password,
         // `backend_teams.role` is the account's fest-wide role and a separate
-        // vocabulary from the per-event designation below. `volunteer` is the
-        // non-privileged value: an Event Head's authority comes from being named
+        // vocabulary from the per-event role chosen in the dropdown. `volunteer` is
+        // the non-privileged value: an Event Head's authority comes from being named
         // on `event_team`, not from their account role, so minting a
         // `super_admin` here would hand out far more than this panel is for.
         role: 'volunteer',
         department: 'events',
-        designation: designation.trim() || label,
+        // Derived from the role dropdown rather than collected separately. This
+        // used to be a free-text "Designation on record" box sitting directly
+        // under that dropdown, pre-filled with this same label — two fields whose
+        // values matched in every ordinary case, and whose names read as synonyms.
+        //
+        // The two are genuinely different in scope: `role` above is per-event and
+        // the backend enforces it, while `designation` is one string on the account
+        // that nothing checks, shown in the staff directory, on the staffer's own
+        // dashboard, beside announcements they post, and as the audit trail's name
+        // fallback. But that difference never justified a second input here, since
+        // this panel only ever creates an account *for this event*. A designation
+        // that should say something broader — "Technicals Core", or the right title
+        // for somebody who works several events — is an edit to the account, and
+        // `EditStaffForm` under Staff already does that through
+        // `PUT /backend_teams/{paradox_id}`.
+        designation: label,
       });
       newId = created.paradox_id;
       await api.assignEventTeam(eventId, { user_id: created.paradox_id, role });
       setNotice(`${email.trim()} created as ${label} (${created.paradox_id})`);
       setEmail('');
       setPassword('');
-      setDesignation('');
       // Refresh the directory too, so the new account shows in the picker.
       api
         .listBackendTeams()
@@ -296,6 +318,11 @@ export function EventTeamPanel({
             ))}
           </div>
 
+          {/* The one field that decides both what this person may do on the event
+              and how they are labelled on their staff record — see
+              `createAndAssign`. It sits above the mode-specific fields because it
+              applies to both: assigning an existing account and creating a new one
+              each need a role on this event. */}
           <Select
             label="Role on this event"
             value={role}
@@ -360,13 +387,10 @@ export function EventTeamPanel({
                   onChange={(e) => setPassword(e.target.value)}
                   hint="At least 8 characters."
                 />
-                <TextInput
-                  label="Designation on record"
-                  value={designation}
-                  onChange={(e) => setDesignation(e.target.value)}
-                  placeholder={eventTeamRoleLabel(role)}
-                  hint="Shown on the staff directory. Defaults to the role above."
-                />
+                {/* No designation box: the role dropdown above is the whole
+                    answer, and `createAndAssign` writes its label to the account.
+                    Change it afterwards under Staff if the person needs a title
+                    broader than one event's role. */}
               </div>
 
               <Button
@@ -387,7 +411,8 @@ export function EventTeamPanel({
             <span>
               Every member can scan attendance for this event from the moment they are assigned;
               events have no per-member scanning switch. There is also no route that takes somebody
-              off an event team, so assign deliberately.
+              off an event team, so assign deliberately. A new account is recorded with the role
+              above as its designation, which you can change later under Staff.
             </span>
           </p>
         </Card>

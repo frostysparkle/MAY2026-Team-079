@@ -37,6 +37,12 @@ import {
  *   - There is no route that removes a member. Switching scanning off is the only
  *     way to stand somebody down, so the panel says so rather than offering a
  *     delete that would 404.
+ *
+ * One dropdown, not two fields — the same consolidation `EventTeamPanel` carries,
+ * and for the same reason. Creating a volunteer used to ask for a designation on
+ * the workshop *and* a free-text "Designation on record" for the account,
+ * pre-filled from the first, which made one concept look like two. The dropdown
+ * now supplies both; a broader title is an edit under Staff.
  */
 export function WorkshopTeamPanel({
   workshopId,
@@ -61,7 +67,6 @@ export function WorkshopTeamPanel({
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [designation, setDesignation] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -134,11 +139,24 @@ export function WorkshopTeamPanel({
         email: email.trim(),
         password,
         // `backend_teams.role` is the account's fest-wide role and is a separate
-        // vocabulary from the per-workshop designation below; `volunteer` is the
-        // non-privileged value, which is what a door role should be.
+        // vocabulary from the per-workshop designation chosen in the dropdown;
+        // `volunteer` is the non-privileged value, which is what a door role
+        // should be.
         role: 'volunteer',
         department: 'workshops',
-        designation: designation.trim() || label,
+        // Derived from the designation dropdown rather than collected separately,
+        // matching `EventTeamPanel` — the two panels are written as mirrors. There
+        // was a free-text "Designation on record" box under that dropdown holding
+        // this exact label by default, which made one concept look like two.
+        //
+        // `workshop_team[].role` is per-workshop and privileges nothing (the
+        // backend's only switch is `attendance`); `backend_teams.designation` is one
+        // display string on the account, read by the staff directory, the staffer's
+        // own dashboard, announcement attribution, and the audit trail's name
+        // fallback. Different scopes, but this panel only ever creates an account
+        // for this workshop, so one choice covers both. `EditStaffForm` under Staff
+        // changes a designation afterwards.
+        designation: label,
       });
       newId = created.paradox_id;
       await api.assignWorkshopVolunteer(workshopId, {
@@ -149,7 +167,6 @@ export function WorkshopTeamPanel({
       setNotice(`${email.trim()} created as ${label} (${created.paradox_id})`);
       setEmail('');
       setPassword('');
-      setDesignation('');
       // Refresh the directory too, so the new account shows in the picker.
       api
         .listBackendTeams()
@@ -304,6 +321,9 @@ export function WorkshopTeamPanel({
             ))}
           </div>
 
+          {/* The one field that decides both what this person is labelled as on the
+              workshop and what goes on their staff record — see `createAndAssign`.
+              Above the mode-specific fields because it applies to both. */}
           <Select
             label="Designation on this workshop"
             value={role}
@@ -363,13 +383,9 @@ export function WorkshopTeamPanel({
                   onChange={(e) => setPassword(e.target.value)}
                   hint="At least 8 characters."
                 />
-                <TextInput
-                  label="Designation on record"
-                  value={designation}
-                  onChange={(e) => setDesignation(e.target.value)}
-                  placeholder={workshopRoleLabel(role)}
-                  hint="Shown on the staff directory. Defaults to the designation above."
-                />
+                {/* No designation box: the dropdown above is the whole answer, and
+                    `createAndAssign` writes its label to the account. Change it
+                    afterwards under Staff if the person needs a broader title. */}
               </div>
 
               <Button
@@ -386,7 +402,8 @@ export function WorkshopTeamPanel({
 
           <p className="text-xs text-muted">
             Scanning is on from the moment somebody is assigned. Switch it off to stand a volunteer
-            down for a shift, or remove them to take them off this workshop entirely.
+            down for a shift, or remove them to take them off this workshop entirely. A new account
+            is recorded with the designation above, which you can change later under Staff.
           </p>
         </Card>
       )}
