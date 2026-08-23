@@ -411,6 +411,8 @@ export interface EventParticipant {
   house: string | null;
   team_id: string | null;
   team_role: string | null;
+  /** The participant's uploaded profile photo, when they have one. */
+  photo: string | null;
 }
 
 export interface EventParticipationResponse {
@@ -491,6 +493,23 @@ export type EventUpdateRequest = Partial<Omit<EventCreateRequest, 'event_id'>> &
   open?: boolean;
 };
 
+/**
+ * The body `POST /events/recommendations` and `POST /workshops/recommendations`
+ * take — free text, or omitted/empty to fall back to the participant's saved
+ * preference embedding for that domain.
+ */
+export interface RecommendationRequest {
+  query?: string | null;
+}
+
+/**
+ * An event as the recommendations endpoint returns it: every event that
+ * exists, each carrying its cosine similarity (-1..1) to the query or saved
+ * preference embedding. Nothing is filtered out — only reordered, most
+ * similar first.
+ */
+export type RecommendedEvent = Event & { similarity: number };
+
 export interface EventTeamAssignRequest {
   user_id: string;
   role: 'event_head' | 'event_member' | 'volunteer';
@@ -548,6 +567,14 @@ export interface WorkshopCreateRequest {
 }
 
 export type WorkshopUpdateRequest = Partial<Omit<WorkshopCreateRequest, 'workshop_id'>>;
+
+/**
+ * A workshop as the recommendations endpoint returns it: every workshop that
+ * exists, each carrying its cosine similarity (-1..1) to the query or saved
+ * preference embedding. Nothing is filtered out — only reordered, most
+ * similar first.
+ */
+export type RecommendedWorkshop = Workshop & { similarity: number };
 
 export interface WorkshopAssignVolunteerRequest {
   user_id: string;

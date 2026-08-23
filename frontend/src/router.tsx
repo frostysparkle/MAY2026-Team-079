@@ -28,7 +28,6 @@ import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import MyQrPage from '@/pages/MyQrPage';
 import AccommodationPage from '@/pages/stay/AccommodationPage';
 import StayPaymentPage from '@/pages/stay/StayPaymentPage';
-import AnnouncementsPage from '@/pages/AnnouncementsPage';
 import SupportPage from '@/pages/support/SupportPage';
 
 import EventsListPage from '@/pages/events/EventsListPage';
@@ -60,7 +59,6 @@ import AdminMessPage from '@/pages/staff/admin/AdminMessPage';
 import AdminHostelsPage from '@/pages/staff/admin/AdminHostelsPage';
 import AdminBackendTeamsPage from '@/pages/staff/admin/AdminBackendTeamsPage';
 import AdminParticipantsPage from '@/pages/staff/admin/AdminParticipantsPage';
-import AdminAnnouncementsPage from '@/pages/staff/admin/AdminAnnouncementsPage';
 import AuditLogsPage from '@/pages/staff/admin/AuditLogsPage';
 import EntityLogsPage from '@/pages/staff/admin/EntityLogsPage';
 
@@ -214,7 +212,6 @@ export const routes: RouteObject[] = [
           { path: 'workshops/:workshopId', element: <WorkshopDetailPage /> },
           { path: 'accommodation', element: <AccommodationPage /> },
           { path: 'accommodation/payment', element: <StayPaymentPage /> },
-          { path: 'announcements', element: <AnnouncementsPage /> },
           { path: 'support', element: <SupportPage /> },
           // The three routes Help & Support was consolidated out of. Kept as
           // redirects rather than deleted: they are on students' bookmarks and in
@@ -288,7 +285,6 @@ export const routes: RouteObject[] = [
       { path: ROUTES.adminHostels, element: <AdminHostelsPage /> },
       { path: ROUTES.adminBackendTeams, element: <AdminBackendTeamsPage /> },
       { path: ROUTES.adminParticipants, element: <AdminParticipantsPage /> },
-      { path: ROUTES.adminAnnouncements, element: <AdminAnnouncementsPage /> },
       { path: ROUTES.adminAuditLogs, element: <AuditLogsPage /> },
       { path: ROUTES.adminEntityLogs, element: <EntityLogsPage /> },
     ],

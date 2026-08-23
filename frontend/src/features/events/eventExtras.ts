@@ -61,16 +61,6 @@ const ID_PROOF_KEY = 'id_proof';
 const ALLOWED_ITEMS_KEY = 'allowed_items';
 /** Gate rules, as a JSON array of strings. */
 const ENTRY_RULES_KEY = 'entry_rules';
-/**
- * Official announcements filed on this event, as a JSON array — Stories 8.1/8.2.
- *
- * Exported because `features/announcements/announcements.ts` owns the *contents*
- * of this value, while this module owns its place in the map. The split is
- * deliberate: the event editor has to carry the key through a save without
- * dropping it, and it can do that without understanding a single thing about
- * announcements.
- */
-export const ANNOUNCEMENTS_KEY = 'announcements';
 
 export interface EventFaq {
   q: string;
@@ -127,18 +117,6 @@ export interface EventExtras {
   capacity?: number;
   /** Entry requirements, always present as an object; may be entirely empty. */
   entry: EventEntryInfo;
-  /**
-   * The announcements blob, **unparsed and untouched**.
-   *
-   * This module deliberately does not look inside it. Its only job here is to
-   * survive a round trip: `AdminEventEditorPage` rebuilds the whole registration
-   * map on every save, so a key it cannot read is a key it would delete. Reading
-   * it as an opaque string and writing it straight back means editing an event's
-   * capacity does not silently un-send its notices.
-   *
-   * `features/announcements/announcements.ts` is where the contents are parsed.
-   */
-  announcementsRaw?: string;
 }
 
 /* ------------------------------------------------------------- reading --- */
@@ -227,7 +205,6 @@ export function readEventExtras(registration: Event['registration'] | undefined)
       allowedItems: parseTextList(map[ALLOWED_ITEMS_KEY]),
       rules: parseTextList(map[ENTRY_RULES_KEY]),
     },
-    announcementsRaw: readText(map[ANNOUNCEMENTS_KEY]),
   };
 }
 
@@ -264,12 +241,6 @@ export function writeEventRegistration(input: {
   /** Ignored unless it is a positive whole number; see `parseCapacity`. */
   capacity?: number;
   entry?: Partial<EventEntryInfo>;
-  /**
-   * The announcements blob as read, passed straight back through. Callers that
-   * edit an event should hand back whatever `readEventExtras` gave them; only
-   * the announcements composer builds a new value.
-   */
-  announcementsRaw?: string;
 }): Record<string, string> {
   const map: Record<string, string> = {};
 
@@ -310,8 +281,6 @@ export function writeEventRegistration(input: {
 
   writeAlignedList(map, PRIZE_AMOUNTS_KEY, input.prizeAmounts);
   writeAlignedList(map, ROUND_WHEN_KEY, input.roundWhen);
-
-  if (input.announcementsRaw?.trim()) map[ANNOUNCEMENTS_KEY] = input.announcementsRaw.trim();
 
   return map;
 }

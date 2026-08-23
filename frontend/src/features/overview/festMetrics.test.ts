@@ -73,6 +73,7 @@ function participation(count: number, scans?: number): EventParticipationRespons
       house: null,
       team_id: null,
       team_role: null,
+      photo: null,
     })),
     event_team: [],
     ...(scans === undefined ? {} : { total_daily_scans: scans }),

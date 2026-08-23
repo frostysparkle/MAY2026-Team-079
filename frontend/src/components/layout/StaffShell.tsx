@@ -60,7 +60,6 @@ const NAV: {
   // Story 7.3. Admin-flagged unlike Queries and Issues, because both routes
   // behind it are Super Admin only — a volunteer opening it would get a 403.
   { to: ROUTES.adminParticipants, label: 'Participants', superAdmin: true },
-  { to: ROUTES.adminAnnouncements, label: 'Announcements', superAdmin: true },
   { to: ROUTES.adminAuditLogs, label: 'Audit Logs', superAdmin: true },
 ];
 

@@ -168,21 +168,27 @@ export default function EventDetailPage() {
                   entry also threw away the team. */}
               <RegistrationAnswers event={event} registration={registration} />
 
-              {event.open ? (
-                editing ? (
-                  <EventRegistrationForm
-                    event={event}
-                    mode="edit"
-                    initialAnswers={registration.registration_data}
-                    onRegistered={() => {
-                      setEditing(false);
-                      refresh();
-                    }}
-                    onCancel={() => setEditing(false)}
-                  />
-                ) : (
+              {/* Withdrawing is offered whether or not entries are still open,
+                  because `DELETE /events/{id}/register` accepts it either way.
+                  Only *amending* answers needs an open window, so only that is
+                  behind `event.open` — the two used to share this branch, which
+                  meant a closed window removed the way out of a registration
+                  along with the way to correct it. */}
+              {editing ? (
+                <EventRegistrationForm
+                  event={event}
+                  mode="edit"
+                  initialAnswers={registration.registration_data}
+                  onRegistered={() => {
+                    setEditing(false);
+                    refresh();
+                  }}
+                  onCancel={() => setEditing(false)}
+                />
+              ) : (
+                <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap gap-2">
-                    {hasAnswerableFields(event) && (
+                    {event.open && hasAnswerableFields(event) && (
                       <Button
                         variant="secondary"
                         className="w-fit"
@@ -193,14 +199,16 @@ export default function EventDetailPage() {
                       </Button>
                     )}
                     <Button variant="danger" loading={busy} onClick={cancel} className="w-fit">
-                      Cancel registration
+                      Undo registration
                     </Button>
                   </div>
-                )
-              ) : (
-                <p className="text-sm text-muted">
-                  Registration has closed, so this can no longer be edited or cancelled.
-                </p>
+                  {!event.open && (
+                    <p className="text-sm text-muted">
+                      Registration has closed, so your answers can no longer be changed — but you
+                      can still withdraw.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           ) : (
