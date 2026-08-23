@@ -26,7 +26,6 @@ import type {
   EventTeamRoleUpdateRequest,
   AnnouncementCreateRequest,
   ParticipantTeamUpdateRequest,
-  RecommendationRequest,
   IssueCreateRequest,
   IssueUpdateRequest,
   ParticipantAdminUpdateRequest,
@@ -206,8 +205,15 @@ export const realApi: ApiClient = {
   listAnnouncements: (eventId) => request(`/events/${eventId}/announcements`),
   eventCapacityCounts: (eventId) => request(`/events/${eventId}/capacity`),
   eventLogs: (eventId) => request(`/events/${eventId}/logs`),
-  recommendEvents: (req: RecommendationRequest) =>
-    request('/events/recommendations', { method: 'POST', body: JSON.stringify(req) }),
+
+  // ---- embeddings ----
+  generateEmbedding: async (input: string | string[]) => {
+    const response = await request<{ data: Array<{ embedding: number[] }> }>(
+      '/embeddings',
+      { method: 'POST', body: JSON.stringify({ input }) }
+    );
+    return response.data.map(item => item.embedding);
+  },
 
   // ---- workshop slots ----
   listWorkshopSlots: () => request('/workshop-slots'),
@@ -260,8 +266,6 @@ export const realApi: ApiClient = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  recommendWorkshops: (req: RecommendationRequest) =>
-    request('/workshops/recommendations', { method: 'POST', body: JSON.stringify(req) }),
 
   // ---- backend teams ----
   listBackendTeams: () => request('/backend_teams'),

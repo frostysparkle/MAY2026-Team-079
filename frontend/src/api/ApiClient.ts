@@ -51,9 +51,6 @@ import type {
   EventTeamAssignRequest,
   EventTeamRoleUpdateRequest,
   ParticipantTeamUpdateRequest,
-  RecommendationRequest,
-  RecommendedEvent,
-  RecommendedWorkshop,
   Workshop,
   WorkshopCreateRequest,
   WorkshopUpdateRequest,
@@ -200,13 +197,14 @@ export interface ApiClient {
   eventCapacityCounts(eventId: string): Promise<EventCapacityCountsResponse>;
   /** Every attendance scan recorded for one event. Super Admins only. */
   eventLogs(eventId: string): Promise<EventLogsResponse>;
+
+  // ---- embeddings ----
   /**
-   * Every event, re-ranked by similarity to `req.query` — or, when omitted, to
-   * this participant's saved preference embedding. Nothing is filtered out;
-   * the list is always the full catalogue, most similar first. A query present
-   * overwrites the saved preference for next time.
+   * Generate embeddings for text input(s). Used by client-side recommendations
+   * to convert a query string into a vector for similarity calculation.
+   * Returns one embedding vector per input string.
    */
-  recommendEvents(req: RecommendationRequest): Promise<RecommendedEvent[]>;
+  generateEmbedding(input: string | string[]): Promise<number[][]>;
 
   // ---- workshop slots (super admin) ----
   /** The slot catalogue — `D<day>S<shift>` time blocks. No token required. */
@@ -261,12 +259,6 @@ export interface ApiClient {
     scanType: 'pre-registered' | 'on-spot',
     body: ScanQRRequest,
   ): Promise<MessageResponse>;
-  /**
-   * Every workshop, re-ranked by similarity to `req.query` — or, when omitted,
-   * to this participant's saved preference embedding. The workshop-side twin
-   * of `recommendEvents`; kept on a separate saved embedding slot from events.
-   */
-  recommendWorkshops(req: RecommendationRequest): Promise<RecommendedWorkshop[]>;
 
   // ---- backend teams (super admin) ----
   listBackendTeams(): Promise<BackendTeamMember[]>;
