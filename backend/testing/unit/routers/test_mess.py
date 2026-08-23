@@ -343,20 +343,21 @@ def test_assigning_the_same_person_twice_is_a_409(client, admin_headers):
     assert response.json()["detail"] == "Team member already assigned to this mess"
 
 
-def test_assigning_to_a_hall_that_does_not_exist_is_recorded(client, admin_headers, audit, caplog):
-    """
-    Pinned as current behaviour: the route answers 200 and writes nothing, but the
-    no-op is no longer silent.
-    """
-    import logging
+def test_assigning_to_a_hall_that_does_not_exist_is_a_404(client, admin_headers):
+    """The `$push` matched nothing, so this used to answer 200 "Team member
+    assigned" having written nothing anywhere."""
+    response = client.post("/mess/NOPE/team", json={"user_id": SCANNER, "role": "volunteer"},
+                           headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Mess not found"
 
-    with caplog.at_level(logging.ERROR, logger="paradox.audit"):
-        response = client.post("/mess/NOPE/team", json={"user_id": SCANNER, "role": "volunteer"},
-                               headers=admin_headers)
 
-    assert response.status_code == 200
-    assert audit.one("ASSIGN_MESS_TEAM")["details"]["hall_exists"] is False
-    assert any(getattr(r, "reason", None) == "mess_not_found_on_assign" for r in caplog.records)
+def test_a_refused_assignment_writes_no_success_row(client, admin_headers, audit):
+    client.post("/mess/NOPE/team", json={"user_id": SCANNER, "role": "volunteer"},
+                headers=admin_headers)
+
+    audit.none("ASSIGN_MESS_TEAM")
+    assert audit.one("ASSIGN_MESS_TEAM_DENIED")["details"]["reason"] == "mess_not_found"
 
 
 def test_scanning_can_be_revoked_and_the_revocation_is_audited(client, admin_headers, audit):
@@ -368,23 +369,29 @@ def test_scanning_can_be_revoked_and_the_revocation_is_audited(client, admin_hea
 
     row = audit.one("TOGGLE_MESS_SCAN")
     assert row["details"]["scanning_enabled"] is False
-    assert row["details"]["applied"] is True
 
 
-def test_toggling_a_non_member_reports_that_nothing_was_applied(
-    client, admin_headers, audit, caplog
-):
-    import logging
-
+def test_toggling_a_non_member_is_a_404(client, admin_headers, audit):
+    """It used to answer 200 "Scanning toggled" with the miss recorded only as
+    `applied: false` inside the success row."""
     make_mess()
-    with caplog.at_level(logging.ERROR, logger="paradox.audit"):
-        response = client.put("/mess/MESS1/team/GHOST/toggle_scan?logging=true",
-                              headers=admin_headers)
+    response = client.put("/mess/MESS1/team/GHOST/toggle_scan?logging=true",
+                          headers=admin_headers)
 
-    assert response.status_code == 200
-    assert audit.one("TOGGLE_MESS_SCAN")["details"]["applied"] is False
-    assert any(getattr(r, "reason", None) == "team_member_not_found_on_toggle"
-               for r in caplog.records)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "user_id is not on this mess's team"
+    audit.none("TOGGLE_MESS_SCAN")
+    assert audit.one("TOGGLE_MESS_SCAN_DENIED")["details"]["reason"] == \
+        "team_member_not_found"
+
+
+def test_toggling_on_a_hall_that_does_not_exist_is_a_404(client, admin_headers, audit):
+    response = client.put(f"/mess/NOPE/team/{SCANNER}/toggle_scan?logging=true",
+                          headers=admin_headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Mess not found"
+    assert audit.one("TOGGLE_MESS_SCAN_DENIED")["details"]["reason"] == "mess_not_found"
 
 
 def test_the_toggle_flag_is_required(client, admin_headers):

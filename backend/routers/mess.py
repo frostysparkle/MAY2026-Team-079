@@ -416,7 +416,24 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
         "phone": request.phone,
         "logging": logging
     }
-    existing = mess_collection.find_one({"mess_id": mess_id, "mess_team.user_id": request.user_id})
+
+    # The hall has to exist. This route never checked — the `$push` below simply
+    # matched nothing — so assigning a team to a mistyped `mess_id` answered
+    # "Team member assigned" and did nothing at all, with the miss recorded only
+    # as `hall_exists: false` inside the success row.
+    mess = mess_collection.find_one({"mess_id": mess_id})
+    if not mess:
+        log_denied(
+            current_user, "ASSIGN_MESS_TEAM_DENIED", mess_id,
+            reason="mess_not_found",
+            details={"team_user_id": request.user_id, "role": request.role, "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Mess not found")
+
+    existing = any(
+        member.get("user_id") == request.user_id
+        for member in mess.get("mess_team") or []
+    )
     if existing and request.user_id:
         log_denied(
             current_user, "ASSIGN_MESS_TEAM_DENIED", mess_id,
@@ -441,17 +458,7 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
             },
         )
 
-    result = mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
-    if result.matched_count == 0:
-        # This route never checked that the hall exists — the push simply matches
-        # nothing — so assigning a team to a mistyped `mess_id` returned success
-        # and did nothing at all. Logged rather than turned into a 404, since
-        # changing the status code would change the contract.
-        log_integrity(
-            "mess team assignment matched no hall",
-            reason="mess_not_found_on_assign",
-            details={"mess_id": mess_id, "team_user_id": request.user_id, "role": request.role},
-        )
+    mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
 
     log_audit(
         current_user,
@@ -461,7 +468,6 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
             "team_user_id": request.user_id,
             "role": request.role,
             "scanning_enabled": logging,
-            "hall_exists": result.matched_count > 0,
         },
     )
     return {"message": "Team member assigned"}
@@ -470,21 +476,34 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
 def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_staff)):
     _require_super_admin(current_user, "toggle_scan")
 
+    # A mistyped hall or team id matches nothing, and the route used to answer
+    # "Scanning toggled" regardless, recording the miss only as `applied: false`
+    # inside the success row. An admin who believed they had just re-enabled a
+    # volunteer had changed nothing, and would not find out until that volunteer
+    # was refused at the counter.
+    mess = mess_collection.find_one({"mess_id": mess_id})
+    if not mess:
+        log_denied(
+            current_user, "TOGGLE_MESS_SCAN_DENIED", mess_id,
+            reason="mess_not_found",
+            details={"team_user_id": team_user_id, "requested_state": logging,
+                     "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Mess not found")
+
     result = mess_collection.update_one(
         {"mess_id": mess_id, "mess_team.user_id": team_user_id},
         {"$set": {"mess_team.$.logging": logging}}
     )
 
     if result.matched_count == 0:
-        # A mistyped hall or team id matches nothing, and the route still answers
-        # "Scanning toggled". An admin who believes they have just re-enabled a
-        # volunteer has in fact changed nothing, and will not find out until that
-        # volunteer is refused at the counter.
-        log_integrity(
-            "scan toggle matched no mess team member",
-            reason="team_member_not_found_on_toggle",
-            details={"mess_id": mess_id, "team_user_id": team_user_id, "requested_state": logging},
+        log_denied(
+            current_user, "TOGGLE_MESS_SCAN_DENIED", mess_id,
+            reason="team_member_not_found",
+            details={"team_user_id": team_user_id, "requested_state": logging,
+                     "status": 404},
         )
+        raise HTTPException(status_code=404, detail="user_id is not on this mess's team")
 
     # This had no audit row, which made it the natural blind spot behind "the
     # scanner stopped working": a volunteer's scanning privilege could be revoked
@@ -498,7 +517,6 @@ def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_use
         {
             "team_user_id": team_user_id,
             "scanning_enabled": logging,
-            "applied": result.matched_count > 0,
         },
     )
     return {"message": "Scanning toggled"}

@@ -352,14 +352,29 @@ def update_event(event_id: str, request: EventUpdateRequest, current_user: dict 
 def delete_event(event_id: str, current_user: dict = Depends(get_current_staff)):
     _require_super_admin(current_user)
 
+    # A mistyped id used to answer 200 "Event deleted" and write a DELETE_EVENT
+    # row all the same, so the trail recorded a deletion that never happened and
+    # the client could not tell it from a real one. Every other write in this
+    # module 404s on an unknown event; the destructive one now does too.
     event = event_collection.find_one({"event_id": event_id})
-    if event:
-        participants_collection.update_many(
-            {"events.event_id": event["_id"]},
-            {"$pull": {"events": {"event_id": event["_id"]}}}
+    if not event:
+        log_denied(
+            current_user, "DELETE_EVENT_DENIED", event_id,
+            reason="event_not_found",
+            details={"status": 404},
         )
-        event_collection.delete_one({"event_id": event_id})
-    log_audit(current_user, "DELETE_EVENT", event_id)
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    result = participants_collection.update_many(
+        {"events.event_id": event["_id"]},
+        {"$pull": {"events": {"event_id": event["_id"]}}}
+    )
+    event_collection.delete_one({"event_id": event_id})
+    log_audit(current_user, "DELETE_EVENT", event_id, {
+        "name": event.get("name"),
+        "event_type": event.get("event_type"),
+        "registrations_removed": result.modified_count,
+    })
     return {"message": "Event deleted"}
 
 

@@ -273,16 +273,31 @@ def test_scanning_can_be_revoked_and_is_audited(client, admin_headers, guard, au
     assert response.status_code == 200
     assert stored()["hostel_team"][0]["attendance"] is False
     row = audit.one("TOGGLE_HOSTEL_SCAN")
-    assert row["details"]["applied"] is True
     assert row["details"]["scanning_enabled"] is False
 
 
-def test_toggling_a_non_member_reports_that_nothing_applied(client, admin_headers, audit):
+def test_toggling_a_non_member_is_a_404(client, admin_headers, audit):
+    """It used to answer 200 "Scanning toggled" with the miss recorded only as
+    `applied: false` inside the success row, so a warden who believed they had
+    re-enabled a guard had changed nothing."""
     make_hostel()
     response = client.put("/hostels/HSTL111/team/GHOST/toggle_scan?attendance=true",
                           headers=admin_headers)
-    assert response.status_code == 200
-    assert audit.one("TOGGLE_HOSTEL_SCAN")["details"]["applied"] is False
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "user_id is not on this hostel's team"
+    audit.none("TOGGLE_HOSTEL_SCAN")
+    assert audit.one("TOGGLE_HOSTEL_SCAN_DENIED")["details"]["reason"] == \
+        "team_member_not_found"
+
+
+def test_toggling_on_a_hostel_that_does_not_exist_is_a_404(client, admin_headers, audit):
+    response = client.put(f"/hostels/NOPE/team/{GUARD}/toggle_scan?attendance=true",
+                          headers=admin_headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Hostel not found"
+    assert audit.one("TOGGLE_HOSTEL_SCAN_DENIED")["details"]["reason"] == "hostel_not_found"
 
 
 # ===========================================================================

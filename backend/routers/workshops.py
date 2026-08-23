@@ -337,51 +337,50 @@ def delete_workshop(workshop_id: str, current_user: dict = Depends(get_current_s
         current_user, "delete", "Only Super Admins can delete workshops", workshop_id
     )
 
+    # A mistyped id used to answer 200 "Workshop deleted" and write a
+    # DELETE_WORKSHOP row with `existed: false`, so neither the client nor the
+    # trail could tell a real deletion from a typo — and the one destructive
+    # operation in this module is the worst place to leave that ambiguity.
     workshop = workshops_collection.find_one({"workshop_id": workshop_id})
-    removed = 0
-    attendees = []
-    if workshop:
-        ws_doc_id = workshop["_id"]
-        # Who loses a booking, captured before the pull. This cascade deletes the
-        # workshop entry from every participant who held one, including the
-        # `attended: True` marker for people who actually sat in the room — so
-        # afterwards there is nothing on the participant to say they were ever
-        # there. The `workshop_logs` rows survive; this makes the participant side
-        # recoverable too.
-        holders = list(participants_collection.find(
-            {"workshops.workshop_id": ws_doc_id},
-            {"participant_id": 1, "workshops": 1},
-        ))
-        attendees = [
-            p.get("participant_id")
-            for p in holders
-            if any(
-                str(w.get("workshop_id")) == str(ws_doc_id) and w.get("attended")
-                for w in p.get("workshops") or []
-            )
-        ]
-        result = participants_collection.update_many(
-            {"workshops.workshop_id": ws_doc_id},
-            {"$pull": {"workshops": {"workshop_id": ws_doc_id}}}
+    if not workshop:
+        log_denied(
+            current_user, "DELETE_WORKSHOP_DENIED", workshop_id,
+            reason="workshop_not_found",
+            details={"status": 404},
         )
-        removed = result.modified_count
-        workshops_collection.delete_one({"workshop_id": workshop_id})
-    else:
-        # The route answers 200 whether or not the workshop existed, so a delete
-        # against a mistyped id is indistinguishable from a real one in the
-        # response. The audit row used to be identical in both cases too.
-        log_config.warning(
-            _log,
-            f"delete requested for unknown workshop {workshop_id}",
-            {"workshop_id": workshop_id, "reason": "workshop_not_found_on_delete"},
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    ws_doc_id = workshop["_id"]
+    # Who loses a booking, captured before the pull. This cascade deletes the
+    # workshop entry from every participant who held one, including the
+    # `attended: True` marker for people who actually sat in the room — so
+    # afterwards there is nothing on the participant to say they were ever
+    # there. The `workshop_logs` rows survive; this makes the participant side
+    # recoverable too.
+    holders = list(participants_collection.find(
+        {"workshops.workshop_id": ws_doc_id},
+        {"participant_id": 1, "workshops": 1},
+    ))
+    attendees = [
+        p.get("participant_id")
+        for p in holders
+        if any(
+            str(w.get("workshop_id")) == str(ws_doc_id) and w.get("attended")
+            for w in p.get("workshops") or []
         )
+    ]
+    result = participants_collection.update_many(
+        {"workshops.workshop_id": ws_doc_id},
+        {"$pull": {"workshops": {"workshop_id": ws_doc_id}}}
+    )
+    removed = result.modified_count
+    workshops_collection.delete_one({"workshop_id": workshop_id})
 
     log_audit(current_user, "DELETE_WORKSHOP", workshop_id, {
-        "existed": bool(workshop),
-        "name": (workshop or {}).get("name"),
-        "slot_id": (workshop or {}).get("slot_id"),
-        "registration_count": (workshop or {}).get("registration_count"),
-        "participant_count": (workshop or {}).get("participant_count"),
+        "name": workshop.get("name"),
+        "slot_id": workshop.get("slot_id"),
+        "registration_count": workshop.get("registration_count"),
+        "participant_count": workshop.get("participant_count"),
         "bookings_removed": removed,
         "attendance_discarded_for": attendees,
     })
@@ -434,31 +433,53 @@ def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteer
     return {"message": "Volunteer assigned"}
 
 @router.put("/{workshop_id}/volunteers/{user_id}/toggle_scan")
-def toggle_volunteer_scan(workshop_id: str, volunteer_user_id: str, attendance: bool, current_user: dict = Depends(get_current_staff)):
+def toggle_volunteer_scan(workshop_id: str, user_id: str, attendance: bool, current_user: dict = Depends(get_current_staff)):
+    """
+    Switch a volunteer's desk scanning on or off.
+
+    The volunteer is named by the `{user_id}` path segment — as the path always
+    advertised, and as the sibling `DELETE .../volunteers/{user_id}` already did.
+    The handler used to read a `volunteer_user_id` parameter that appears nowhere
+    in the path, so FastAPI made it a *required query* parameter: the RESTful call
+    the route documents was a 422, and the volunteer had to be repeated in the
+    query string instead.
+
+    A filter matching nothing is a 404. It used to answer 200 "Volunteer scanning
+    toggled" with `applied: false` buried in the audit row, so an admin who
+    believed they had just re-enabled somebody had changed nothing, and found out
+    when that volunteer was refused at the desk.
+    """
     _require_super_admin_logged(
         current_user, "toggle_scan", "Only Super Admins can toggle scanning", workshop_id
     )
 
-    result = workshops_collection.update_one(
-        {"workshop_id": workshop_id, "workshop_team.user_id": volunteer_user_id},
+    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
+    if not workshop:
+        log_denied(
+            current_user, "TOGGLE_WORKSHOP_SCAN_DENIED", workshop_id,
+            reason="workshop_not_found",
+            details={"volunteer_user_id": user_id, "requested_state": attendance,
+                     "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    if not _workshop_team_member(workshop, user_id):
+        log_denied(
+            current_user, "TOGGLE_WORKSHOP_SCAN_DENIED", workshop_id,
+            reason="volunteer_not_on_team",
+            details={"volunteer_user_id": user_id, "requested_state": attendance,
+                     "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="That member is not on this workshop's team")
+
+    workshops_collection.update_one(
+        {"workshop_id": workshop_id, "workshop_team.user_id": user_id},
         {"$set": {"workshop_team.$.attendance": attendance}}
     )
 
-    if result.matched_count == 0:
-        log_integrity(
-            "scan toggle matched no workshop volunteer",
-            reason="volunteer_not_found_on_toggle",
-            details={
-                "workshop_id": workshop_id,
-                "volunteer_user_id": volunteer_user_id,
-                "requested_state": attendance,
-            },
-        )
-
     log_audit(current_user, "TOGGLE_WORKSHOP_SCAN", workshop_id, {
-        "volunteer_user_id": volunteer_user_id,
+        "volunteer_user_id": user_id,
         "scanning_enabled": attendance,
-        "applied": result.matched_count > 0,
     })
     return {"message": "Volunteer scanning toggled"}
 

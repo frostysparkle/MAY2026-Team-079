@@ -348,14 +348,28 @@ def test_only_super_admins_can_delete(client, staff_headers, event):
     assert client.delete("/events/EVTEC1111", headers=staff_headers).status_code == 403
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: deleting an event that does not exist returns 200 'Event "
-           "deleted' and audits a deletion that never happened, so a client cannot "
-           "tell a real deletion from a typo'd id.",
-)
 def test_deleting_an_unknown_event_is_a_404(client, admin_headers):
-    assert client.delete("/events/EVTEC9999", headers=admin_headers).status_code == 404
+    response = client.delete("/events/EVTEC9999", headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Event not found"
+
+
+def test_a_refused_deletion_is_not_recorded_as_a_deletion(client, admin_headers, audit):
+    client.delete("/events/EVTEC9999", headers=admin_headers)
+
+    audit.none("DELETE_EVENT")
+    assert audit.one("DELETE_EVENT_DENIED")["details"]["reason"] == "event_not_found"
+
+
+def test_a_real_deletion_records_the_registrations_it_discarded(
+    client, admin_headers, event, make_participant, audit
+):
+    make_participant(events=[factories.event_registration(event["_id"])])
+    client.delete("/events/EVTEC1111", headers=admin_headers)
+
+    row = audit.one("DELETE_EVENT")
+    assert row["target_id"] == "EVTEC1111"
+    assert row["details"]["registrations_removed"] == 1
 
 
 # ===========================================================================

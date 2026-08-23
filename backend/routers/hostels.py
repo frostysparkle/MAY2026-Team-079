@@ -223,17 +223,32 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
 def toggle_hostel_scan(hostel_id: str, team_user_id: str, attendance: bool, current_user: dict = Depends(get_current_staff)):
     _require_super_admin(current_user, "toggle_scan")
 
+    # A filter matching nothing is a 404, as in the mess counterpart. It used to
+    # answer "Scanning toggled" and record the miss only as `applied: false`, so a
+    # warden who believed they had re-enabled a guard had changed nothing.
+    hostel = hostel_collection.find_one({"hostel_id": hostel_id})
+    if not hostel:
+        log_denied(
+            current_user, "TOGGLE_HOSTEL_SCAN_DENIED", hostel_id,
+            reason="hostel_not_found",
+            details={"team_user_id": team_user_id, "requested_state": attendance,
+                     "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Hostel not found")
+
     result = hostel_collection.update_one(
         {"hostel_id": hostel_id, "hostel_team.user_id": team_user_id},
         {"$set": {"hostel_team.$.attendance": attendance}}
     )
 
     if result.matched_count == 0:
-        log_integrity(
-            "scan toggle matched no hostel team member",
-            reason="team_member_not_found_on_toggle",
-            details={"hostel_id": hostel_id, "team_user_id": team_user_id, "requested_state": attendance},
+        log_denied(
+            current_user, "TOGGLE_HOSTEL_SCAN_DENIED", hostel_id,
+            reason="team_member_not_found",
+            details={"team_user_id": team_user_id, "requested_state": attendance,
+                     "status": 404},
         )
+        raise HTTPException(status_code=404, detail="user_id is not on this hostel's team")
 
     # Previously unaudited, like its mess counterpart. Revoking a guard's scanning
     # at a hostel door is the difference between residents getting in and not, so
@@ -241,7 +256,6 @@ def toggle_hostel_scan(hostel_id: str, team_user_id: str, attendance: bool, curr
     log_audit(current_user, "TOGGLE_HOSTEL_SCAN", hostel_id, {
         "team_user_id": team_user_id,
         "scanning_enabled": attendance,
-        "applied": result.matched_count > 0,
     })
     return {"message": "Scanning toggled"}
 

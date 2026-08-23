@@ -315,15 +315,30 @@ def test_only_super_admins_can_delete(client, staff_headers, workshop):
     assert response.json()["detail"] == "Only Super Admins can delete workshops"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: deleting a workshop that does not exist returns 200 "
-           "'Workshop deleted' and still writes a DELETE_WORKSHOP audit row, so a "
-           "client cannot tell a real deletion from a typo'd id, and the trail "
-           "records a deletion that never happened.",
-)
 def test_deleting_an_unknown_workshop_is_a_404(client, admin_headers):
-    assert client.delete("/workshops/WKSP999", headers=admin_headers).status_code == 404
+    response = client.delete("/workshops/WKSP999", headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workshop not found"
+
+
+def test_a_refused_deletion_is_not_recorded_as_a_deletion(client, admin_headers, audit):
+    """The trail must not carry a deletion that never happened — a mistyped id used
+    to write the same DELETE_WORKSHOP row a real deletion writes."""
+    client.delete("/workshops/WKSP999", headers=admin_headers)
+
+    audit.none("DELETE_WORKSHOP")
+    assert audit.one("DELETE_WORKSHOP_DENIED")["details"]["reason"] == "workshop_not_found"
+
+
+def test_a_real_deletion_records_what_it_destroyed(
+    client, admin_headers, workshop, make_participant, audit
+):
+    make_participant(workshops=[factories.workshop_booking(workshop["_id"], "D1S1")])
+    client.delete("/workshops/WKSP111", headers=admin_headers)
+
+    row = audit.one("DELETE_WORKSHOP")
+    assert row["target_id"] == "WKSP111"
+    assert row["details"]["bookings_removed"] == 1
 
 
 # ===========================================================================
@@ -421,63 +436,88 @@ def test_a_refused_assignment_writes_no_success_row(client, admin_headers, audit
     audit.none("ASSIGN_WORKSHOP_VOLUNTEER")
 
 
-def test_the_toggle_route_takes_its_arguments_as_query_parameters(
-    client, admin_headers, workshop
-):
+def toggle(client, admin_headers, user_id="OTWO1111", attendance="false",
+           workshop_id="WKSP111"):
+    return client.put(
+        f"/workshops/{workshop_id}/volunteers/{user_id}/toggle_scan"
+        f"?attendance={attendance}",
+        headers=admin_headers,
+    )
+
+
+def test_the_volunteer_in_the_path_is_the_one_toggled(client, admin_headers, workshop):
     """
-    Characterises the signature defect below: the handler's parameters are
-    `volunteer_user_id` and `attendance`, neither of which matches the declared
-    `{user_id}` path segment, so FastAPI treats both as required query params.
+    The handler used to read a `volunteer_user_id` parameter that appears nowhere
+    in the path, which FastAPI therefore made a required *query* parameter — so
+    this call, the one the route's own path advertises, was a 422, and the
+    `{user_id}` segment was ignored entirely.
     """
     database.workshops_collection.update_one(
         {"_id": workshop["_id"]},
         {"$push": {"workshop_team": factories.workshop_team_member("OTWO1111")}},
     )
-    response = client.put(
-        "/workshops/WKSP111/volunteers/ignored/toggle_scan"
-        "?volunteer_user_id=OTWO1111&attendance=false",
-        headers=admin_headers,
-    )
+    response = toggle(client, admin_headers)
     assert response.status_code == 200
     assert stored()["workshop_team"][0]["attendance"] is False
 
 
-def test_omitting_the_query_parameters_is_a_422(client, admin_headers, workshop):
+def test_the_attendance_flag_is_still_required(client, admin_headers, workshop):
+    """`attendance` is the one genuine query parameter — nothing in the path
+    carries the state being set."""
     assert client.put("/workshops/WKSP111/volunteers/OTWO1111/toggle_scan",
                       headers=admin_headers).status_code == 422
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: the route declares `{user_id}` in its path but the handler "
-           "reads `volunteer_user_id`, so the path segment is unbound and the "
-           "volunteer must instead be named in the query string. The RESTful call "
-           "the path advertises does not work.",
-)
-def test_the_volunteer_in_the_path_is_the_one_toggled(client, admin_headers, workshop):
+def test_a_stray_volunteer_user_id_query_parameter_is_ignored(
+    client, admin_headers, workshop
+):
+    """The path is now the only place the volunteer is named, so an old client
+    still sending the query parameter cannot toggle somebody else."""
     database.workshops_collection.update_one(
         {"_id": workshop["_id"]},
         {"$push": {"workshop_team": factories.workshop_team_member("OTWO1111")}},
     )
-    response = client.put("/workshops/WKSP111/volunteers/OTWO1111/toggle_scan?attendance=false",
-                          headers=admin_headers)
+    response = client.put(
+        "/workshops/WKSP111/volunteers/OTWO1111/toggle_scan"
+        "?volunteer_user_id=GHOST&attendance=false",
+        headers=admin_headers,
+    )
     assert response.status_code == 200
     assert stored()["workshop_team"][0]["attendance"] is False
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: the toggle answers 200 'Volunteer scanning toggled' even "
-           "when the filter matched nothing, so an admin who believes they have "
-           "re-enabled a volunteer has changed nothing and finds out only when that "
-           "volunteer is refused at the desk.",
-)
 def test_toggling_a_non_member_is_refused(client, admin_headers, workshop):
-    response = client.put(
-        "/workshops/WKSP111/volunteers/x/toggle_scan?volunteer_user_id=GHOST&attendance=true",
-        headers=admin_headers,
-    )
+    """It used to answer 200 'Volunteer scanning toggled' having changed nothing,
+    so an admin found out only when the volunteer was refused at the desk."""
+    response = toggle(client, admin_headers, user_id="GHOST", attendance="true")
     assert response.status_code == 404
+    assert response.json()["detail"] == "That member is not on this workshop's team"
+
+
+def test_toggling_on_an_unknown_workshop_is_a_404(client, admin_headers):
+    response = toggle(client, admin_headers, workshop_id="WKSP999", attendance="true")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workshop not found"
+
+
+def test_a_refused_toggle_writes_no_success_row(client, admin_headers, workshop, audit):
+    toggle(client, admin_headers, user_id="GHOST", attendance="true")
+
+    audit.none("TOGGLE_WORKSHOP_SCAN")
+    assert audit.one("TOGGLE_WORKSHOP_SCAN_DENIED")["details"]["reason"] == \
+        "volunteer_not_on_team"
+
+
+def test_a_real_toggle_is_audited(client, admin_headers, workshop, audit):
+    database.workshops_collection.update_one(
+        {"_id": workshop["_id"]},
+        {"$push": {"workshop_team": factories.workshop_team_member("OTWO1111")}},
+    )
+    toggle(client, admin_headers, attendance="false")
+
+    row = audit.one("TOGGLE_WORKSHOP_SCAN")
+    assert row["details"]["volunteer_user_id"] == "OTWO1111"
+    assert row["details"]["scanning_enabled"] is False
 
 
 def test_a_volunteer_can_be_removed(client, admin_headers, workshop):
