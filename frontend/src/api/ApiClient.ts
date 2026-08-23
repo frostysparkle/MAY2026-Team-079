@@ -26,6 +26,8 @@ import type {
   MessStatisticsResponse,
   MessCreateRequest,
   MessAssignTeamRequest,
+  MockPaymentRequest,
+  MockPaymentResponse,
   Hostel,
   MyHostelResponse,
   HostelScanResponse,
@@ -121,6 +123,13 @@ export interface ApiClient {
   updateMessMenu(messId: string, req: MessMenuRequest): Promise<MessageResponse>;
   allocateMess(): Promise<MessageResponse>;
   myMess(): Promise<MyMessResponse>;
+  /**
+   * Mock-settle the fixed mess fee. Independent of `mess.registered`/
+   * `mess_id` — this only records that the fee was paid, in any order relative
+   * to registering or being allocated. Not idempotent: a second call
+   * overwrites the stored payment record server-side.
+   */
+  payMess(req: MockPaymentRequest): Promise<MockPaymentResponse>;
   scanMess(
     messId: string,
     slot: MealSlot,
@@ -143,6 +152,13 @@ export interface ApiClient {
   registerForAccommodation(): Promise<MessageResponse>;
   /** Withdraw a pending accommodation request. Refused once one is allotted. */
   cancelAccommodationRequest(): Promise<MessageResponse>;
+  /**
+   * Mock-settle the fixed hostel fee. Independent of `accommodation.registered`/
+   * `hostel_id` — this only records that the fee was paid, in any order relative
+   * to registering or being allocated. Not idempotent: a second call
+   * overwrites the stored payment record server-side.
+   */
+  payHostel(req: MockPaymentRequest): Promise<MockPaymentResponse>;
   scanHostel(
     hostelId: string,
     action: 'entry' | 'exit' | 'permanent_exit',

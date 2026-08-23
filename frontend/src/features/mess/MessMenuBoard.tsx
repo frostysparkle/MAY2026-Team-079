@@ -37,26 +37,32 @@ export function MessMenuBoard({
   initialDay = 1,
   /** Shown under the day picker — the caller's own caveat, e.g. that day 6 has no swipe. */
   dayNote,
+  layout = 'default',
   className,
 }: {
   menu: ResolvedMenu;
   initialDay?: number;
   dayNote?: (day: number) => string | null;
+  layout?: 'default' | 'roomy';
   className?: string;
 }) {
   const clamped = Math.min(Math.max(initialDay, 1), menu.days.length);
   const [day, setDay] = useState(clamped);
   const active = menu.days.find((d) => d.day === day) ?? menu.days[0];
   const note = dayNote?.(active.day) ?? null;
+  const roomy = layout === 'roomy';
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
       {/* ---- service windows, for the day on show ---- */}
-      <div className="flex flex-wrap gap-2">
+      <div className={cn('flex flex-wrap gap-2', roomy && 'sm:gap-3')}>
         {active.timings.map((timing) => (
           <span
             key={timing.slot}
-            className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-ink"
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-ink',
+              roomy && 'px-3.5 py-1.5',
+            )}
           >
             <Clock size={13} strokeWidth={2.25} aria-hidden className="text-muted" />
             {SLOT_LABEL[timing.slot]} · {timingLabel(timing)}
@@ -68,7 +74,10 @@ export function MessMenuBoard({
       <div
         role="tablist"
         aria-label="Fest day"
-        className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+        className={cn(
+          '-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1',
+          roomy && 'sm:flex-wrap sm:overflow-visible',
+        )}
       >
         {menu.days.map((d) => (
           <button
@@ -79,6 +88,7 @@ export function MessMenuBoard({
             onClick={() => setDay(d.day)}
             className={cn(
               'tap shrink-0 rounded-xl px-3 py-2 text-left transition-colors',
+              roomy && 'min-w-28',
               d.day === day
                 ? 'bg-brand text-white shadow-card'
                 : 'bg-surface-2 text-muted hover:text-ink',
@@ -100,7 +110,7 @@ export function MessMenuBoard({
       )}
 
       {/* ---- the three sittings ---- */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn('grid gap-3', roomy ? 'md:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-3')}>
         {MENU_SLOTS.map((slot) => {
           const Icon = SLOT_ICON[slot];
           const timing = active.timings.find((t) => t.slot === slot);
@@ -108,7 +118,10 @@ export function MessMenuBoard({
           return (
             <section
               key={slot}
-              className="flex min-w-0 flex-col gap-2 rounded-2xl bg-surface-2/60 p-4"
+              className={cn(
+                'flex min-w-0 flex-col gap-2 rounded-2xl bg-surface-2/60 p-4',
+                roomy && 'sm:gap-3 sm:p-5',
+              )}
             >
               <header className="flex items-center gap-2">
                 <Icon size={16} strokeWidth={2.25} aria-hidden className="shrink-0 text-brand" />

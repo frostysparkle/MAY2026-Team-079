@@ -97,15 +97,28 @@ export default function StaffHomePage() {
   const myMess = mess.filter((m) => m.mess_team?.some((t) => t.user_id === staff?.id));
   const myHostels = hostels.filter((h) => h.hostel_team?.some((t) => t.user_id === staff?.id));
   const myEventTeams = events.filter((e) => e.event_team.some((t) => t.user_id === staff?.id));
+  // An Event Head's own department can coincidentally match an event type (e.g.
+  // `department: 'technical'`), which would otherwise qualify them as that
+  // domain's admin via `isDomainAdminFor` below and surface every other event of
+  // that type here — a panel that has nothing to do with running their own event,
+  // whose roster and controls already live in the duty section beneath the
+  // masonry. So "Participation & Reports" is withheld outright from anybody
+  // heading an event; it stays for a UHC officer, domain admin, or Super Admin
+  // who isn't also an Event Head.
+  const amEventHead = myEventTeams.some((e) =>
+    isEventHeadRole(eventTeamRoleOf(e.event_team, staff?.id)),
+  );
   // Events this staffer oversees without working on them. Their own events are
   // excluded because the duty card above now leads to the same roster, and the
   // page used to list a domain admin's own event twice, under two headings, with
   // two different labels for one screen.
-  const participationEvents = events.filter(
-    (e) =>
-      (isUhc() || isDomainAdminFor(e.event_type) || isSuperAdmin()) &&
-      !myEventTeams.some((mine) => mine.event_id === e.event_id),
-  );
+  const participationEvents = amEventHead
+    ? []
+    : events.filter(
+        (e) =>
+          (isUhc() || isDomainAdminFor(e.event_type) || isSuperAdmin()) &&
+          !myEventTeams.some((mine) => mine.event_id === e.event_id),
+      );
 
   // `GET /workshops` strips `workshop_team` for non-super-admin callers, so
   // whether the assignment can be derived depends on who is asking. When the field

@@ -124,7 +124,7 @@ export function ReportPanel({
   const chosenCategory = categories.find((c) => c.value === draft.category) ?? null;
   const outstanding = facility ? outstandingFor(issues, facility) : 0;
   const blocked = facility ? atReportLimit(issues, facility) : false;
-  const reachable = facility ? (contacts[activeKey] ?? []) : [];
+  const reachable = facility ? (contacts[activeKey] ?? []).filter((c) => c.phone !== null) : [];
   const counts = useMemo(() => countIssues(issues), [issues]);
 
   function set<K extends keyof ReportDraft>(key: K, value: ReportDraft[K]) {

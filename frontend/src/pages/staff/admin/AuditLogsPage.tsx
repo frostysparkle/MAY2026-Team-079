@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Download,
@@ -21,7 +22,6 @@ import {
   ListToolbar,
   ResultBanner,
   SectionHeading,
-  Select,
   Skeleton,
   StatCard,
   StatusBadge,
@@ -372,19 +372,7 @@ export default function AuditLogsPage() {
               // Beside the filters rather than up in the header, because it is one
               // of them in effect: `limit` decides what there is to filter. The
               // `GET /audit-logs?limit=` parameter had no control at all before.
-              trailing={
-                <div className="w-40 shrink-0">
-                  <Select
-                    label="Rows"
-                    value={String(limit)}
-                    onChange={(e) => setLimit(Number(e.target.value))}
-                    options={TRAIL_LIMIT_OPTIONS.map((option) => ({
-                      value: String(option),
-                      label: `Newest ${option.toLocaleString()}`,
-                    }))}
-                  />
-                </div>
-              }
+              trailing={<RowsSelect limit={limit} onChange={setLimit} />}
             />
 
             {/* `truncated` has always been computed here and never shown, so a
@@ -556,4 +544,41 @@ function DomainTab({
 /** The next larger row window, or `null` at the widest one offered. */
 function nextLimit(current: number): number | null {
   return TRAIL_LIMIT_OPTIONS.find((option) => option > current) ?? null;
+}
+
+/**
+ * The "how many rows to fetch" control, styled to match `ListToolbar`'s other
+ * selects (compact, visually-hidden label, chosen option carrying the meaning)
+ * rather than the taller, stacked-label `Select` used in forms — that mismatch
+ * in shape was what threw the row out of alignment with its neighbors.
+ */
+function RowsSelect({ limit, onChange }: { limit: number; onChange: (value: number) => void }) {
+  const id = useId();
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <label htmlFor={id} className="sr-only">
+        Rows
+      </label>
+      <div className="relative">
+        <select
+          id={id}
+          value={String(limit)}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full appearance-none rounded-xl border border-line bg-surface py-2.5 pl-3.5 pr-9 text-sm font-medium text-ink outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/25"
+        >
+          {TRAIL_LIMIT_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {`Newest ${option.toLocaleString()}`}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          aria-hidden
+          size={15}
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+        />
+      </div>
+    </div>
+  );
 }

@@ -24,6 +24,7 @@
  * bills them for.
  */
 import { DEMO_TARIFF, formatRupees } from '@/features/finance/demoLedger';
+import type { MockPaymentResponse } from '@/api/types';
 
 /** One bookable facility. */
 export type StayFacility = 'accommodation' | 'mess';
@@ -77,7 +78,11 @@ export interface StayLineItem {
 }
 
 export interface StayReceipt {
-  /** Mock transaction reference, e.g. `PDX-MOCK-7F3A21`. */
+  /**
+   * The real transaction reference(s) `POST /hostels/pay` / `POST /mess/pay`
+   * returned, e.g. `PDX-HOSTEL-A1B2C3D4`. A `both` booking pays each facility
+   * separately, so this joins both ids with ` · ` rather than picking one.
+   */
   reference: string;
   /** `upi` | `card` | `netbanking` — the same vocabulary as the demo ledger. */
   method: string;
@@ -117,16 +122,32 @@ export function needsPayment(choice: StayChoice): boolean {
 }
 
 /**
- * A mock settlement. The reference is random rather than derived: two payments
- * for the same choice are two payments, and a deterministic id would collide.
+ * A receipt built from what `POST /hostels/pay` and/or `POST /mess/pay` actually
+ * returned, rather than fabricated client-side.
+ *
+ * A `both` booking pays each facility with its own call, so this takes one
+ * response per facility that was billed and combines them: the total is the
+ * line items' sum (matching what was charged), the reference joins both
+ * transaction ids so either one can be looked up, and `paid_at` is the later of
+ * the two settlements — the moment the whole booking became paid in full.
  */
-export function makeReceipt(choice: StayChoice, method: string): StayReceipt {
+export function receiptFromPayments(
+  choice: StayChoice,
+  method: string,
+  payments: Partial<Record<StayFacility, MockPaymentResponse>>,
+): StayReceipt {
   const items = stayLineItems(choice);
-  const suffix = Math.random().toString(16).slice(2, 8).toUpperCase().padEnd(6, '0');
+  const references = CHOICE_FACILITIES[choice]
+    .map((facility) => payments[facility]?.transaction_id)
+    .filter((id): id is string => Boolean(id));
+  const paidTimestamps = CHOICE_FACILITIES[choice]
+    .map((facility) => payments[facility]?.paid_at)
+    .filter((at): at is string => Boolean(at));
+
   return {
-    reference: `PDX-MOCK-${suffix}`,
+    reference: references.join(' · '),
     method,
-    paid_at: new Date().toISOString(),
+    paid_at: paidTimestamps.sort().at(-1) ?? new Date().toISOString(),
     items,
     total: items.reduce((sum, item) => sum + item.amount, 0),
   };

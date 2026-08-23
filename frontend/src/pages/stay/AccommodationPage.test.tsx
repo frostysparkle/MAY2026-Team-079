@@ -7,9 +7,10 @@ import { ROUTES } from '@/config/routes';
 import { useAuthStore } from '@/stores/authStore';
 import {
   clearStayRecord,
-  makeReceipt,
   readStayRecord,
   saveStayRecord,
+  stayLineItems,
+  stayTotal,
 } from '@/features/stay/stayChoice';
 import { resolveMenu } from '@/features/mess/messMenu';
 
@@ -208,9 +209,10 @@ describe('AccommodationPage', () => {
     expect(screen.getAllByText('Veg · South Indian')).toHaveLength(2);
     expect(screen.getByText('1 of 6')).toBeInTheDocument();
     expect(screen.getAllByText('Allotted')).toHaveLength(2);
-    // Nothing is outstanding, so the picker is gone and the pass is offered.
+    // Nothing is outstanding, so the picker is gone.
     expect(screen.queryByRole('radio', { name: /Mess only/ })).not.toBeInTheDocument();
-    expect(screen.getByText('Entry QR')).toBeInTheDocument();
+    // The live pass itself lives on My QR and the dashboard, not repeated here.
+    expect(screen.queryByText('Entry QR')).not.toBeInTheDocument();
   });
 });
 
@@ -245,7 +247,13 @@ describe('AccommodationPage — mess menu and meal timings (story 4.1)', () => {
     saveStayRecord(PARTICIPANT_ID, {
       choice: 'mess',
       decided_at: new Date().toISOString(),
-      receipt: makeReceipt('mess', 'upi'),
+      receipt: {
+        reference: 'PDX-MESS-ABCD1234',
+        method: 'upi',
+        paid_at: new Date().toISOString(),
+        items: stayLineItems('mess'),
+        total: stayTotal('mess'),
+      },
     });
     useAuthStore.getState().setParticipantSession({
       id: PARTICIPANT_ID,

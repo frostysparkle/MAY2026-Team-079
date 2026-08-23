@@ -2,19 +2,21 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { BedDouble, CreditCard, Landmark, Lock, Smartphone, UtensilsCrossed } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
+import type { MockPaymentMethod, MockPaymentResponse } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { currentParticipant } from '@/stores/authStore';
-import { METHOD_LABEL, type PaymentMethod } from '@/features/finance/demoLedger';
+import { METHOD_LABEL } from '@/features/finance/demoLedger';
 import {
   CHOICE_FACILITIES,
   CHOICE_LABEL,
   PAYMENT_DISCLAIMER,
-  makeReceipt,
   money,
   readStayRecord,
+  receiptFromPayments,
   saveStayRecord,
   stayLineItems,
   stayTotal,
+  type StayFacility,
 } from '@/features/stay/stayChoice';
 import {
   Button,
@@ -28,33 +30,31 @@ import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { cn } from '@/lib/cn';
 
 /**
- * The dummy payment step. Everything else in this flow talks to the real API;
- * this one screen does not, because there is nothing on the other end — the
- * Paradox Connect backend has no payments domain at all (no fee on a block or a
- * hall, no transaction collection, no gateway callback). So the settlement is
- * simulated here, in the open, and every surface that shows the result repeats
- * `PAYMENT_DISCLAIMER`.
+ * The payment step. Settles the real fee against the backend's mock payment
+ * gateway — `POST /hostels/pay` and/or `POST /mess/pay`, one call per facility
+ * in the student's choice — rather than simulating a delay client-side.
+ * `simulate_payment()` on the backend always succeeds today and the fee is
+ * fixed server-side (`HOSTEL_FEE`, `MESS_FEE`), never client-supplied, so every
+ * surface that shows the result still repeats `PAYMENT_DISCLAIMER`: real
+ * transaction ids are recorded, but no gateway and no money sit behind them.
  *
- * What is *not* simulated is the consequence. The moment the mock settles, the
- * accommodation half is written to the server with `POST /hostels/register` —
- * the real opt-in flag `POST /hostels/allocate` filters on — so a student who
- * pays here is genuinely in the queue the organisers allocate from. A 400 back
- * from that call is deliberately not fatal: its two error branches both mean
- * "you already have this", which is a settled booking, not a failed one.
+ * The accommodation half has a second consequence beyond the payment record:
+ * the moment it settles, `POST /hostels/register` is called — the real opt-in
+ * flag `POST /hostels/allocate` filters on — so a student who pays here is
+ * genuinely in the queue the organisers allocate from. A 400 back from that
+ * call is deliberately not fatal: its two error branches both mean "you
+ * already have this", which is a settled booking, not a failed one.
  *
  * No card fields are rendered, on purpose. A realistic-looking card form is the
  * one part of a mock checkout that can mislead someone into typing a real
  * number into it.
  */
 
-const METHODS: { value: PaymentMethod; icon: typeof CreditCard }[] = [
+const METHODS: { value: MockPaymentMethod; icon: typeof CreditCard }[] = [
   { value: 'upi', icon: Smartphone },
   { value: 'card', icon: CreditCard },
   { value: 'netbanking', icon: Landmark },
 ];
-
-/** How long the fake gateway "thinks" for, so the state change reads as a step. */
-const SETTLE_DELAY_MS = 1200;
 
 export default function StayPaymentPage() {
   const navigate = useNavigate();
@@ -62,7 +62,7 @@ export default function StayPaymentPage() {
   const participantId = participant?.id ?? '';
 
   const [record] = useState(() => (participantId ? readStayRecord(participantId) : null));
-  const [method, setMethod] = useState<PaymentMethod>('upi');
+  const [method, setMethod] = useState<MockPaymentMethod>('upi');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +80,17 @@ export default function StayPaymentPage() {
     setBusy(true);
     setError(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, SETTLE_DELAY_MS));
+      // One `/pay` call per facility in the choice — the two fees are separate
+      // endpoints with separate fixed amounts, so a `both` booking settles both
+      // rather than one call covering the combined total.
+      const facilities = CHOICE_FACILITIES[record.choice];
+      const payments: Partial<Record<StayFacility, MockPaymentResponse>> = {};
+      if (facilities.includes('accommodation')) {
+        payments.accommodation = await api.payHostel({ method });
+      }
+      if (facilities.includes('mess')) {
+        payments.mess = await api.payMess({ method });
+      }
 
       if (wantsAccommodation) {
         try {
@@ -93,7 +103,10 @@ export default function StayPaymentPage() {
         }
       }
 
-      saveStayRecord(participantId, { ...record, receipt: makeReceipt(record.choice, method) });
+      saveStayRecord(participantId, {
+        ...record,
+        receipt: receiptFromPayments(record.choice, method, payments),
+      });
       navigate(`${ROUTES.accommodation}?paid=1`, { replace: true });
     } catch (e) {
       setError(

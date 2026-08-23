@@ -130,6 +130,37 @@ export interface ScanQRRequest {
   timestamp: string;
 }
 
+/* --------------------------------------------------------------- payments --- */
+
+/** The only vocabulary `POST /hostels/pay` / `POST /mess/pay` accept — backend's `PAYMENT_METHODS`. */
+export type MockPaymentMethod = 'upi' | 'card' | 'netbanking';
+
+/**
+ * Body for `POST /hostels/pay` and `POST /mess/pay` (`MockPaymentRequest` in
+ * `backend/models.py`). `method` only labels the mock receipt — there is no
+ * `amount` field; the fee is always the server's fixed `HOSTEL_FEE`/`MESS_FEE`,
+ * never one the client supplies.
+ */
+export interface MockPaymentRequest {
+  method?: MockPaymentMethod;
+}
+
+/**
+ * Response from `POST /hostels/pay` / `POST /mess/pay` — `simulate_payment()`'s
+ * record, returned verbatim. `transaction_id` is `PDX-HOSTEL-XXXXXXXX` or
+ * `PDX-MESS-XXXXXXXX` (8 uppercase hex chars). `paid_at` is ISO 8601.
+ *
+ * Neither route is idempotent: calling it again overwrites the stored payment,
+ * and the previous transaction id survives only in the audit trail.
+ */
+export interface MockPaymentResponse {
+  paid: boolean;
+  transaction_id: string;
+  amount: number;
+  method: string;
+  paid_at: string;
+}
+
 /* ------------------------------------------------------------------- mess --- */
 
 export interface MessTeamMember {

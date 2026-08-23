@@ -34,10 +34,13 @@ import { FEST_DAYS } from '@/config/festCalendar';
 import { MessMenuBoard } from '@/features/mess/MessMenuBoard';
 import { MealSlotGrid } from '@/features/mess/MealSlotGrid';
 import { loggedMeals } from '@/features/mess/mealSlots';
-import { currentMenuDay, overrideFor, resolveMenu } from '@/features/mess/messMenu';
+import {
+  currentMenuDay,
+  overrideFor,
+  resolveMenu,
+  type ResolvedMenu,
+} from '@/features/mess/messMenu';
 import { currentParticipant, useAuthStore } from '@/stores/authStore';
-import { useLiveQr } from '@/features/qr/useLiveQr';
-import { EntryQrCard } from '@/features/qr/EntryQrCard';
 import { ALLOCATION_POLL_MS, useStayFacilities } from '@/features/stay/useStayFacilities';
 import { deriveStayStatus, type FacilityState } from '@/features/stay/stayStatus';
 import {
@@ -141,8 +144,11 @@ export default function AccommodationPage() {
     () => deriveStayStatus(record, data?.hostel ?? null, data?.mess ?? null),
     [record, data],
   );
-
-  const qr = useLiveQr();
+  const allottedMess = data?.mess?.mess_details ?? null;
+  const messMenu = useMemo(
+    () => resolveMenu(allottedMess, overrideFor(allottedMess)),
+    [allottedMess],
+  );
 
   // Allocation lands on the server with nothing to notify the client, so the
   // only way this screen fills in a room number on its own is to keep asking —
@@ -357,7 +363,7 @@ export default function AccommodationPage() {
                 </ResultBanner>
               )}
 
-              <div className="grid items-start gap-5 lg:grid-cols-2">
+              <div className="grid gap-5 lg:grid-cols-2">
                 <AccommodationPanel
                   state={live.accommodation}
                   hostel={data.hostel}
@@ -369,33 +375,17 @@ export default function AccommodationPage() {
                   mess={data.mess}
                   catalogue={data.messHalls}
                   preference={participant?.mess_preference ?? null}
+                  menu={messMenu}
                   saving={busy}
                   onChangePreference={(next) => void changePreference(next)}
                 />
 
-                {live.choice !== 'neither' && live.paid && (
-                  <DetailPanel
-                    title="Entry QR"
-                    trailing={
-                      qr.status === 'ready' ? (
-                        <StatusBadge tone="success" className="gap-1.5">
-                          <span
-                            aria-hidden
-                            className="h-1.5 w-1.5 animate-pulse rounded-full bg-success"
-                          />
-                          Live
-                        </StatusBadge>
-                      ) : undefined
-                    }
-                    footer="The same code opens the hostel gate and the mess counter. It refreshes every 45 seconds and works with no signal."
-                  >
-                    <EntryQrCard qr={qr} size={180} />
-                  </DetailPanel>
-                )}
+                {live.mess === 'allocated' && data.mess && <MessMenuPanel menu={messMenu} />}
 
                 {record?.receipt && (
                   <DetailPanel
                     title="Receipt"
+                    className="lg:col-span-2"
                     trailing={<StatusBadge tone="success">Paid</StatusBadge>}
                     footer={PAYMENT_DISCLAIMER}
                   >
@@ -688,6 +678,7 @@ function AccommodationPanel({
   return (
     <DetailPanel
       title="Accommodation"
+      className="h-full"
       trailing={<StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>}
       footer={
         state === 'allocated'
@@ -764,6 +755,7 @@ function MessPanel({
   mess,
   catalogue,
   preference,
+  menu,
   saving,
   onChangePreference,
 }: {
@@ -771,6 +763,7 @@ function MessPanel({
   mess: MyMessResponse | null;
   catalogue: Mess[];
   preference: string | null;
+  menu: ResolvedMenu;
   saving: boolean;
   onChangePreference: (next: string) => void;
 }) {
@@ -782,10 +775,6 @@ function MessPanel({
   // the API would reject, or refuse one it would allow.
   const locked = state === 'allocated';
   const slots = mess?.slots ?? [];
-  // The published campus menu for whatever this hall cooks, with the hall's own
-  // menu laid over it — `mess.menu` when its team has published one, this
-  // device's copy otherwise. Arrives with `GET /mess/my_mess`, so no extra fetch.
-  const menu = useMemo(() => resolveMenu(hall, overrideFor(hall)), [hall]);
   // Counted by the same helper the dashboard widget uses, so the "meals checked
   // in" figure on this screen and the one on the dashboard cannot disagree.
   const { logged, total } = loggedMeals(slots);
@@ -798,6 +787,7 @@ function MessPanel({
   return (
     <DetailPanel
       title="Mess"
+      className="h-full"
       trailing={<StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>}
       footer={
         locked
@@ -852,26 +842,6 @@ function MessPanel({
           {/* The same meal card the dashboard widget draws, from one component —
               it was written out in full on both screens. */}
           <MealSlotGrid slots={slots} />
-
-          {/* ---- what is actually being served ---- */}
-          <div className="border-t border-line pt-4">
-            <h4 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink">
-              <BookOpen size={15} strokeWidth={2.25} aria-hidden /> Menu and meal timings
-            </h4>
-            <MessMenuBoard
-              menu={menu}
-              initialDay={currentMenuDay()}
-              /* The schedule runs six days; a participant's `mess.entries` is
-                 seeded with five. Day 6 has a menu and no swipe to log against
-                 it, which is worth saying where someone would otherwise turn up
-                 expecting one. */
-              dayNote={(day) =>
-                day > FEST_DAYS
-                  ? `Day ${day} is on the fest schedule but your mess pass carries ${FEST_DAYS} days of swipes, so there is no entry to log against it. Check with your hall.`
-                  : null
-              }
-            />
-          </div>
         </>
       ) : state === 'awaiting_allocation' ? (
         <div className="flex flex-col gap-3">
@@ -902,6 +872,35 @@ function MessPanel({
           body="You are eating off campus. Change your selection above if that changes."
         />
       )}
+    </DetailPanel>
+  );
+}
+
+function MessMenuPanel({ menu }: { menu: ResolvedMenu }) {
+  return (
+    <DetailPanel
+      title="Menu and meal timings"
+      className="lg:col-span-2"
+      meta={
+        <span className="inline-flex items-center gap-1.5">
+          <BookOpen size={14} strokeWidth={2.25} aria-hidden />
+          Today first
+        </span>
+      }
+    >
+      <MessMenuBoard
+        menu={menu}
+        initialDay={currentMenuDay()}
+        layout="roomy"
+        /* The schedule runs six days; a participant's `mess.entries` is seeded
+           with five. Day 6 has a menu and no swipe to log against it, which is
+           worth saying where someone would otherwise turn up expecting one. */
+        dayNote={(day) =>
+          day > FEST_DAYS
+            ? `Day ${day} is on the fest schedule but your mess pass carries ${FEST_DAYS} days of swipes, so there is no entry to log against it. Check with your hall.`
+            : null
+        }
+      />
     </DetailPanel>
   );
 }

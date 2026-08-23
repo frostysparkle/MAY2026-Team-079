@@ -17,6 +17,7 @@ import type {
   MessCreateRequest,
   MessAssignTeamRequest,
   MessMenuRequest,
+  MockPaymentRequest,
   HostelCreateRequest,
   HostelUpdateRequest,
   HostelAssignTeamRequest,
@@ -142,6 +143,8 @@ export const realApi: ApiClient = {
     request(`/mess/${messId}/menu`, { method: 'PUT', body: JSON.stringify(req) }),
   allocateMess: () => request('/mess/allocate', { method: 'POST' }),
   myMess: () => request('/mess/my_mess'),
+  payMess: (req: MockPaymentRequest) =>
+    request('/mess/pay', { method: 'POST', body: JSON.stringify(req) }),
   scanMess: (messId, slot, day, body: ScanQRRequest) =>
     request(`/mess/${messId}/scan${qs({ slot, day })}`, {
       method: 'POST',
@@ -165,6 +168,8 @@ export const realApi: ApiClient = {
   myHostel: () => request('/hostels/my_hostel'),
   registerForAccommodation: () => request('/hostels/register', { method: 'POST' }),
   cancelAccommodationRequest: () => request('/hostels/register', { method: 'DELETE' }),
+  payHostel: (req: MockPaymentRequest) =>
+    request('/hostels/pay', { method: 'POST', body: JSON.stringify(req) }),
   scanHostel: (hostelId, action, body: ScanQRRequest) =>
     request(`/hostels/${hostelId}/scan${qs({ action })}`, {
       method: 'POST',
@@ -211,9 +216,14 @@ export const realApi: ApiClient = {
 
   // ---- embeddings ----
   generateEmbedding: async (input: string | string[]) => {
+    // `dimensions: 768` matches what the backend asks for when it embeds an
+    // event/workshop description (`embedding_service.EMBEDDING_DIMENSIONS`).
+    // Without it, Gemini returns its default 3072-dim vector, which fails the
+    // length check in `cosineSimilarity` against every stored embedding and
+    // silently scores every item 0 — recommendations then rank nothing.
     const response = await request<{ data: Array<{ embedding: number[] }> }>('/embeddings', {
       method: 'POST',
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ input, dimensions: 768 }),
     });
     return response.data.map((item) => item.embedding);
   },
