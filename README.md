@@ -79,3 +79,64 @@ filtering this sprint, with seed scripts and pytest coverage for each.
 | Anshuman Pandey        | 23f3001726 | Product Manager / Backend Developer |
 | Tanisha Agrawal        | 23f3001897 | Scrum Master / Tester               |
 | Ravi Kumar K           | 24f1002594 | Frontend Developer                  |
+
+## Backend Setup Instructions
+
+### Quick Start
+
+1. **Navigate to backend directory**:
+   ```bash
+   cd backend
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configure environment**:
+   Create `atlas-credentials.env` file with:
+   ```env
+   MONGODB_URI=mongodb://localhost:27017/paradox
+   SECRET_KEY=your-secret-key-here
+   # For embeddings (optional):
+   # OPENAI_API_KEY=your-key-here
+   ```
+
+4. **Run the backend**:
+   ```bash
+   python main.py
+   # or
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+### Database Setup
+
+**Option A: Local MongoDB**:
+- Install MongoDB Community Edition
+- Default connection: `mongodb://localhost:27017/paradox`
+
+**Option B: MongoDB Atlas**:
+- Create free cluster at mongodb.com/cloud/atlas
+- Configure network access and database user
+- Use provided connection string
+
+### Seeding (Optional)
+Run from `backend/` directory:
+```bash
+python seed_staff.py --bootstrap --roster
+python seed.py --email paradox.admin@example.com
+python seed_mess.py --email paradox.admin@example.com
+python seed_events.py --email paradox.admin@example.com
+python seed_workshops.py --email paradox.admin@example.com
+python seed_staff.py --assign --email paradox.admin@example.com
+python seed_students.py
+```
+
+### Default Credentials
+- Admin: `paradox.admin@example.com` / `admin123`
+- Students: `DS26F1000001@example.com` through `DS26F1003000@example.com` / `password`
+
+### API Documentation
+- Interactive docs: http://localhost:8000/docs
+- OpenAPI spec: http://localhost:8000/openapi.json
