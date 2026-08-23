@@ -1,0 +1,32 @@
+# Root-level mirror of backend/requirements.txt.
+#
+# Lets you create ONE virtual environment from the project root and install
+# everything the backend needs, without having to `cd backend` first. Once the
+# venv is set up and activated, the frontend still uses its own toolchain
+# (npm/Node) — this file only covers the Python side. See the "Running the
+# Application" section in README.md for the full setup flow.
+
+fastapi
+uvicorn
+pymongo
+pydantic
+pydantic-settings
+python-dotenv
+python-dateutil==2.9.0.post0
+passlib[bcrypt]
+python-jose[cryptography]
+cryptography
+email-validator
+bcrypt
+openai
+
+# Testing dependencies
+mongomock
+pytest
+httpx
+# Pinned, unlike the lines above, because both are test-infrastructure plugins
+# whose behaviour the suite depends on: pytest-asyncio's `asyncio_mode = auto`
+# (see pytest.ini) drives the SSE generator tests, and a coverage major bump
+# has changed report defaults before.
+pytest-asyncio==1.3.0
+pytest-cov==7.0.0

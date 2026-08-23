@@ -26,11 +26,17 @@ with one integrated platform, built around a single participant profile. It cove
 |----------------|--------------------------------------------------------------------|
 | Frontend       | React.js (Progressive Web App)                                      |
 | Backend        | Python + FastAPI                                                    |
-| Database       | MongoDB Atlas (`paradox` database)                                  |
+| Database       | **Local MongoDB** (`paradox` database, `mongodb://localhost:27017`) |
 | Authentication | Email + password (IITM domains only), bcrypt, JWT sessions          |
 | Digital ID     | Rotating QR, RSA-OAEP encrypted payload, per participant             |
-| Payments       | Not implemented — see Project Status                                |
+| Payments       | Mock gateway (see Project Status)                                   |
 | Hosting        | Vercel (frontend) · Render (backend) — free tier                   |
+
+> **Database note:** the project ran on MongoDB Atlas earlier on, but has since
+> migrated fully to a **local MongoDB instance**. There is currently no Atlas
+> (or other cloud) database in use — `MONGODB_URI` points at
+> `mongodb://localhost:27017/paradox`, and a local `mongod` must be running
+> before the backend starts. See "Running the Application" below.
 
 ## Project Status
 
@@ -48,7 +54,7 @@ live FastAPI backend, and the staff/admin console has been built out on top of i
 | Admin console — events, workshops, mess, hostels, staff, backend teams | Built |
 | Audit trail — full log plus per-entity views | Built |
 | Fest overview board — KPIs, capacity, trends, alerts | Built |
-| Mess & hostel fee payments | **Not built.** The backend has no payments domain; the Finance panel renders a client-side demo ledger derived from real rosters and is labelled as such. |
+| Mess & hostel fee payments | **Mock gateway.** `POST /hostels/pay` and `POST /mess/pay` record a simulated settlement (fixed server-side fee, no real gateway or money involved) and the frontend now settles against these routes instead of a client-side demo ledger. |
 | Query / contact management | **Not started** |
 | Targeted announcements | **Not started** |
 
@@ -78,6 +84,99 @@ filtering this sprint, with seed scripts and pytest coverage for each.
 | Anshuman Pandey        | 23f3001726 | Product Manager / Backend Developer |
 | Tanisha Agrawal        | 23f3001897 | Scrum Master / Tester               |
 | Ravi Kumar K           | 24f1002594 | Frontend Developer                  |
+
+## Running the Application
+
+The app has two parts that both need to be running at once: the FastAPI backend
+and the React frontend. The backend talks to a **local MongoDB** instance —
+there is no cloud database involved in normal local development.
+
+### Prerequisites
+
+- **Python 3.8+** and **pip**
+- **Node.js** (current LTS) and **npm**
+- **MongoDB Community Edition** installed and able to run locally — see
+  [mongodb.com/try/download/community](https://www.mongodb.com/try/download/community)
+
+### 1. Start local MongoDB
+
+The backend expects MongoDB reachable at `mongodb://localhost:27017` (database
+name `paradox`). Start it before doing anything else:
+
+```bash
+# macOS (Homebrew)
+brew services start mongodb-community@7.0
+
+# or run it directly, any OS
+mongod --dbpath /path/to/your/db
+```
+
+Confirm it's up:
+
+```bash
+mongosh --eval "db.adminCommand('ping')"
+```
+
+### 2. Set up a Python virtual environment (backend)
+
+A `requirements.txt` is provided at the **repository root** so you can create one
+virtual environment and install everything the backend needs without first
+`cd`-ing into `backend/`:
+
+```bash
+# from the repository root
+python -m venv venv
+
+# activate it
+source venv/bin/activate      # macOS/Linux
+venv\Scripts\activate         # Windows
+
+# install backend dependencies
+pip install -r requirements.txt
+```
+
+### 3. Configure the backend environment
+
+Create `backend/atlas-credentials.env` (the filename is historical — it now holds
+the **local** MongoDB URI, not an Atlas one):
+
+```env
+MONGODB_URI=mongodb://localhost:27017/paradox
+SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+```
+
+This file is gitignored and must never be committed.
+
+### 4. Run the backend
+
+With the virtual environment active and MongoDB running:
+
+```bash
+cd backend
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+The API is now live at `http://127.0.0.1:8000` (docs at `/docs`). See the
+detailed guide below for seeding the database with hostels, mess halls, events,
+and workshops if you're starting from an empty database.
+
+### 5. Run the frontend
+
+In a separate terminal, with Node/npm installed:
+
+```bash
+cd frontend
+cp .env.example .env.local   # first time only — sets VITE_API_BASE_URL
+npm install
+npm run dev
+```
+
+Vite prints the local dev server URL (typically `http://localhost:5173`). Open
+it in a browser; the app calls the backend at the `VITE_API_BASE_URL` set in
+`frontend/.env.local` (defaults to `http://localhost:8000`).
+
+At this point both servers are running against the local MongoDB database, and
+the app is fully usable end to end.
 
 ## Backend Setup and Deployment Guide
 
@@ -122,12 +221,20 @@ pip install -r requirements.txt
 
 ### **3. Database Configuration**
 
-#### **Option A: Local MongoDB (Development)**
-1. Install MongoDB Community Edition from [mongodb.com](https://www.mongodb.com/try/download/community)
-2. Start MongoDB service
-3. Default connection: `mongodb://localhost:27017/paradox`
+**The application currently uses a local MongoDB database.** The project ran on
+MongoDB Atlas earlier on, but has since migrated fully off it — there is no
+cloud database in use today, and `atlas-credentials.env` (despite the name) is
+expected to hold a local `mongodb://` URI, not an Atlas `mongodb+srv://` one.
 
-#### **Option B: MongoDB Atlas (Cloud/Production)**
+#### **Local MongoDB (current setup)**
+1. Install MongoDB Community Edition from [mongodb.com](https://www.mongodb.com/try/download/community)
+2. Start MongoDB service (`brew services start mongodb-community@7.0` on macOS, or `mongod --dbpath <path>` anywhere)
+3. Default connection: `mongodb://localhost:27017/paradox`
+4. Confirm it's reachable: `mongosh --eval "db.adminCommand('ping')"`
+
+#### **MongoDB Atlas (not currently used)**
+Kept here for reference only, in case the project moves back to a cloud database
+in the future:
 1. Create free account at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
 2. Create M0 free cluster
 3. Configure network access (add your IP or 0.0.0.0/0)
@@ -141,9 +248,9 @@ pip install -r requirements.txt
 Create `backend/atlas-credentials.env`:
 
 ```env
-# Database Configuration (choose one)
+# Database Configuration — the app currently uses a LOCAL MongoDB database.
 MONGODB_URI=mongodb://localhost:27017/paradox
-# OR for Atlas:
+# Atlas is not currently used, but the connection string would look like this:
 # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/paradox?retryWrites=true&w=majority
 
 # Authentication
