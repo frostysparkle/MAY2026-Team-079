@@ -3515,6 +3515,69 @@ paths:
         '404':
           description: Entity not found
   /hostels/{hostel_id}:
+    put:
+      tags:
+      - Hostels
+      summary: Update Hostel
+      description: 'Edit a block''s `name` or `capacity`, Super Admin only.
+
+
+        Mirrors `mess.update_mess`: every field optional, nothing to update is
+        a
+
+        400, and a `capacity` cut below the block''s real bed ceiling
+
+        (`min(capacity, sharing * num_rooms)`, the same ceiling `allocate_hostels`
+
+        enforces) is logged rather than refused — the residents already assigned
+
+        keep their beds, and allocation simply stops placing anyone new here
+        until
+
+        capacity is raised again or beds free up. Rooming (`sharing`/`num_rooms`)
+
+        and `gender` are not editable through this route; see
+
+        `HostelUpdateRequest`.'
+      operationId: update_hostel_hostels__hostel_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: hostel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Hostel Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostelUpdateRequest'
+      responses:
+        '401':
+          description: Invalid or expired token, or user not found
+        '403':
+          description: Insufficient permissions or wrong token type
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '404':
+          description: Entity not found
+      description: PUT /hostels/{hostel_id}
     delete:
       tags:
       - Hostels
@@ -5191,6 +5254,24 @@ components:
       - sharing
       - num_rooms
       title: HostelCreateRequest
+    HostelUpdateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        capacity:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Capacity
+      type: object
+      title: HostelUpdateRequest
+      description: 'Every field optional: a caller updates only what it names.
+        `gender` and the rooming fields (`sharing`, `num_rooms`) are deliberately
+        absent — they cannot be changed after a hostel block is created.'
     IssueCreateRequest:
       properties:
         facility_type:
