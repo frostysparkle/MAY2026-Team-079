@@ -465,7 +465,7 @@ def test_a_participant_with_no_hostel_id_key_is_still_placed(
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: `excluded_by_null_filter` counts candidates whose "
            "`accommodation.hostel_id` key is absent and reports them as excluded, "
            "plus a WARNING naming them as unplaceable. They are not excluded — an "

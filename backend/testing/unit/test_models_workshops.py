@@ -311,7 +311,7 @@ def test_three_of_the_four_event_types_have_a_matching_department():
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN GAP: models.py documents the department vocabulary as lining up "
            "'exactly' with event_type, but there is no 'others' department. No "
            "department admin can ever satisfy the is_dept_admin branch of "

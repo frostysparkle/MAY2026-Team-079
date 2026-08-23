@@ -358,7 +358,7 @@ def test_an_unknown_status_filter_is_a_400(client, admin_headers):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the no-duty early return happens before the status is "
            "validated, so a staff member with no duty and a misspelled status "
            "receives 200 with an empty list while a super admin receives 400. The "
@@ -449,7 +449,7 @@ def test_an_unknown_issue_is_a_404(client, duty_staff):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the body is validated before the issue is looked up, so a "
            "malformed update against a nonexistent issue reports the body error "
            "rather than the missing issue.",

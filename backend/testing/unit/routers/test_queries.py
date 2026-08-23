@@ -110,7 +110,7 @@ def test_a_general_query_stores_no_target(client, participant):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the code's own comment calls a general query with a "
            "target_id 'a category error', but the route silently discards the value "
            "instead of refusing it, so a mis-categorised query is accepted and its "
@@ -490,7 +490,7 @@ def test_replying_to_an_unknown_query_is_a_404(client, participant):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the 404 lookup runs before either authorisation branch, so "
            "any authenticated user can probe which query ids exist.",
 )
@@ -534,7 +534,7 @@ def test_a_reply_is_audited(client, participant, audit):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: a staff reply's author_name falls back designation -> role, "
            "skipping `name` entirely, so a staff member with a name but no "
            "designation appears to the participant as their raw role, e.g. "

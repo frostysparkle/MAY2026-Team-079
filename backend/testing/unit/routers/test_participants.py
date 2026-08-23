@@ -281,7 +281,7 @@ def test_a_non_numeric_limit_is_a_422(client, admin_headers):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: `limit` is unvalidated, and `limit=0` means 'no limit' in "
            "Mongo semantics rather than 'no rows'. A client paging with a computed "
            "limit that reaches 0 receives the entire roster.",

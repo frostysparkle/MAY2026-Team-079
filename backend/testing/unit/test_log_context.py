@@ -68,7 +68,7 @@ def test_reset_unwinds_in_reverse_order():
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: `reset` guards against ValueError and LookupError, but "
            "re-resetting an already-used token raises RuntimeError, which is not "
            "caught. The docstring's stated intent — 'never worth failing a "

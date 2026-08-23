@@ -184,7 +184,7 @@ def test_editing_an_unknown_event_is_a_404(client, admin_headers):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the 404 lookup runs before _require_super_admin, so any "
            "valid staff token can distinguish an existing event from a missing one "
            "before being refused. Every sibling route gates authorisation first.",

@@ -237,7 +237,7 @@ def test_unrelated_staff_cannot_edit_the_menu(client, staff_headers):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the 404 lookup runs before the authorisation check on this "
            "route alone, so any staff token can distinguish an existing hall from a "
            "missing one. Every sibling route gates authorisation first.",

@@ -749,7 +749,7 @@ async def unknown_resume_frames(module, event):
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="KNOWN DEFECT: the resume loop marks every announcement as seen and only "
            "stops when it reaches the client's Last-Event-ID, so an id that matches "
            "nothing marks the whole history seen and the client is shown nothing at "

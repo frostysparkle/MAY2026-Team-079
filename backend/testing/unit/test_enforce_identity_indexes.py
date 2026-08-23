@@ -270,3 +270,75 @@ def test_the_index_is_the_backstop_behind_the_duplicate_check(client, password):
     assert second.status_code == 400
     assert second.json()["detail"] == "Email already registered"
     assert database.participants_collection.count_documents({}) == 1
+
+
+# ---------------------------------------------------------------------------
+# The command line
+#
+# Which mode the script runs in is the whole safety story: a `--confirm` that
+# was misread as present would write to a database somebody only asked for a
+# report on. Both branches are asserted against the indexes actually present
+# afterwards rather than against what the script printed.
+# ---------------------------------------------------------------------------
+
+def run_cli(monkeypatch, *argv):
+    import enforce_identity_indexes as script
+
+    monkeypatch.setattr("sys.argv", ["enforce_identity_indexes.py", *argv])
+    return script.main()
+
+
+def index_names(collection=None):
+    collection = collection or database.participants_collection
+    return set(collection.index_information())
+
+
+def test_the_report_is_the_default_and_creates_nothing(monkeypatch, capsys):
+    insert_participants("a@ds.study.iitm.ac.in")
+    before = index_names()
+
+    assert run_cli(monkeypatch) == 0
+
+    assert index_names() == before
+    assert "Nothing was changed." in capsys.readouterr().out
+
+
+def test_the_report_names_the_duplicates_holding_an_index_back(monkeypatch, capsys):
+    insert_participants("a@ds.study.iitm.ac.in", "a@ds.study.iitm.ac.in")
+
+    assert run_cli(monkeypatch) == 0
+
+    out = capsys.readouterr().out
+    assert "a@ds.study.iitm.ac.in" in out
+    assert "held by 2 documents" in out
+    assert "cannot be indexed until the duplicates above are resolved" in out
+
+
+def test_a_clean_report_says_what_to_run_next(monkeypatch, capsys):
+    insert_participants("a@ds.study.iitm.ac.in")
+
+    run_cli(monkeypatch)
+
+    assert "Re-run with --confirm" in capsys.readouterr().out
+
+
+def test_confirm_creates_the_indexes(monkeypatch, capsys):
+    insert_participants("a@ds.study.iitm.ac.in")
+
+    assert run_cli(monkeypatch, "--confirm") == 0
+
+    assert "uniq_participants_email" in index_names()
+    assert "uniq_backend_teams_paradox_id" in index_names(database.backend_teams_collection)
+    assert "created" in capsys.readouterr().out
+
+
+def test_confirm_reports_a_blocked_field_without_failing(monkeypatch, capsys):
+    """One field it cannot enforce is not a reason to exit non-zero — the other
+    fields were enforced and the operator needs to see which."""
+    insert_participants("a@ds.study.iitm.ac.in", "a@ds.study.iitm.ac.in")
+
+    assert run_cli(monkeypatch, "--confirm") == 0
+
+    assert "blocked" in capsys.readouterr().out
+    assert "uniq_participants_email" not in index_names()
+    assert database.participants_collection.count_documents({}) == 2
