@@ -1,226 +1,280 @@
 """
-Seed the official Paradox hostel catalogue into the ``hostel`` collection.
+Publish the official Paradox hostel catalogue through the Super Admin API.
 
-The inventory is 22 blocks — 16 men's and 6 women's — each with a capacity of
-300 and no occupants yet. `POST /hostels/allocate` (`routers/hostels.py`)
-seats participants into pre-generated rooms, at up to `sharing` occupants per
-room — the same `sharing` + `rooms` shape `POST /hostels` builds via
-`generate_room_numbers` when a block is created through the API. This script
-builds that shape for the catalogue too, so a seeded block is exactly as
-allocatable as one created by hand; no allocations or sample participants are
-created here, and occupancy is only ever moved by the application.
+22 blocks — 16 men's and 6 women's, 300 beds each — created with exactly the
+payload the dashboard's "+ New Hostel" form sends, so a seeded block is
+indistinguishable from one typed in by hand and stays fully editable afterwards.
 
-The catalogue itself lives in ``frontend/src/data/paradoxHostels.json``. That
-same dataset is what the frontend's mock API seeds, so the Super Admin dashboard
-shows the identical 22 blocks under the identical ids whether it is running
-against the mock layer or this database — the arrangement ``seed_events.py``
-already uses for the event catalogue.
+The catalogue lives in ``frontend/src/data/paradoxHostels.json``; the rooming
+plan that dataset has no field for comes from ``seed_calendar``.
 
-Re-running is safe. Each block is matched on its ``hostel_id``, so a second run
-corrects catalogue fields in place instead of inserting a second copy, and
-``occupancy`` / ``created_at`` are written on first insert only — a re-run can
-never bump occupancy or rewrite a block's original creation time.
+Why this no longer writes to Mongo directly
+===========================================
+
+There is now a ``POST /hostels`` route, and it does considerably more than
+insert the dataset's fields: it mints the ``hostel_id``, pre-generates the
+``rooms`` array, checks the generated id for a collision against the in-memory
+counter, and validates that the rooms can actually hold the stated capacity.
+Hand-writing the document meant re-implementing all of that, and the old
+version of this script had already drifted — it wrote ``category``,
+``occupancy`` and ``coordinator``, none of which exist in the current schema,
+and omitted ``sharing`` and ``rooms``, without which allocation cannot place
+anybody.
+
+What the dataset does not carry
+===============================
+
+``sharing`` (beds per room) and ``num_rooms`` have no equivalent in the
+dataset, so they come from ``seed_calendar.hostel_rooming``, which varies
+sharing across the blocks (2, 3, 4) and sizes ``num_rooms`` so that a block has
+exactly enough beds for its capacity and not one more. That precision matters:
+``hostels.allocate_hostels`` treats ``min(capacity, sharing * len(rooms))`` as
+its ceiling, so a surplus bed would let allocation seat more residents than the
+block's own stated capacity.
+
+``category`` ("men" / "women") is dropped — it duplicated ``gender``, which is
+the field allocation actually matches against ``profile.gender``. ``coordinator``
+is dropped because the schema replaced it with ``hostel_team``, which
+``seed_staff.py --assign`` fills.
+
+Re-running
+==========
+
+Safe, and matched on ``name``: ``hostel_id`` is assigned by the backend now, so
+it is not stable across environments and cannot be the key. A block already on
+file is left alone.
+
+Note that hostels have **no update route** — there is no ``PUT /hostels/{id}``.
+So a block whose catalogue fields have drifted from the dataset is reported
+rather than corrected; fixing one means deleting and recreating it, which
+resets every resident's accommodation, and that is an organiser's decision
+rather than a seed script's.
+
+Where this sits in the run order
+================================
+
+Step 2 of 4. ``seed_staff.py --bootstrap --roster`` must run first — every create
+route here is Super Admin only, and the API cannot create its own first Super
+Admin::
+
+    python seed_staff.py --bootstrap --roster
+    python seed.py            --email <admin>   # <- this script
+    python seed_mess.py       --email <admin>
+    python seed_events.py     --email <admin>
+    python seed_workshops.py  --email <admin>
+    python seed_staff.py --assign
+    python seed_students.py
 
 Usage::
 
-    python seed.py
-    python seed.py --dry-run
+    python seed.py --email <super-admin-address>
+    python seed.py --dry-run        # builds and validates payloads, no server needed
 
-Connection details come from ``database.py``, so this uses the same Mongo
-instance (and the same ``TESTING=1`` in-memory fallback) as the API.
+The password comes from ``PARADOX_ADMIN_PASSWORD`` or is prompted for, so it
+never lands in your shell history.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import math
-from datetime import datetime
+import os
+from getpass import getpass
 from pathlib import Path
+from typing import Optional
 
-from database import hostel_collection
-from id_generator import generate_room_numbers
+import httpx
 
+import seed_calendar
+
+DEFAULT_API = "http://localhost:8000"
 DEFAULT_DATASET = (
     Path(__file__).resolve().parent.parent / "frontend" / "src" / "data" / "paradoxHostels.json"
 )
 
-# The catalogue facts kept in step with the dataset on every run. `category` is
-# the catalogue wording ("men" / "women"); `gender` is the value the rest of the
-# backend keys on — `POST /hostels/allocate` matches it against a participant's
-# `profile.gender`, which is "male" / "female". `sharing` and `rooms` are not
-# read off the dataset — the dataset carries no room layout — they are derived
-# below (see `_rooms_for`) so allocation has the same `sharing` + pre-generated
-# `rooms` shape `POST /hostels` builds for a block created through the API.
-CATALOGUE_FIELDS = ("hostel_id", "name", "category", "gender", "capacity")
-
-# Occupants per room for every seeded block. `POST /hostels/allocate` seats
-# people into rooms at up to this many per room; this is a seed-time choice
-# (the dataset itself has no room layout), not something read from anywhere
-# else, so it is named here rather than left as a bare literal.
-ROOM_SHARING = 3
+#: The dataset fields this script reads. Everything else in the file — the
+#: dataset's own `hostel_id`, `category`, `coordinator` — is deliberately
+#: ignored; see the module docstring.
+CATALOGUE_FIELDS = ("name", "gender", "capacity")
 
 
-def _rooms_for(capacity: int, sharing: int = ROOM_SHARING) -> list[dict]:
-    """
-    Enough rooms, at ``sharing`` occupants each, to cover ``capacity`` — the
-    same shape `create_hostel` (`routers/hostels.py`) builds from
-    `generate_room_numbers`, reused here rather than re-implemented so the
-    room-numbering scheme (start at "101", sequential) can never drift between
-    a hostel created through the API and one seeded by this script.
-    """
-    num_rooms = math.ceil(capacity / sharing)
-    return [{"room_number": rn, "occupants": []} for rn in generate_room_numbers(num_rooms)]
+def _detail(response: httpx.Response) -> str:
+    try:
+        return str(response.json().get("detail", response.text))
+    except ValueError:
+        return response.text
+
+
+def login(client: httpx.Client, email: str, password: str) -> str:
+    """Sign in as staff and return the bearer token."""
+    response = client.post("/auth/admin/login", json={"email": email, "password": password})
+    if response.status_code != 200:
+        raise SystemExit(f"Login failed ({response.status_code}): {_detail(response)}")
+
+    body = response.json()
+    if body.get("role") != "super_admin":
+        raise SystemExit(
+            f"{email} has role {body.get('role')!r}; only a Super Admin may create hostels."
+        )
+    return body["access_token"]
 
 
 def load_catalogue(dataset: Path = DEFAULT_DATASET) -> list[dict]:
     """
-    Read the hostel inventory from ``dataset``.
+    Read the block inventory and turn it into ``POST /hostels`` payloads.
 
-    The catalogue fields are carried over as-is; ``sharing`` and ``rooms`` are
-    derived from each block's ``capacity`` (see ``_rooms_for``), since the
-    dataset itself has no room layout. ``coordinator`` and any other
-    per-deployment detail in the dataset is left to the application to fill in.
+    Ordered by name so the rooming plan a block receives is stable across runs
+    — ``seed_calendar.hostel_rooming`` cycles ``sharing`` by position, and an
+    unordered read would hand the same block a different room layout each time.
     """
     if not dataset.is_file():
         raise SystemExit(f"Dataset not found: {dataset}")
 
     records = json.loads(dataset.read_text(encoding="utf-8"))
-    catalogue = [{field: record[field] for field in CATALOGUE_FIELDS} for record in records]
 
-    ids = [hostel["hostel_id"] for hostel in catalogue]
-    if len(set(ids)) != len(ids):
-        raise SystemExit(f"Dataset has duplicate hostel_ids: {dataset}")
+    names = [record["name"] for record in records]
+    if len(set(names)) != len(names):
+        raise SystemExit(f"Dataset has duplicate hostel names, which are the match key: {dataset}")
 
-    for hostel in catalogue:
-        # `POST /hostels/allocate` computes a block's bed ceiling as
-        # `sharing * len(rooms)`, capped by `capacity`
-        # (`min(capacity, sharing * len(rooms))`) — without `rooms`/`sharing`
-        # that ceiling is 0 and the block can never receive anyone, which is
-        # exactly the defect this seed fix closes.
-        hostel["sharing"] = ROOM_SHARING
-        hostel["rooms"] = _rooms_for(hostel["capacity"], ROOM_SHARING)
-
+    catalogue = []
+    for index, record in enumerate(sorted(records, key=lambda r: r["name"])):
+        payload = {field: record[field] for field in CATALOGUE_FIELDS}
+        payload.update(seed_calendar.hostel_rooming(record["name"], record["capacity"], index))
+        catalogue.append(payload)
     return catalogue
 
 
-def seed_hostels(
-    catalogue: list[dict] | None = None,
-    collection=hostel_collection,
+def validate_locally(catalogue: list[dict], log=print) -> int:
+    """
+    Check every payload against the route's own request model, with no server.
+
+    Imported lazily because pulling in a router drags FastAPI, the database
+    module and the logging stack behind it — worth paying for a ``--dry-run``
+    that genuinely proves the payloads are acceptable, not worth paying on a
+    normal run that is about to have them validated by the API anyway.
+    """
+    from pydantic import ValidationError
+
+    from routers.hostels import HostelCreateRequest
+
+    failures = 0
+    for payload in catalogue:
+        try:
+            HostelCreateRequest(**payload)
+        except ValidationError as exc:
+            failures += 1
+            log(f"  INVALID {payload.get('name')}: {exc.errors()[0].get('msg')}")
+    return failures
+
+
+def publish_hostels(
+    client: httpx.Client,
+    catalogue: list[dict],
     *,
-    dry_run: bool = False,
     log=print,
 ) -> dict:
     """
-    Upsert the catalogue into ``collection`` and return a tally of what changed.
+    Create every block in ``catalogue`` through ``POST /hostels``.
 
-    Each document is handled in three parts. The catalogue fields (name,
-    category, gender, capacity) are corrected if they have drifted; occupancy
-    and creation time are seeded once and then left alone; and ``sharing`` /
-    ``rooms`` are *backfilled* only when a block has neither yet — never
-    diffed against the freshly-generated catalogue value the way the other
-    catalogue fields are. `POST /hostels/allocate` writes real participants
-    into ``rooms[i].occupants``, so treating a freshly regenerated (empty)
-    ``rooms`` array as "drift" on every run would silently wipe out every
-    room assignment the moment this script is re-run after an allocation. A
-    block that already has rooms keeps exactly the ones it has; only a block
-    seeded before this fix existed (or created some other way without them)
-    gets them filled in. A block that already matches everything is left
-    completely untouched, so ``updated_at`` only moves when something
-    genuinely changed.
+    Takes an already-authenticated client so the transport is the caller's
+    choice: the CLI passes a real ``httpx.Client`` and a test can pass
+    FastAPI's ``TestClient``, both exercising the same path.
+
+    Matching is on ``name`` because ``hostel_id`` is backend-assigned. Drift in
+    a block already on file is reported, not corrected — there is no update
+    route to correct it with.
     """
-    if catalogue is None:
-        catalogue = load_catalogue()
+    existing_response = client.get("/hostels")
+    if existing_response.status_code != 200:
+        raise SystemExit(f"Could not list hostels: {_detail(existing_response)}")
+    existing = {block["name"]: block for block in existing_response.json()}
+    log(f"{len(existing)} block(s) already in the database")
 
-    tally = {"created": 0, "updated": 0, "unchanged": 0, "conflicts": 0}
+    tally = {"created": 0, "skipped": 0, "drifted": 0, "failed": 0}
 
-    for hostel in catalogue:
-        hostel_id = hostel["hostel_id"]
-        catalogue_fields = {f: hostel[f] for f in CATALOGUE_FIELDS}
-        room_fields = {f: hostel[f] for f in ("sharing", "rooms")}
+    for payload in catalogue:
+        name = payload["name"]
+        on_file = existing.get(name)
 
-        # A block already stored under a different id would be a duplicate the
-        # upsert can't see. Report it and leave both records untouched.
-        clash = collection.find_one({"name": hostel["name"], "hostel_id": {"$ne": hostel_id}})
-        if clash:
-            tally["conflicts"] += 1
-            log(f"  SKIP    {hostel['name']} — already present as {clash.get('hostel_id')!r}")
-            continue
-
-        existing = collection.find_one({"hostel_id": hostel_id})
-
-        if existing is not None:
-            drift = {f: v for f, v in catalogue_fields.items() if existing.get(f) != v}
-
-            # Backfill only what is missing — a block with no `rooms` yet (every
-            # block seeded before this fix, or one written some other way without
-            # them) has nothing for `POST /hostels/allocate` to seat anyone into,
-            # and gets the catalogue's derived layout. A block that already has
-            # rooms, even an empty list on a 0-room block, is left exactly as it
-            # is: it may already hold real occupants this script must not touch.
-            if not existing.get("rooms"):
-                drift.update(room_fields)
-
-            if not drift:
-                tally["unchanged"] += 1
-                continue
-
-            tally["updated"] += 1
-            log(f"  updated {hostel_id} — {hostel['name']}: {', '.join(sorted(drift))}")
-            if not dry_run:
-                collection.update_one(
-                    {"hostel_id": hostel_id},
-                    {"$set": {**drift, "updated_at": datetime.utcnow()}},
+        if on_file is not None:
+            drift = sorted(
+                field for field, value in payload.items()
+                if field != "num_rooms" and on_file.get(field) != value
+            )
+            tally["skipped"] += 1
+            if drift:
+                tally["drifted"] += 1
+                log(
+                    f"  DRIFT   {on_file.get('hostel_id')} - {name}: {', '.join(drift)} "
+                    f"differ from the dataset (no update route; delete and recreate to fix)"
                 )
             continue
 
-        tally["created"] += 1
-        log(f"  created {hostel_id} — {hostel['name']} ({hostel['category']})")
-        if not dry_run:
-            now = datetime.utcnow()
-            # An upsert rather than a plain insert: if two runs overlap, Mongo
-            # keeps the second one from landing a duplicate.
-            collection.update_one(
-                {"hostel_id": hostel_id},
-                {
-                    "$setOnInsert": {
-                        **hostel,
-                        # A fresh block: nobody in it, no team yet.
-                        "occupancy": 0,
-                        "coordinator": {},
-                        "hostel_team": [],
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                },
-                upsert=True,
+        response = client.post("/hostels", json=payload)
+        if response.status_code == 200:
+            tally["created"] += 1
+            beds = payload["sharing"] * payload["num_rooms"]
+            log(
+                f"  created {response.json().get('hostel_id')} - {name} "
+                f"({payload['gender']}, {payload['num_rooms']} rooms x {payload['sharing']} = {beds} beds)"
             )
+        else:
+            tally["failed"] += 1
+            log(f"  FAILED  {name}: {_detail(response)}")
 
     return tally
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed the official hostel catalogue.")
+    parser = argparse.ArgumentParser(
+        description="Seed the official hostel catalogue through the API.",
+    )
+    parser.add_argument("--api", default=DEFAULT_API, help=f"API base URL (default {DEFAULT_API})")
+    parser.add_argument("--email", help="Super Admin email (not needed for --dry-run)")
     parser.add_argument(
         "--dataset", type=Path, default=DEFAULT_DATASET, help="Hostel catalogue JSON"
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report what would change without writing to the database",
+        help="Build and validate every payload locally, without a server or a token",
     )
     args = parser.parse_args()
 
     catalogue = load_catalogue(args.dataset)
-    men = sum(1 for h in catalogue if h["category"] == "men")
+    men = sum(1 for block in catalogue if block["gender"] == "male")
+    beds = sum(block["sharing"] * block["num_rooms"] for block in catalogue)
     print(
         f"Seeding {len(catalogue)} hostels "
-        f"({men} men's, {len(catalogue) - men} women's) from {args.dataset}"
+        f"({men} men's, {len(catalogue) - men} women's, {beds} beds) from {args.dataset}"
         + (" [dry run]" if args.dry_run else "")
     )
 
-    tally = seed_hostels(catalogue, dry_run=args.dry_run)
+    if args.dry_run:
+        failures = validate_locally(catalogue)
+        for block in catalogue:
+            print(
+                f"  {block['name']:<16} {block['gender']:<7} capacity={block['capacity']} "
+                f"sharing={block['sharing']} num_rooms={block['num_rooms']}"
+            )
+        print(
+            f"\nDone. {len(catalogue)} payload(s) built, {failures} rejected by "
+            f"HostelCreateRequest."
+        )
+        return 1 if failures else 0
+
+    if not args.email:
+        raise SystemExit("--email is required unless --dry-run is given")
+
+    password = os.getenv("PARADOX_ADMIN_PASSWORD") or getpass(f"Password for {args.email}: ")
+
+    with httpx.Client(base_url=args.api.rstrip("/"), timeout=60.0) as client:
+        token = login(client, args.email, password)
+        client.headers["Authorization"] = f"Bearer {token}"
+        tally = publish_hostels(client, catalogue)
 
     print("\nDone. " + " ".join(f"{name}={count}" for name, count in tally.items()))
-    return 1 if tally["conflicts"] else 0
+    return 1 if tally["failed"] else 0
 
 
 if __name__ == "__main__":
