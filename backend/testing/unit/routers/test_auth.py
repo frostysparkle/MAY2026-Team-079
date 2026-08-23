@@ -98,13 +98,14 @@ def test_registration_generates_a_usable_keypair(client):
     client.post("/auth/register", json=REGISTRATION)
     document = database.participants_collection.find_one({"email": REGISTRATION["email"]})
     secrets = document["qr_secrets"]
-    assert secrets["private_key"].startswith("-----BEGIN PRIVATE KEY-----")
+    assert secrets["private_key"].startswith(security.ENVELOPE_PREFIX)
     assert secrets["public_key"].startswith("-----BEGIN PUBLIC KEY-----")
 
     from testing.helpers import encrypt_for
 
     assert security.decrypt_qr_data(
-        secrets["private_key"], encrypt_for(secrets["public_key"], {"ok": True})
+        security.decrypt_private_key(secrets["private_key"]),
+        encrypt_for(secrets["public_key"], {"ok": True}),
     ) == {"ok": True}
 
 
@@ -465,16 +466,16 @@ def test_admin_login_with_the_wrong_password_is_401(client, super_admin):
 
 
 # ---------------------------------------------------------------------------
-# Password reset stubs
+# Password reset
 # ---------------------------------------------------------------------------
 
-def test_forgot_password_is_a_non_enumerating_stub(client, participant):
+def test_forgot_password_uses_a_generic_message(client, participant):
     known = client.post("/auth/password/forgot", json={"email": participant["email"]})
     unknown = client.post("/auth/password/forgot", json={"email": "nobody@ds.study.iitm.ac.in"})
     assert known.status_code == unknown.status_code == 200
-    assert known.json() == unknown.json()
-    assert known.json()["message"] == "If the account exists, a reset link has been sent."
+    assert known.json()["message"] == unknown.json()["message"]
     assert "dev_reset_url" in known.json()
+    assert "dev_reset_url" not in unknown.json()
 
 
 def test_forgot_password_writes_nothing(client, participant):
@@ -487,21 +488,24 @@ def test_forgot_password_still_validates_the_email(client):
     assert client.post("/auth/password/forgot", json={"email": "nope"}).status_code == 422
 
 
-def test_reset_password_is_a_stub_that_changes_nothing(client, participant):
+@pytest.mark.slow
+def test_reset_password_changes_the_hash_for_a_valid_token(client, participant):
+    forgot = client.post("/auth/password/forgot", json={"email": participant["email"]})
+    token = forgot.json()["dev_reset_url"].rsplit("token=", 1)[1]
     response = client.post("/auth/password/reset", json={
-        "token": "mock_token_123", "new_password": "brand-new-password",
+        "token": token, "new_password": "brand-new-password",
     })
     assert response.status_code == 200
     assert response.json() == {"message": "Password reset successfully."}
-    assert database.participants_collection.find_one({"_id": participant["_id"]})["password_hash"] \
-        == participant["password_hash"]
+    new_hash = database.participants_collection.find_one({"_id": participant["_id"]})["password_hash"]
+    assert new_hash != participant["password_hash"]
+    assert security.verify_password("brand-new-password", new_hash)
 
 
-def test_reset_password_accepts_any_token_today(client):
-    """Pinned so the absence of token validation is visible rather than assumed."""
+def test_reset_password_rejects_an_invalid_token(client):
     assert client.post("/auth/password/reset", json={
         "token": "obviously-not-a-real-token", "new_password": "longenough1",
-    }).status_code == 200
+    }).status_code == 401
 
 
 def test_reset_password_still_enforces_the_password_minimum(client):
