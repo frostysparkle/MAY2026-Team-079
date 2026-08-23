@@ -69,27 +69,44 @@ def generate_room_numbers(num_rooms: int, start: int = 101):
     return [str(start + i) for i in range(num_rooms)]
 
 
-def _report_unknown_type(method: str, event_type) -> None:
-    """
-    Record an unrecognised event type before the `UnboundLocalError` it causes.
+EVENT_TYPE_CODES = {
+    "technical": "TEC",
+    "culturals": "CUL",
+    "sports": "SPO",
+    "others": "OTH",
+}
 
-    `blob` is only assigned inside the `if type in [...]` check in each of the three
-    methods below, so an unrecognised type raises `UnboundLocalError` on the next
-    line — which reaches the client as an opaque 500 with no indication that the
-    cause was an event type this generator has never heard of. The exception is
-    deliberately left to happen (changing it into a 400 would change the API's
-    behaviour); what changes is that the reason is now written down first.
+
+def _type_code(method: str, event_type) -> str:
     """
-    log_config.error(
-        _log,
-        f"{method} called with an unrecognised event type; id generation will fail",
-        {
-            "reason": "unknown_event_type",
-            "method": method,
-            "event_type": str(event_type),
-            "known_types": ["technical", "culturals", "sports", "others"],
-        },
-    )
+    The three-letter code for an event type, or a `ValueError` naming what was wrong.
+
+    This used to be an `if type in [...]` with no `else`, so an unrecognised type left
+    `blob` unassigned and the next line raised `UnboundLocalError` — which reached the
+    client as a 500 pointing at a variable that was never set, saying nothing about the
+    actual cause.
+
+    It now raises `ValueError` naming the offending value and the accepted set, and the
+    callers that pass a type read back from a stored document turn that into a 422. No
+    HTTP request can reach here with a bad value on its own: `EventCreateRequest.event_type`
+    is a `Literal`, so the only way in is a write that bypassed the request models.
+    """
+    code = EVENT_TYPE_CODES.get(event_type)
+    if code is None:
+        log_config.error(
+            _log,
+            f"{method} called with an unrecognised event type",
+            {
+                "reason": "unknown_event_type",
+                "method": method,
+                "event_type": str(event_type),
+                "known_types": sorted(EVENT_TYPE_CODES),
+            },
+        )
+        raise ValueError(
+            f"unknown event_type {event_type!r}; expected one of {sorted(EVENT_TYPE_CODES)}"
+        )
+    return code
 
 
 class EventIDGenerator:
@@ -112,29 +129,17 @@ class EventIDGenerator:
         self.current_team_id = 111111
 
     def next_event_id(self, type: str):
-        if type in ["technical", "culturals", "sports", "others"]:
-            blob = "EV" + type[:3].upper()
-        else:
-            _report_unknown_type("next_event_id", type)
-        event_id = blob + str(self.current_event_id)
+        event_id = "EV" + _type_code("next_event_id", type) + str(self.current_event_id)
         self.current_event_id += 1
         return event_id
 
     def next_round_id(self, type: str):
-        if type in ["technical", "culturals", "sports", "others"]:
-            blob = "RND" + type[:3].upper()
-        else:
-            _report_unknown_type("next_round_id", type)
-        round_id = blob + str(self.current_round_id)
+        round_id = "RND" + _type_code("next_round_id", type) + str(self.current_round_id)
         self.current_round_id += 1
         return round_id
 
     def next_team_id(self, type: str):
-        if type in ["technical", "culturals", "sports", "others"]:
-            blob = "TM" + type[:3].upper()
-        else:
-            _report_unknown_type("next_team_id", type)
-        team_id = blob + str(self.current_team_id)
+        team_id = "TM" + _type_code("next_team_id", type) + str(self.current_team_id)
         self.current_team_id += 1
         return team_id
 
@@ -182,12 +187,13 @@ class BackendTeamIDGenerator:
         )
 
     def next_id(self, role: str, department: str) -> str:
-        # Both lookups are unguarded subscripts, so an unrecognised role or
-        # department raises `KeyError` and reaches the client as a 500 rather than a
-        # 400 naming the bad value. The exception is left as it is — turning it into
-        # a 400 would change the API's behaviour — but the offending value and the
-        # accepted set are recorded first, which is the whole of what a caller
-        # debugging a failed staff creation needs.
+        # Both lookups used to be unguarded subscripts, so an unrecognised role or
+        # department raised `KeyError` and reached the client as a 500 naming nothing.
+        # It now raises `ValueError` naming the offending value and the accepted set.
+        #
+        # No HTTP request can arrive here with a bad value: both fields are `Literal`
+        # types on `BackendTeamCreateRequest`, so this is a guard against internal
+        # callers and against values that entered the database some other way.
         if role not in self.ROLE_CODES or department not in self.DEPARTMENT_CODES:
             log_config.error(
                 _log,
@@ -201,6 +207,11 @@ class BackendTeamIDGenerator:
                     "known_roles": sorted(self.ROLE_CODES),
                     "known_departments": sorted(self.DEPARTMENT_CODES),
                 },
+            )
+            raise ValueError(
+                f"unknown role {role!r} or department {department!r}; "
+                f"expected a role in {sorted(self.ROLE_CODES)} and a department in "
+                f"{sorted(self.DEPARTMENT_CODES)}"
             )
 
         role_code = self.ROLE_CODES[role]

@@ -286,14 +286,12 @@ def test_a_profile_less_account_logs_in_with_null_profile_fields(client, make_pa
     assert body["program"] is None
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: `verify_password` calls `.encode()` on the stored hash, so "
-           "a participant document with no `password_hash` raises AttributeError and "
-           "the endpoint answers 500 instead of 401. Reachable for any account "
-           "created outside POST /auth/register, e.g. by a seed script.",
-)
 def test_an_account_with_no_password_hash_is_401_not_500(client, make_participant):
+    """
+    Reachable for any account whose document was written by something other than
+    `POST /auth/register`. Such an account cannot log in — but it must fail on
+    credentials, not crash.
+    """
     person = make_participant(email="23f100010@ds.study.iitm.ac.in",
                               participant_id="DS23F100010")
     database.participants_collection.update_one(
@@ -303,6 +301,36 @@ def test_an_account_with_no_password_hash_is_401_not_500(client, make_participan
         "email": person["email"], "password": "longenough1",
     })
     assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
+
+
+def test_a_staff_account_with_no_password_hash_is_also_401(client, make_staff):
+    staff = make_staff(paradox_id="OTHO1111", email="broken@ds.study.iitm.ac.in", role="other")
+    database.backend_teams_collection.update_one(
+        {"_id": staff["_id"]}, {"$unset": {"password_hash": ""}}
+    )
+    response = client.post("/auth/admin/login", json={
+        "email": staff["email"], "password": "longenough1",
+    })
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid credentials"
+
+
+def test_changing_the_password_of_a_hashless_account_is_400_not_500(
+    client, make_participant
+):
+    """The third caller of `verify_password`, and the same reasoning applies."""
+    person = make_participant(email="23f100011@ds.study.iitm.ac.in",
+                              participant_id="DS23F100011")
+    database.participants_collection.update_one(
+        {"_id": person["_id"]}, {"$unset": {"password_hash": ""}}
+    )
+    response = client.post("/auth/password/change",
+                           json={"current_password": "anything",
+                                 "new_password": "a-brand-new-password"},
+                           headers=auth_headers(person))
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Incorrect current password"
 
 
 # ---------------------------------------------------------------------------

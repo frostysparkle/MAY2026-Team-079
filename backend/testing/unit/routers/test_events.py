@@ -240,6 +240,71 @@ def test_a_supplied_round_id_is_preserved_and_a_missing_one_minted(
     assert schedule[1]["round_id"].startswith("RNDTEC")
 
 
+def test_a_corrupt_stored_event_type_is_a_422_not_a_500(client, admin_headers, event):
+    """
+    A document written outside the API can hold an `event_type` no id generator
+    recognises — `EventCreateRequest` cannot prevent that. Minting a round id from it
+    used to crash; it now names the offending field.
+    """
+    database.event_collection.update_one(
+        {"_id": event["_id"]}, {"$set": {"event_type": "quidditch"}}
+    )
+    response = client.put("/events/EVTEC1111", json={"schedule": [
+        {"name": "Round 1", "start_time": iso_from_now(60), "end_time": iso_from_now(120)},
+    ]}, headers=admin_headers)
+
+    assert response.status_code == 422
+    assert "quidditch" in response.json()["detail"]
+
+
+def test_a_corrupt_stored_event_type_is_reported_as_an_integrity_event(
+    client, admin_headers, event, caplog
+):
+    import logging
+
+    database.event_collection.update_one(
+        {"_id": event["_id"]}, {"$set": {"event_type": "quidditch"}}
+    )
+    with caplog.at_level(logging.ERROR, logger="paradox.audit"):
+        client.put("/events/EVTEC1111", json={"schedule": [
+            {"name": "R", "start_time": iso_from_now(60), "end_time": iso_from_now(120)},
+        ]}, headers=admin_headers)
+
+    assert any(getattr(record, "reason", None) == "stored_event_type_unknown"
+               for record in caplog.records)
+
+
+def test_a_supplied_round_id_sidesteps_generation_entirely(client, admin_headers, event):
+    """No id needs minting, so a corrupt stored type is not consulted."""
+    database.event_collection.update_one(
+        {"_id": event["_id"]}, {"$set": {"event_type": "quidditch"}}
+    )
+    response = client.put("/events/EVTEC1111", json={"schedule": [
+        {"round_id": "RNDTEC99999", "name": "R", "start_time": iso_from_now(60),
+         "end_time": iso_from_now(120)},
+    ]}, headers=admin_headers)
+    assert response.status_code == 200
+
+
+def test_registering_a_team_on_a_corrupt_event_is_a_422(client, participant):
+    doc = factories.event_doc("EVTEC1111", team_min=2, team_max=3)
+    doc["event_type"] = "quidditch"
+    database.event_collection.insert_one(doc)
+
+    response = client.post("/events/EVTEC1111/register", json={"team_name": "Rockets"},
+                           headers=auth_headers(participant))
+    assert response.status_code == 422
+
+
+def test_a_solo_registration_on_a_corrupt_event_still_works(client, participant):
+    """Only team creation mints an id, so a solo sign-up is unaffected."""
+    doc = factories.event_doc("EVTEC1111")
+    doc["event_type"] = "quidditch"
+    database.event_collection.insert_one(doc)
+    assert client.post("/events/EVTEC1111/register",
+                       headers=auth_headers(participant)).status_code == 200
+
+
 def test_an_empty_list_overwrites_rather_than_being_ignored(client, admin_headers, event):
     """`[]` is not None, so it is written — easy to mistake for a no-op."""
     client.put("/events/EVTEC1111", json={"prize_money": []}, headers=admin_headers)
@@ -732,6 +797,54 @@ def test_uhc_staff_see_only_their_own_house(client, event, make_staff, make_part
 
     body = client.get("/events/EVTEC1111/participation", headers=auth_headers(uhc)).json()
     assert [row["name"] for row in body["participants"]] == ["In House"]
+
+
+def test_a_registrant_with_no_house_does_not_crash_the_uhc_view(
+    client, event, make_staff, make_participant
+):
+    """
+    `prof.get("house", "")` returns None for a profile that stores an explicit null —
+    the default only applies to a *missing* key — so `.lower()` used to raise
+    AttributeError and answer 500. An incomplete profile is ordinary: `profile` is
+    `{}` from registration until the student fills it in.
+    """
+    uhc = make_staff(paradox_id="OTUH3333", email="gir-uhc@ds.study.iitm.ac.in",
+                     role="other", department="uhc")
+    make_participant(participant_id="DS23F000001", email="a@ds.study.iitm.ac.in",
+                     profile={"full_name": "No House", "house": None},
+                     events=[factories.event_registration(event["_id"])])
+
+    response = client.get("/events/EVTEC1111/participation", headers=auth_headers(uhc))
+    assert response.status_code == 200
+    # Nobody's house matches, so the roster is empty rather than broken.
+    assert response.json()["participants"] == []
+
+
+def test_a_registrant_with_no_house_is_visible_to_a_super_admin(
+    client, admin_headers, event, make_participant
+):
+    """The house filter is UHC-only, so a null house is no obstacle here."""
+    make_participant(participant_id="DS23F000001", email="a@ds.study.iitm.ac.in",
+                     profile={"full_name": "No House", "house": None},
+                     events=[factories.event_registration(event["_id"])])
+    body = client.get("/events/EVTEC1111/participation", headers=admin_headers).json()
+    assert [row["name"] for row in body["participants"]] == ["No House"]
+    assert body["participants"][0]["house"] is None
+
+
+def test_a_uhc_admin_whose_email_has_no_house_prefix_sees_nobody(
+    client, event, make_staff, make_participant
+):
+    """`admin_house` is None when the email carries no dash, which matches no
+    participant — pinned so the behaviour is deliberate rather than incidental."""
+    uhc = make_staff(paradox_id="OTUH4444", email="uhc@ds.study.iitm.ac.in",
+                     role="other", department="uhc")
+    make_participant(participant_id="DS23F000001", email="a@ds.study.iitm.ac.in",
+                     profile={"full_name": "In Gir", "house": "Gir"},
+                     events=[factories.event_registration(event["_id"])])
+    response = client.get("/events/EVTEC1111/participation", headers=auth_headers(uhc))
+    assert response.status_code == 200
+    assert response.json()["participants"] == []
 
 
 def test_uhc_staff_do_not_receive_the_daily_scan_total(client, event, make_staff):

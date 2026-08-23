@@ -13,7 +13,28 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week token expiry
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    """
+    Whether this password matches this stored hash.
+
+    Returns False rather than raising when the stored hash is missing or not a
+    bcrypt hash at all. It used to raise: `None.encode()` gave `AttributeError` and a
+    malformed string gave `ValueError`, both of which reached the client as a 500
+    from `POST /auth/login` — an account whose document was created by anything
+    other than `POST /auth/register` could not fail to log in, it could only crash.
+
+    False is the truthful answer in every case. A document with no usable hash has no
+    password that can match, so the callers' own "Invalid credentials" 401 and
+    "Incorrect current password" 400 are exactly right. Refusing to authenticate is
+    also the safe direction to fail: there is no input for which this now returns True
+    where it previously raised.
+    """
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        # Not a bcrypt hash — truncated, double-encoded, or written by hand.
+        return False
 
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')

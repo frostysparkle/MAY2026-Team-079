@@ -105,24 +105,37 @@ def test_team_ids_are_unique_across_event_types():
     assert second == "TMSPO111112"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: `blob` is assigned inside an `if` with no `else`, so an "
-           "unrecognised event_type raises UnboundLocalError (a 500) instead of a "
-           "clear error. Reachable from events.update_event / allocate_teams, which "
-           "pass event_type read back from a stored document.",
-)
 @pytest.mark.parametrize("method", ["next_event_id", "next_round_id", "next_team_id"])
 def test_unknown_event_type_reports_a_clear_error(method):
+    """
+    It used to leave the prefix variable unassigned and raise `UnboundLocalError`,
+    which the client saw as a 500 pointing at a variable rather than at the bad value.
+    """
     generator = EventIDGenerator()
+    with pytest.raises(ValueError) as excinfo:
+        getattr(generator, method)("quidditch")
+    message = str(excinfo.value)
+    assert "quidditch" in message
+    assert "technical" in message, "the accepted set is named"
+
+
+@pytest.mark.parametrize("method", ["next_event_id", "next_round_id", "next_team_id"])
+def test_a_rejected_type_does_not_consume_a_counter(method):
+    """The refusal happens before the increment, so a failed call cannot leave a gap
+    in the id sequence."""
+    generator = EventIDGenerator()
+    before = (generator.current_event_id, generator.current_round_id, generator.current_team_id)
     with pytest.raises(ValueError):
         getattr(generator, method)("quidditch")
+    assert (generator.current_event_id, generator.current_round_id,
+            generator.current_team_id) == before
 
 
-def test_unknown_event_type_currently_raises_unbound_local():
-    """Characterises today's behaviour so the xfail above has a documented pair."""
-    with pytest.raises(UnboundLocalError):
-        EventIDGenerator().next_event_id("quidditch")
+def test_the_event_type_code_table_covers_the_model_vocabulary():
+    from id_generator import EVENT_TYPE_CODES
+    from models import EVENT_TYPES
+
+    assert set(EVENT_TYPE_CODES) == set(EVENT_TYPES)
 
 
 # ---------------------------------------------------------------------------
@@ -161,17 +174,18 @@ def test_role_and_department_code_tables_cover_the_model_vocabularies():
     assert set(BackendTeamIDGenerator.DEPARTMENT_CODES) == set(BACKEND_TEAM_DEPARTMENTS)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: direct dict indexing raises KeyError (a 500) for input "
-           "outside the vocabularies instead of a clear error.",
-)
 @pytest.mark.parametrize("role,department", [("wizard", "mess"), ("admin", "quidditch")])
 def test_unknown_role_or_department_reports_a_clear_error(role, department):
-    with pytest.raises(ValueError):
+    """Previously a bare `KeyError`, which reached the client as a 500 naming
+    nothing."""
+    with pytest.raises(ValueError) as excinfo:
         BackendTeamIDGenerator().next_id(role, department)
+    message = str(excinfo.value)
+    assert role in message and department in message
 
 
-def test_unknown_role_currently_raises_key_error():
-    with pytest.raises(KeyError):
-        BackendTeamIDGenerator().next_id("wizard", "mess")
+def test_a_rejected_staff_id_does_not_consume_the_counter():
+    generator = BackendTeamIDGenerator()
+    with pytest.raises(ValueError):
+        generator.next_id("wizard", "mess")
+    assert generator.next_id("admin", "mess") == "ADME1111"

@@ -260,19 +260,39 @@ def test_the_roster_lists_every_account(client, admin_headers, make_staff, super
     assert ids == {super_admin["paradox_id"], "OTHO1111"}
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: the projection excludes only `_id` and `password_hash`, so "
-           "`admin_id` is returned as a raw ObjectId, which is not JSON "
-           "serialisable. Any staff account linked to a participant — which "
-           "super_admin, admin and volunteer accounts are required to be — makes "
-           "this endpoint 500.",
-)
 def test_the_roster_survives_a_participant_linked_account(client, admin_headers, make_staff,
                                                          linked_participant):
+    """
+    `admin_id` is a raw ObjectId on the document. Returning it unconverted made this
+    endpoint 500 for any privileged account — and `super_admin`, `admin` and
+    `volunteer` are all required to be linked, so the roster broke as soon as one
+    existed.
+    """
     make_staff(paradox_id="ADHO1111", email="a@x.com", role="admin",
                admin_id=linked_participant["_id"])
-    assert client.get("/backend_teams", headers=admin_headers).status_code == 200
+    response = client.get("/backend_teams", headers=admin_headers)
+    assert response.status_code == 200
+
+    linked = next(row for row in response.json() if row["paradox_id"] == "ADHO1111")
+    assert linked["admin_id"] == str(linked_participant["_id"])
+
+
+def test_an_unlinked_account_reports_a_null_link(client, admin_headers, make_staff):
+    make_staff(paradox_id="OTHO1111", email="a@x.com", role="other")
+    row = next(r for r in client.get("/backend_teams", headers=admin_headers).json()
+               if r["paradox_id"] == "OTHO1111")
+    assert row["admin_id"] is None
+
+
+def test_the_roster_is_json_serialisable_end_to_end(client, admin_headers, make_staff,
+                                                    linked_participant):
+    """No ObjectId anywhere in the response, whatever the account shape."""
+    import json
+
+    make_staff(paradox_id="ADHO1111", email="a@x.com", role="admin",
+               admin_id=linked_participant["_id"])
+    make_staff(paradox_id="OTHO2222", email="b@x.com", role="other")
+    json.dumps(client.get("/backend_teams", headers=admin_headers).json())
 
 
 # ---------------------------------------------------------------------------

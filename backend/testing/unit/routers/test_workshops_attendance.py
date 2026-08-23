@@ -462,14 +462,36 @@ def test_an_unrecognised_scan_type_reports_a_400(client, workshop, scanner, part
     register(client, participant)
     response = client.post("/workshops/WKSP111/attendance?scan_type=teleported",
                            json=make_qr(participant), headers=auth_headers(scanner))
-    if response.status_code == 500:
-        pytest.xfail(
-            "KNOWN DEFECT: _assert_scan_window raises KeyError for an unrecognised "
-            "scan_type, so the route 500s before reaching its own "
-            "400 'Invalid scan_type'."
-        )
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid scan_type"
+
+
+@pytest.mark.parametrize("scan_type", ["changes", "PRE-REGISTERED", "", "on_spot"])
+def test_the_accepted_scan_types_are_a_closed_set(client, workshop, scanner, participant,
+                                                  scan_type):
+    """
+    `changes` is a window key for the manual-correction route, not something a
+    scanner may send — so it is refused here like any other unknown value.
+    """
+    response = client.post(f"/workshops/WKSP111/attendance?scan_type={scan_type}",
+                           json=make_qr(participant), headers=auth_headers(scanner))
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid scan_type"
+
+
+def test_an_invalid_scan_type_is_refused_before_anything_else_is_touched(
+    client, slots, scanner, participant, audit
+):
+    """
+    Checked ahead of the workshop lookup, the team check and the window guard, so a
+    typo cannot produce a misleading refusal about some other condition — and
+    nothing is written.
+    """
+    response = client.post("/workshops/WKSP999/attendance?scan_type=teleported",
+                           json=make_qr(participant), headers=auth_headers(scanner))
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid scan_type"
+    audit.none("WORKSHOP_ATTENDANCE")
 
 
 # ---------------------------------------------------------------------------

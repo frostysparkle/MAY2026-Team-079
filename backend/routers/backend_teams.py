@@ -186,7 +186,22 @@ def get_backend_teams(current_user: dict = Depends(get_current_staff)):
             details={"operation": "list", "resource": "backend_teams", "status": 403},
         )
         raise HTTPException(status_code=403, detail="Only Super Admins can view backend teams")
-    return list(backend_teams_collection.find({}, {"_id": 0, "password_hash": 0}))
+
+    # `admin_id` holds the linked participant's raw ObjectId, which is not JSON
+    # serialisable — so this endpoint used to 500 for any account that has one.
+    # That is not an edge case: `super_admin`, `admin` and `volunteer` accounts are
+    # *required* to link to a participant (see ADMIN_ID_REQUIRED_ROLES), so the
+    # staff roster broke as soon as a single privileged account existed.
+    #
+    # Stringified rather than projected out, because the link is what makes a staff
+    # account auditable and a client has a legitimate use for it. Same treatment
+    # `/participants` already gives `mess.mess_id`.
+    rows = []
+    for row in backend_teams_collection.find({}, {"_id": 0, "password_hash": 0}):
+        if row.get("admin_id") is not None:
+            row["admin_id"] = str(row["admin_id"])
+        rows.append(row)
+    return rows
 
 
 @router.put("/{paradox_id}")

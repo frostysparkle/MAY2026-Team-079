@@ -27,6 +27,18 @@ router = APIRouter(prefix="/workshops", tags=["Workshops"])
 
 _log = log_config.get_logger("paradox.workshops")
 
+# The only values `POST /{workshop_id}/attendance?scan_type=` accepts.
+#
+# A closed set rather than a free string, because `scan_type` is also the key into
+# `_WINDOW_OPEN_MINUTES` further down this file: an unrecognised value used to reach
+# that table and raise `KeyError`, which the client saw as a 500. Declared here, at
+# the top, so the accepted vocabulary is visible next to the router rather than
+# buried beside the window arithmetic it happens to index.
+#
+# `"changes"` is deliberately absent: it is a window key for the manual-correction
+# route, never something a scanner may send.
+SCAN_TYPES = frozenset({"pre-registered", "on-spot"})
+
 
 def _require_super_admin_logged(current_user: dict, operation: str, detail: str, target_id=None) -> str:
     """
@@ -633,6 +645,23 @@ async def stream_workshop_seats(workshop_id: str):
 
 @router.post("/{workshop_id}/attendance")
 def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str = "pre-registered", current_user: dict = Depends(get_current_staff)):
+    # Validated first, ahead of every other check.
+    #
+    # `scan_type` doubles as the key into `_WINDOW_OPEN_MINUTES`, so an unrecognised
+    # value used to raise `KeyError` inside `_assert_scan_window` and reach the client
+    # as a 500 — before ever arriving at this function's own "Invalid scan_type" at the
+    # foot of the body, which was therefore unreachable. Any typo in a scanner's query
+    # string produced that 500.
+    if scan_type not in SCAN_TYPES:
+        log_denied(
+            current_user, "WORKSHOP_ATTENDANCE_DENIED", workshop_id,
+            reason="invalid_scan_type",
+            details={"scan_type": scan_type, "accepted": sorted(SCAN_TYPES),
+                     "scan_domain": "workshop"},
+            audit=False,
+        )
+        raise HTTPException(status_code=400, detail="Invalid scan_type")
+
     # _resolve_workshop is defined later in this module but is only called at
     # request time, once the whole module (and the function it names) has
     # been loaded — same as every other forward reference to it below.
@@ -950,15 +979,11 @@ def workshop_attendance(workshop_id: str, request: ScanQRRequest, scan_type: str
         )
         return {"message": "On-spot registration successful and marked present"}
     
-    # Reached by any `scan_type` that is neither of the two handled above. Logged
-    # because it means a client is sending something this API has never supported,
-    # and the volunteer sees a bare 400 while working a queue.
-    log_denied(
-        current_user, "WORKSHOP_ATTENDANCE_DENIED", workshop.get("workshop_id"),
-        reason="invalid_scan_type",
-        details={"scan_type": scan_type, "scan_domain": "workshop"},
-    )
-    raise HTTPException(status_code=400, detail="Invalid scan_type")
+    # Unreachable: `scan_type` is validated against SCAN_TYPES at the top of this
+    # function, and the two branches above cover both members of that set. Kept as a
+    # guard so that adding a third scan type without adding a branch fails loudly
+    # here rather than falling off the end of the function and returning None.
+    raise HTTPException(status_code=500, detail=f"Unhandled scan_type {scan_type!r}")
 
 
 # ==========================================================================

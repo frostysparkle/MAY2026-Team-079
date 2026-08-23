@@ -46,21 +46,42 @@ def test_hash_is_a_bcrypt_2b_string():
     assert security.get_password_hash("x" * 12).startswith("$2b$")
 
 
-def test_verify_raises_on_a_missing_hash():
+def test_a_missing_hash_verifies_as_false_rather_than_raising():
     """
-    `verify_password(plain, None)` raises rather than returning False, because
-    it calls `.encode()` on the hash. This is what makes `POST /auth/login`
-    return 500 instead of 401 for a participant document with no
-    `password_hash` — see test_auth.py for the endpoint-level xfail.
+    It used to raise `AttributeError` from `None.encode()`, which reached the client
+    as a 500 from `POST /auth/login`. False is the truthful answer — a document with
+    no usable hash has no password that can match — and it lets the caller's own 401
+    do its job.
     """
-    with pytest.raises(AttributeError):
-        security.verify_password("anything", None)
+    assert security.verify_password("anything", None) is False
+
+
+def test_an_empty_hash_verifies_as_false():
+    assert security.verify_password("anything", "") is False
+
+
+def test_an_empty_password_verifies_as_false():
+    assert security.verify_password("", "$2b$12$" + "x" * 53) is False
+    assert security.verify_password(None, "$2b$12$" + "x" * 53) is False
+
+
+@pytest.mark.parametrize("hashed", [
+    "not-a-bcrypt-hash", "$2b$12$too-short", "plaintext-password", "$1$md5$abc",
+])
+def test_a_malformed_hash_verifies_as_false(hashed):
+    assert security.verify_password("anything", hashed) is False
 
 
 @pytest.mark.slow
-def test_verify_raises_on_a_malformed_hash():
-    with pytest.raises(ValueError):
-        security.verify_password("anything", "not-a-bcrypt-hash")
+def test_failing_open_is_never_possible():
+    """
+    The safe direction: there is no input for which the guard now returns True where
+    it previously raised. A real hash still only matches its own password.
+    """
+    hashed = security.get_password_hash("the-real-password")
+    assert security.verify_password("the-real-password", hashed) is True
+    for wrong in ("", None, "nearly-the-real-password"):
+        assert security.verify_password(wrong, hashed) is False
 
 
 # ---------------------------------------------------------------------------

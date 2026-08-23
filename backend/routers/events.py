@@ -81,7 +81,7 @@ from models import (
 from database import event_collection, participants_collection, backend_teams_collection, event_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
-from id_generator import EventIDGenerator
+from id_generator import EVENT_TYPE_CODES, EventIDGenerator
 
 generator = EventIDGenerator()
 
@@ -156,6 +156,39 @@ def _with_computed_registration(event: dict) -> dict:
     event = dict(event)
     event["registration"] = registration
     return event
+
+
+def _stored_event_type(event: dict) -> str:
+    """
+    This event's `event_type`, checked before it reaches an id generator.
+
+    Every id this module mints — round ids, team ids — derives its prefix from the
+    event type, and for a *stored* event that value has never been validated by any
+    request model: `EventCreateRequest.event_type` is a `Literal`, but a document
+    written by a migration or by hand is not bound by it.
+
+    Reading it back and handing it straight to the generator therefore turned bad
+    stored data into an opaque 500 (an `UnboundLocalError` on an unassigned prefix
+    variable). Resolved once, here, so the four call sites read the same and a corrupt
+    document reports which field is wrong instead of crashing.
+    """
+    event_type = event.get("event_type", "others")
+    if event_type not in EVENT_TYPE_CODES:
+        log_integrity(
+            "event has an event_type no id generator recognises",
+            reason="stored_event_type_unknown",
+            details={
+                "event_id": event.get("event_id"),
+                "event_type": str(event_type),
+                "known_types": sorted(EVENT_TYPE_CODES),
+            },
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"This event's event_type {event_type!r} is not one of "
+                   f"{sorted(EVENT_TYPE_CODES)}; it cannot be used to generate ids",
+        )
+    return event_type
 
 
 def _event_team_role(event: dict, user_id: str) -> Optional[str]:
@@ -293,7 +326,7 @@ def update_event(event_id: str, request: EventUpdateRequest, current_user: dict 
     if "schedule" in update_data:
         update_data["schedule"] = [
             {
-                "round_id": rnd.round_id or generator.next_round_id(event.get("event_type", "others")),
+                "round_id": rnd.round_id or generator.next_round_id(_stored_event_type(event)),
                 "name": rnd.name,
                 "description": rnd.description,
                 "start_time": rnd.start_time,
@@ -480,7 +513,7 @@ def _resolve_registration_team(event: dict, reg_input: Optional[EventRegistratio
         # Creating a team. The id is backend-assigned — the same way event_id
         # and round_id are — so `team_name` is stored purely as a display
         # label alongside it, never used as the id itself.
-        new_team_id = generator.next_team_id(event.get("event_type", "others"))
+        new_team_id = generator.next_team_id(_stored_event_type(event))
         return new_team_id, "leader"
 
     if team_id:
@@ -719,7 +752,13 @@ def view_participation(event_id: str, current_user: dict = Depends(get_current_s
         if is_uhc and not is_super_admin and not is_event_team:
             email = admin_doc.get("email", "")
             admin_house = email.split("-")[0].lower() if "-" in email else None
-            if prof.get("house", "").lower() != admin_house:
+            # `(... or "")` rather than `.get("house", "")`: the default only applies
+            # to a *missing* key, so a profile storing an explicit `house: None` — the
+            # ordinary state of an account that has not completed registration — used
+            # to reach `.lower()` on None and answer 500 for the whole roster, because
+            # of one incomplete participant.
+            participant_house = (prof.get("house") or "").lower()
+            if participant_house != admin_house:
                 continue
 
         result.append({
@@ -853,7 +892,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
                     # Same `next_team_id` a participant-created team gets, so
                     # every team_id in this event — self-formed or
                     # auto-allocated — comes from the one counter.
-                    team_id = generator.next_team_id(event.get("event_type", "others"))
+                    team_id = generator.next_team_id(_stored_event_type(event))
                     for p in team_chunk:
                         assign_result = participants_collection.update_one(
                             {"_id": p["_id"], "events.event_id": event["_id"]},
@@ -885,7 +924,7 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
         for i in range(0, len(solo_players), max_size):
             team_chunk = solo_players[i:i+max_size]
             if len(team_chunk) >= min_size:
-                team_id = generator.next_team_id(event.get("event_type", "others"))
+                team_id = generator.next_team_id(_stored_event_type(event))
                 for p in team_chunk:
                     assign_result = participants_collection.update_one(
                         {"_id": p["_id"], "events.event_id": event["_id"]},
