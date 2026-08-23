@@ -183,16 +183,19 @@ def test_editing_an_unknown_event_is_a_404(client, admin_headers):
     assert response.json()["detail"] == "Event not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the 404 lookup runs before _require_super_admin, so any "
-           "valid staff token can distinguish an existing event from a missing one "
-           "before being refused. Every sibling route gates authorisation first.",
-)
 def test_existence_is_not_leaked_to_unauthorised_staff(client, staff_headers, event):
+    """A 404 for the missing id and a 403 for the real one is an existence oracle:
+    it answers "does EVTEC1111 exist" to somebody who may not edit it."""
     missing = client.put("/events/EVTEC9999", json={"name": "x"}, headers=staff_headers)
     existing = client.put("/events/EVTEC1111", json={"name": "x"}, headers=staff_headers)
-    assert missing.status_code == existing.status_code
+    assert missing.status_code == existing.status_code == 403
+
+
+def test_a_super_admin_still_gets_a_404_for_a_missing_event(client, admin_headers):
+    """Gating first must not swallow the 404 for somebody entitled to it."""
+    response = client.put("/events/EVTEC9999", json={"name": "x"}, headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Event not found"
 
 
 def test_the_registration_window_is_merged_not_replaced(client, admin_headers, event):

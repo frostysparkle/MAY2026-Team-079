@@ -464,36 +464,26 @@ def test_a_participant_with_no_hostel_id_key_is_still_placed(
     assert accommodation(candidate_with_absent_key)["hostel_id"] == "HSTL111"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: `excluded_by_null_filter` counts candidates whose "
-           "`accommodation.hostel_id` key is absent and reports them as excluded, "
-           "plus a WARNING naming them as unplaceable. They are not excluded — an "
-           "equality match against null also matches a missing field — so the figure "
-           "and the warning both describe a problem that does not exist, while the "
-           "same participants are counted again in allocated_count.",
-)
 def test_absent_keys_are_not_reported_as_excluded(
-    client, admin_headers, candidate_with_absent_key, audit
-):
-    make_hostel()
-    client.post("/hostels/allocate", headers=admin_headers)
-    assert audit.one("ALLOCATE_HOSTELS")["details"]["excluded_by_null_filter"] == 0
-
-
-def test_the_spurious_exclusion_warning_is_currently_emitted(
     client, admin_headers, candidate_with_absent_key, audit, caplog
 ):
-    """Characterises today's behaviour, paired with the xfail above."""
+    """
+    The batch row used to carry `excluded_by_null_filter: 1` for this candidate and
+    warn that they were unplaceable, while the test above shows the same person
+    being placed — and `allocated_count` counted them too. One participant, two
+    contradictory figures in the same row.
+    """
     import logging
 
     make_hostel()
     with caplog.at_level(logging.WARNING, logger="paradox.hostels"):
         client.post("/hostels/allocate", headers=admin_headers)
 
-    assert audit.one("ALLOCATE_HOSTELS")["details"]["excluded_by_null_filter"] == 1
-    assert any(getattr(r, "reason", None) == "candidates_excluded_by_null_filter"
-               for r in caplog.records)
+    details = audit.one("ALLOCATE_HOSTELS")["details"]
+    assert "excluded_by_null_filter" not in details
+    assert details["allocated_count"] == details["candidates"] == 1
+    assert not any(getattr(r, "reason", None) == "candidates_excluded_by_null_filter"
+                   for r in caplog.records)
 
 
 def test_the_batch_summary_reports_the_candidate_and_placement_counts(

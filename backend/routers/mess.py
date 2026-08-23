@@ -438,22 +438,35 @@ def delete_mess(mess_id: str, current_user: dict = Depends(get_current_staff)):
 @router.put("/{mess_id}/menu")
 def update_mess_menu(mess_id: str, request: MessMenuRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
+
+    # Authorise before reporting existence. Unlike its siblings this gate is not a
+    # plain Super Admin check — "on this hall's own team" cannot be answered
+    # without the document — so the lookup happens first and its *result* is
+    # withheld until the caller has been authorised. A staff member who is
+    # neither is refused with the same 403 whether or not the hall exists, and the
+    # 404 below is reachable only by somebody entitled to know: before this, any
+    # staff token could tell a real mess_id from a mistyped one.
     mess = mess_collection.find_one({"mess_id": mess_id})
+
+    is_super = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
+    on_team = any(m.get("user_id") == user_id for m in (mess or {}).get("mess_team", []))
+    if not (is_super or on_team):
+        log_denied(
+            current_user, "UPDATE_MESS_MENU_DENIED", mess_id,
+            reason="not_super_admin_or_team",
+            # The trail still distinguishes what the response deliberately does
+            # not: a refusal against a hall that was not there reads differently
+            # from one against a hall the caller simply does not staff.
+            details={"status": 403, "mess_exists": bool(mess)},
+        )
+        raise HTTPException(status_code=403, detail="Not authorized to edit this menu")
+
     if not mess:
         log_denied(
             current_user, "UPDATE_MESS_MENU_DENIED", mess_id,
             reason="mess_not_found", details={"status": 404},
         )
         raise HTTPException(status_code=404, detail="Mess not found")
-
-    is_super = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
-    on_team = any(m.get("user_id") == user_id for m in mess.get("mess_team", []))
-    if not (is_super or on_team):
-        log_denied(
-            current_user, "UPDATE_MESS_MENU_DENIED", mess_id,
-            reason="not_super_admin_or_team", details={"status": 403},
-        )
-        raise HTTPException(status_code=403, detail="Not authorized to edit this menu")
 
     menu_dict = {
         day_key: {slot_name: slot.model_dump() for slot_name, slot in slots.items()}

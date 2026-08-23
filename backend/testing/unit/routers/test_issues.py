@@ -357,15 +357,15 @@ def test_an_unknown_status_filter_is_a_400(client, admin_headers):
     assert response.json()["detail"] == "status must be one of: in_progress, open, resolved"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the no-duty early return happens before the status is "
-           "validated, so a staff member with no duty and a misspelled status "
-           "receives 200 with an empty list while a super admin receives 400. The "
-           "same request is valid or invalid depending on who asks.",
-)
 def test_a_bad_status_is_rejected_regardless_of_duty(client, staff_headers):
+    """It used to be a 200 with an empty list for a staffer on no team and a 400 for
+    a super admin — so a volunteer between postings read their own typo as "no
+    reports filed"."""
     assert client.get("/issues?status=pending", headers=staff_headers).status_code == 400
+
+
+def test_a_zero_limit_is_refused_rather_than_meaning_no_limit(client, admin_headers):
+    assert client.get("/issues?limit=0", headers=admin_headers).status_code == 422
 
 
 def test_the_limit_caps_the_page(client, admin_headers, resident):
@@ -448,15 +448,24 @@ def test_an_unknown_issue_is_a_404(client, duty_staff):
     assert response.json()["detail"] == "Issue not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the body is validated before the issue is looked up, so a "
-           "malformed update against a nonexistent issue reports the body error "
-           "rather than the missing issue.",
-)
 def test_a_missing_issue_is_reported_before_the_body(client, duty_staff):
-    assert client.patch("/issues/ISS-NOPE", json={}, headers=auth_headers(duty_staff))\
-        .status_code == 404
+    """Reporting the payload's shape for an id that is not there sends the reader
+    looking at the wrong half of their request."""
+    response = client.patch("/issues/ISS-NOPE", json={}, headers=auth_headers(duty_staff))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Issue not found"
+
+
+def test_a_bad_status_against_a_missing_issue_is_still_a_404(client, duty_staff):
+    assert client.patch("/issues/ISS-NOPE", json={"status": "pending"},
+                        headers=auth_headers(duty_staff)).status_code == 404
+
+
+def test_the_body_is_still_judged_for_an_issue_that_is_there(client, duty_staff, resident):
+    """Moving the lookup up must not stop the body being checked at all."""
+    issue_id = report(client, resident)
+    assert client.patch(f"/issues/{issue_id}", json={},
+                        headers=auth_headers(duty_staff)).status_code == 400
 
 
 def test_staff_from_another_facility_cannot_answer(client, resident, make_staff):

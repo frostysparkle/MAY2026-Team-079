@@ -268,29 +268,23 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
     for h in hostels:
         gender_groups.setdefault(h.get("gender"), []).append(h)
 
+    # An equality match against null also matches a document where the field is
+    # absent — that is Mongo's rule, not a quirk of this collection — so this one
+    # clause finds both the participant who has never been placed and the one whose
+    # `accommodation` sub-document predates the key. `mess.py` spells the same
+    # thing out as `$or [None, $exists: false]`, which is equivalent and redundant.
+    #
+    # This used to carry a comment claiming the opposite, along with a count of the
+    # supposedly invisible candidates and a WARNING naming them as unplaceable —
+    # `excluded_by_null_filter`. They were never excluded: they are in this very
+    # result set, they get placed, and they were then counted a second time in
+    # `allocated_count`. So the figure contradicted the one beside it and the
+    # warning sent operators looking for a data problem that did not exist.
     participants = list(participants_collection.find({
         "accommodation.registered": True,
         "accommodation.hostel_id": None
     }))
     allocated = 0
-
-    # This filter matches `hostel_id: None` exactly, so a participant whose
-    # `accommodation.hostel_id` key is *absent* is invisible to this route and will
-    # never be placed by any number of re-runs. `mess.py` hit the same problem and
-    # fixed it with `$or … $exists`; this route did not. Counted and reported
-    # rather than silently corrected here, because widening the filter changes who
-    # gets placed and that is a behavioural decision, not instrumentation.
-    invisible = participants_collection.count_documents({
-        "accommodation.registered": True,
-        "accommodation.hostel_id": {"$exists": False},
-    })
-    if invisible:
-        log_config.warning(
-            _log,
-            f"{invisible} registered participant(s) are invisible to hostel allocation: "
-            "accommodation.hostel_id is absent rather than null",
-            {"reason": "candidates_excluded_by_null_filter", "excluded": invisible},
-        )
 
     skipped_by_reason: Dict[str, int] = {}
     log_config.info(
@@ -417,7 +411,6 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
             "candidates": len(participants),
             "skipped_count": unplaceable,
             "skipped_by_reason": skipped_by_reason,
-            "excluded_by_null_filter": invisible,
             # Places still fillable *after* this sweep, against the same ceiling the
             # sweep itself enforced — `min(capacity, sharing × rooms)`.
             #

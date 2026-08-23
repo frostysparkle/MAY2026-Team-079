@@ -90,10 +90,17 @@ def reset(tokens: List[Token]) -> None:
     for token in reversed(tokens):
         try:
             token.var.reset(token)
-        except (ValueError, LookupError):
-            # The token was created in a different context (possible when a
-            # request is cancelled mid-flight). Nothing to restore, and this is
-            # never worth failing a response over.
+        except (ValueError, LookupError, RuntimeError):
+            # ValueError / LookupError: the token was created in a different
+            # context, which is possible when a request is cancelled mid-flight.
+            # RuntimeError: this token has already been reset once. Both mean the
+            # same thing here — there is nothing left to restore.
+            #
+            # RuntimeError used to escape, which contradicted the sentence below it:
+            # a helper that must "never be the reason a request fails" cannot raise
+            # on a double reset. Reachable the moment any caller resets in both a
+            # normal path and a `finally`, which is the obvious way to write it. The
+            # middleware happens not to today.
             pass
 
 

@@ -109,17 +109,23 @@ def test_a_general_query_stores_no_target(client, participant):
     assert body["query"]["target_id"] is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the code's own comment calls a general query with a "
-           "target_id 'a category error', but the route silently discards the value "
-           "instead of refusing it, so a mis-categorised query is accepted and its "
-           "target is lost.",
-)
 def test_a_general_query_with_a_target_is_refused(client, participant):
+    """Discarding it answered 200 to a request the caller got wrong, and lost the
+    only thing recording which block they meant."""
     response = client.post("/queries", json={**RAISE, "target_id": "HSTL111"},
                            headers=auth_headers(participant))
     assert response.status_code == 400
+    assert "cannot name a target_id" in response.json()["detail"]
+    assert database.queries_collection.count_documents({}) == 0
+
+
+def test_a_general_query_may_still_send_an_explicit_null_target(client, participant):
+    """It is the value that is the error, not the key — a client that always sends
+    the field is not wrong to."""
+    response = client.post("/queries", json={**RAISE, "target_id": None},
+                           headers=auth_headers(participant))
+    assert response.status_code == 200
+    assert response.json()["query"]["target_id"] is None
 
 
 def test_the_subject_and_body_are_stripped(client, participant):
@@ -465,11 +471,28 @@ def test_a_super_admin_can_reply(client, participant, admin_headers):
 
 
 def test_another_participant_cannot_reply(client, participant, other_participant):
+    """Answered 404 rather than 403: telling them "not yours" would confirm the
+    thread exists. For a participant, no query but their own does."""
     query_id = raised(client, participant)
     response = client.post(f"/queries/{query_id}/replies", json={"body": "Me too"},
                            headers=auth_headers(other_participant))
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Not your query"
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Query not found"
+    assert stored(query_id)["replies"] == []
+
+
+def test_the_trail_still_names_the_owner_of_a_thread_reached_for(
+    client, participant, other_participant, audit
+):
+    """The response withholds the distinction; the trail keeps it, because reaching
+    for another student's thread is worth reviewing afterwards."""
+    query_id = raised(client, participant)
+    client.post(f"/queries/{query_id}/replies", json={"body": "Me too"},
+                headers=auth_headers(other_participant))
+
+    row = audit.latest("REPLY_QUERY_DENIED")
+    assert row["details"]["reason"] == "not_query_author"
+    assert row["details"]["owner_participant_id"] == participant["participant_id"]
 
 
 def test_staff_off_the_team_cannot_reply(client, participant, staff_headers):
@@ -489,18 +512,38 @@ def test_replying_to_an_unknown_query_is_a_404(client, participant):
     assert response.json()["detail"] == "Query not found"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the 404 lookup runs before either authorisation branch, so "
-           "any authenticated user can probe which query ids exist.",
-)
-def test_query_existence_is_not_leaked(client, participant, other_participant):
+def test_query_existence_is_not_leaked_to_another_participant(
+    client, participant, other_participant
+):
     query_id = raised(client, participant)
     missing = client.post("/queries/QRY-NOPE/replies", json={"body": "x"},
                           headers=auth_headers(other_participant))
     existing = client.post(f"/queries/{query_id}/replies", json={"body": "x"},
                            headers=auth_headers(other_participant))
-    assert missing.status_code == existing.status_code
+    assert missing.status_code == existing.status_code == 404
+    assert missing.json()["detail"] == existing.json()["detail"]
+
+
+def test_query_existence_is_not_leaked_to_staff_off_the_team(
+    client, participant, staff_headers
+):
+    """Their refusal does not depend on which query it is — they may handle none —
+    so it is decided before the lookup and reads the same either way."""
+    query_id = raised(client, participant)
+    missing = client.post("/queries/QRY-NOPE/replies", json={"body": "x"},
+                          headers=staff_headers)
+    existing = client.post(f"/queries/{query_id}/replies", json={"body": "x"},
+                           headers=staff_headers)
+    assert missing.status_code == existing.status_code == 403
+    assert missing.json()["detail"] == existing.json()["detail"]
+
+
+def test_a_query_team_member_still_gets_a_404_for_a_missing_query(client, resolver):
+    """Gating first must not swallow the 404 for somebody entitled to it."""
+    response = client.post("/queries/QRY-NOPE/replies", json={"body": "x"},
+                           headers=auth_headers(resolver))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Query not found"
 
 
 def test_replies_accumulate_in_order(client, participant, resolver):
@@ -533,15 +576,10 @@ def test_a_reply_is_audited(client, participant, audit):
     assert audit.one("REPLY_QUERY")["details"]["author_type"] == "participant"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: a staff reply's author_name falls back designation -> role, "
-           "skipping `name` entirely, so a staff member with a name but no "
-           "designation appears to the participant as their raw role, e.g. "
-           "'super_admin'.",
-)
 def test_a_staff_replys_name_is_used_when_present(client, participant, admin_headers,
                                                   super_admin):
+    """A participant reading the thread should see a colleague's name, not the raw
+    role the fallback used to reach for."""
     database.backend_teams_collection.update_one(
         {"_id": super_admin["_id"]}, {"$unset": {"designation": ""}, "$set": {"name": "Priya"}}
     )

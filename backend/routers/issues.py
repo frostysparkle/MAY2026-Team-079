@@ -23,7 +23,7 @@ Additive throughout: no existing route, model, guard or response field is
 touched by this module.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from logger import log_audit, log_denied
 from datetime import datetime
 from typing import List, Optional
@@ -38,6 +38,7 @@ from database import (
     backend_teams_collection,
 )
 from dependencies import get_current_staff, get_current_participant
+from models import PAGE_LIMIT_MAX
 
 router = APIRouter(prefix="/issues", tags=["Issues"])
 
@@ -365,7 +366,7 @@ def list_issues(
     status: Optional[str] = None,
     facility_type: Optional[str] = None,
     facility_id: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=PAGE_LIMIT_MAX),
     current_user: dict = Depends(get_current_staff),
 ):
     """
@@ -387,17 +388,12 @@ def list_issues(
     user_id = current_user.get("paradox_id")
     query = {}
 
-    if not _is_super_admin(user_id):
-        duty = _duty_facilities(user_id)
-        scopes = []
-        if duty["hostel"]:
-            scopes.append({"facility_type": "hostel", "facility_id": {"$in": duty["hostel"]}})
-        if duty["mess"]:
-            scopes.append({"facility_type": "mess", "facility_id": {"$in": duty["mess"]}})
-        if not scopes:
-            return {"count": 0, "issues": []}
-        query["$or"] = scopes
-
+    # What was asked for is judged before what this caller may see. The other order
+    # ran the no-duty early return first, so `?status=pending` was a 400 for a Super
+    # Admin and a 200 with an empty list for a staffer on no team — the same request
+    # valid or invalid depending on who sent it. That hid the typo from exactly the
+    # people most likely to make one: a volunteer between postings, reading an empty
+    # queue as "no reports" rather than "you spelled the filter wrong".
     if status:
         if status not in STATUSES:
             raise HTTPException(
@@ -409,6 +405,17 @@ def list_issues(
         query["facility_type"] = facility_type
     if facility_id:
         query["facility_id"] = facility_id
+
+    if not _is_super_admin(user_id):
+        duty = _duty_facilities(user_id)
+        scopes = []
+        if duty["hostel"]:
+            scopes.append({"facility_type": "hostel", "facility_id": {"$in": duty["hostel"]}})
+        if duty["mess"]:
+            scopes.append({"facility_type": "mess", "facility_id": {"$in": duty["mess"]}})
+        if not scopes:
+            return {"count": 0, "issues": []}
+        query["$or"] = scopes
 
     issues = issues_collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
     rows = [_staff_issue(i) for i in issues]
@@ -431,16 +438,13 @@ def update_issue(
     status change is valid; an empty body is a 400, as is a status outside
     open | in_progress | resolved. Audited as ISSUE_UPDATE against the facility
     id.
+
+    The report is resolved and the caller authorised before the body is judged.
+    The other order reported the body's shape for an issue that was not there —
+    "Provide a status, a note, or both" against `ISS-NOPE` — which sends whoever
+    is debugging it to look at their payload when the id is what is wrong. Same
+    reason `update_participant_team` and `update_query` check existence first.
     """
-    if request.status is None and (request.note is None or not request.note.strip()):
-        raise HTTPException(status_code=400, detail="Provide a status, a note, or both")
-
-    if request.status is not None and request.status not in STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"status must be one of: {', '.join(sorted(STATUSES))}",
-        )
-
     issue = issues_collection.find_one({"issue_id": issue_id})
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
@@ -462,6 +466,15 @@ def update_issue(
                 status_code=403,
                 detail="Not authorized to answer for this facility",
             )
+
+    if request.status is None and (request.note is None or not request.note.strip()):
+        raise HTTPException(status_code=400, detail="Provide a status, a note, or both")
+
+    if request.status is not None and request.status not in STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"status must be one of: {', '.join(sorted(STATUSES))}",
+        )
 
     now = datetime.utcnow()
     note = (request.note or "").strip() or None

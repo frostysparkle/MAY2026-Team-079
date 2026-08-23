@@ -236,17 +236,27 @@ def test_unrelated_staff_cannot_edit_the_menu(client, staff_headers):
     assert response.json()["detail"] == "Not authorized to edit this menu"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the 404 lookup runs before the authorisation check on this "
-           "route alone, so any staff token can distinguish an existing hall from a "
-           "missing one. Every sibling route gates authorisation first.",
-)
 def test_hall_existence_is_not_leaked_to_unauthorised_staff(client, staff_headers):
     make_mess()
     missing = client.put("/mess/NOPE/menu", json=MENU, headers=staff_headers)
     existing = client.put("/mess/MESS1/menu", json=MENU, headers=staff_headers)
-    assert missing.status_code == existing.status_code
+    assert missing.status_code == existing.status_code == 403
+    assert missing.json()["detail"] == existing.json()["detail"]
+
+
+def test_the_refusal_still_records_whether_the_hall_was_there(
+    client, staff_headers, audit
+):
+    """The response withholds it; the trail must not, or an operator cannot tell a
+    typo from an authorisation problem."""
+    client.put("/mess/NOPE/menu", json=MENU, headers=staff_headers)
+    assert audit.one("UPDATE_MESS_MENU_DENIED")["details"]["mess_exists"] is False
+
+
+def test_a_super_admin_still_gets_a_404_for_a_missing_hall(client, admin_headers):
+    response = client.put("/mess/NOPE/menu", json=MENU, headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Mess not found"
 
 
 def test_removing_a_sitting_is_recorded_because_scans_will_start_failing(

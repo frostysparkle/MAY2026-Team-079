@@ -38,7 +38,7 @@ needs. The reply thread is the channel back, so the team never needs a number.
 addressed to nobody in particular is unanswerable.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from datetime import datetime
 from typing import Optional
 import uuid
@@ -54,7 +54,13 @@ from database import (
     workshops_collection,
 )
 from dependencies import get_current_user, get_current_staff, get_current_participant
-from models import QueryCreateRequest, QueryUpdateRequest, QueryReplyRequest, QueryTeamAssignRequest
+from models import (
+    PAGE_LIMIT_MAX,
+    QueryCreateRequest,
+    QueryUpdateRequest,
+    QueryReplyRequest,
+    QueryTeamAssignRequest,
+)
 
 router = APIRouter(prefix="/queries", tags=["Queries"])
 
@@ -143,8 +149,19 @@ def raise_query(request: QueryCreateRequest, current_user: dict = Depends(get_cu
 
     target_id = request.target_id
     if category == "general":
-        # A general query has no owning entity. Keeping it None means the scope
-        # filter cannot accidentally match it against a team's target list.
+        # A general query has no owning entity, so naming one is a category error —
+        # refused rather than quietly dropped. Discarding it silently answered 200
+        # to a request the caller got wrong: somebody reporting a fault against a
+        # specific block, under the wrong category, was told their query was raised
+        # and lost the only thing that said which block they meant.
+        if target_id:
+            raise HTTPException(
+                status_code=400,
+                detail="A general query cannot name a target_id; choose the category "
+                       "that owns it instead",
+            )
+        # Kept None so the scope filter cannot accidentally match it against a
+        # team's target list.
         target_id = None
     else:
         if not target_id:
@@ -200,7 +217,7 @@ def my_queries(current_user: dict = Depends(get_current_participant)):
 def list_queries(
     status: Optional[str] = None,
     category: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=PAGE_LIMIT_MAX),
     current_user: dict = Depends(get_current_staff),
 ):
     """
@@ -305,16 +322,24 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
     member write to the same thread. Nobody else can read or write it, which is
     checked per-role rather than per-token, so a staff member off the query
     team is refused even though their token is valid.
-    """
-    query = queries_collection.find_one({"query_id": query_id})
-    if not query:
-        log_denied(
-            current_user, "REPLY_QUERY_DENIED", query_id,
-            reason="query_not_found", details={"status": 404}, audit=False,
-        )
-        raise HTTPException(status_code=404, detail="Query not found")
 
+    Neither refusal discloses whether the id exists. The route used to look the
+    query up and 404 first, so any authenticated user could tell a real query id
+    from an invented one — and these threads hold participants' free text, the one
+    place in this API where a student writes something another user reads back.
+    The two sides get there differently, because their refusals are different
+    kinds of thing:
+
+      * a staff member off the query team may handle *no* query, so which one was
+        asked for never enters into it. Refused before the lookup, exactly as
+        `update_query` and every other staff-side route here already does.
+      * a participant may only handle their *own*, which cannot be decided without
+        the document. So "not yours" and "not there" collapse into the same 404:
+        for a participant, no other query exists — the same thing `GET
+        /queries/mine` says by omitting it from the list.
+    """
     is_staff = "paradox_id" in current_user
+
     if is_staff:
         author_id = current_user["paradox_id"]
         if not (_is_super_admin(author_id) or _is_query_team_member(author_id)):
@@ -323,22 +348,44 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
                 reason="not_on_query_team", details={"status": 403},
             )
             raise HTTPException(status_code=403, detail="Not authorized to handle this query")
-        author_name = current_user.get("designation") or current_user.get("role") or "Fest team"
+        # `designation` stays first on purpose — a participant reading the thread
+        # should see the desk that answered ("Query Desk"), not the individual.
+        # `name` is the new middle rung: the chain used to fall straight from
+        # designation to `role`, so a named account with no designation signed its
+        # replies "super_admin". A raw role is not a person and is not a desk; it is
+        # an internal enum value, and it was the only thing the participant saw.
+        author_name = (
+            current_user.get("designation")
+            or current_user.get("name")
+            or current_user.get("role")
+            or "Fest team"
+        )
         author_type = "staff"
-    else:
+
+    query = queries_collection.find_one({"query_id": query_id})
+
+    if not is_staff:
         author_id = current_user["participant_id"]
-        if query.get("participant_id") != author_id:
+        if not query or query.get("participant_id") != author_id:
             # A participant reaching for a thread that is not theirs. Recorded because
             # the threads contain other students' words, so an attempt to read or
-            # append to one is worth being able to review afterwards.
+            # append to one is worth being able to review afterwards — and the row
+            # keeps the distinction the response withholds.
             log_denied(
                 current_user, "REPLY_QUERY_DENIED", query_id,
-                reason="not_query_author",
-                details={"status": 403, "owner_participant_id": query.get("participant_id")},
+                reason="query_not_found" if not query else "not_query_author",
+                details={"status": 404, "owner_participant_id": (query or {}).get("participant_id")},
             )
-            raise HTTPException(status_code=403, detail="Not your query")
+            raise HTTPException(status_code=404, detail="Query not found")
         author_name = (current_user.get("profile") or {}).get("full_name") or "Participant"
         author_type = "participant"
+
+    if not query:
+        log_denied(
+            current_user, "REPLY_QUERY_DENIED", query_id,
+            reason="query_not_found", details={"status": 404}, audit=False,
+        )
+        raise HTTPException(status_code=404, detail="Query not found")
 
     now = datetime.utcnow()
     reply = {

@@ -67,28 +67,22 @@ def test_reset_unwinds_in_reverse_order():
     assert snapshot() == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: `reset` guards against ValueError and LookupError, but "
-           "re-resetting an already-used token raises RuntimeError, which is not "
-           "caught. The docstring's stated intent — 'never worth failing a "
-           "response over' — therefore does not hold for the double-reset case. "
-           "Not reachable from the middleware today (it never resets), but it is "
-           "the documented contract of this helper.",
-)
 def test_reset_tolerates_an_already_used_token():
+    """A helper documented as never worth failing a response over cannot raise on a
+    double reset — which is what a caller resetting in both a normal path and a
+    `finally` does."""
     tokens = bind(request_id="a")
     reset(tokens)
     reset(tokens)
     assert get_request_id() is None
 
 
-def test_a_double_reset_currently_raises_runtime_error():
-    """Characterises today's behaviour, paired with the xfail above."""
-    tokens = bind(request_id="a")
+def test_a_double_reset_leaves_the_context_clean():
+    """Not merely swallowed: the value stays unset rather than being restored."""
+    tokens = bind(request_id="a", actor_id="b")
     reset(tokens)
-    with pytest.raises(RuntimeError):
-        reset(tokens)
+    reset(tokens)
+    assert snapshot() == {}
 
 
 def test_reset_tolerates_the_errors_it_does_guard_against():

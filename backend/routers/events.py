@@ -301,11 +301,15 @@ def list_public_events():
 
 @router.put("/{event_id}")
 def update_event(event_id: str, request: EventUpdateRequest, current_user: dict = Depends(get_current_staff)):
+    # Authorise first, resolve second. The other order let any valid staff token
+    # tell a real event id from an invented one — 404 versus 403 — before being
+    # refused, which every sibling route in this module avoids by gating first.
+    # This gate does not depend on the event, so there is nothing to look up yet.
+    _require_super_admin(current_user)
+
     event = event_collection.find_one({"event_id": event_id})
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-
-    _require_super_admin(current_user)
 
     update_data = {k: v for k, v in request.model_dump(exclude_unset=True).items() if v is not None}
 
@@ -1381,11 +1385,38 @@ async def _announcement_stream(event_id: str, event_oid, request: Request):
     if last_seen_id:
         # Seed `seen_ids` with every announcement up to and including the one
         # the client already has, so a reconnect does not replay history.
+        #
+        # Only when that id is genuinely in this event's history. The loop that did
+        # this walked the array marking each announcement seen and stopped when it
+        # reached the client's id — so an id that matched *nothing* marked the whole
+        # history seen and the client was shown nothing at all, for as long as it
+        # kept resuming with that id. Two ordinary things produce a stale id: the
+        # announcement it names has since been removed, or the client reconnected
+        # against a different event. Both used to end in silence, which is the worst
+        # possible failure for a channel whose entire job is telling participants
+        # where to be.
+        #
+        # An unknown id is therefore treated as a fresh connection: everything is
+        # delivered. Showing an announcement twice is a visible, recoverable
+        # annoyance; not showing it is neither.
         current = event_collection.find_one({"_id": event_oid}, {"announcements": 1})
-        for ann in (current or {}).get("announcements", []):
-            seen_ids.add(ann.get("announcement_id"))
-            if ann.get("announcement_id") == last_seen_id:
-                break
+        history = [
+            ann.get("announcement_id") for ann in (current or {}).get("announcements", [])
+        ]
+        if last_seen_id in history:
+            seen_ids.update(history[: history.index(last_seen_id) + 1])
+        else:
+            log_config.info(
+                _log,
+                f"resuming announcement stream for {event_id} from an unknown Last-Event-ID; "
+                "delivering the full history",
+                {
+                    "event_id": event_id,
+                    "last_event_id": str(last_seen_id),
+                    "reason": "unknown_last_event_id",
+                    "announcements_held": len(history),
+                },
+            )
 
     heartbeat_every = 15  # seconds
     poll_every = 3  # seconds

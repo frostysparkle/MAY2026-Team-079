@@ -170,6 +170,18 @@ PARTICIPANT_TEAM_ROLES = ("leader", "member")
 # The only priorities an announcement may be published at.
 ANNOUNCEMENT_PRIORITIES = ("low", "mid", "high")
 
+# The ceiling on `?limit=` for every paged staff-facing list: the participant
+# roster, the issues queue, the queries queue and the audit trail.
+#
+# `limit` used to be a bare `int` on all four, which is unvalidated in both
+# directions and wrong at both ends. `limit=0` does not mean "no rows" to Mongo,
+# it means *no limit*, so a client computing a page size that reached zero was
+# handed the entire collection — the exact opposite of what it asked for, and on
+# the roster that is every participant's name, address and phone number in one
+# response. A large positive value did the same thing without needing the quirk.
+# Bounded here rather than per-route so the four cannot drift apart.
+PAGE_LIMIT_MAX = 500
+
 
 def parse_instant_utc(value: str, field: str) -> datetime:
     """A permissive ISO 8601 parse, accepting a trailing 'Z', normalised to

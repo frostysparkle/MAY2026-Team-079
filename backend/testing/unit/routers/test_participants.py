@@ -280,14 +280,28 @@ def test_a_non_numeric_limit_is_a_422(client, admin_headers):
     assert client.get("/participants?limit=abc", headers=admin_headers).status_code == 422
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: `limit` is unvalidated, and `limit=0` means 'no limit' in "
-           "Mongo semantics rather than 'no rows'. A client paging with a computed "
-           "limit that reaches 0 receives the entire roster.",
-)
-def test_a_zero_limit_returns_no_rows(client, admin_headers, population):
-    assert client.get("/participants?limit=0", headers=admin_headers).json()["count"] == 0
+def test_a_zero_limit_is_refused_rather_than_meaning_no_limit(
+    client, admin_headers, population
+):
+    """`limit=0` is *no limit* to Mongo, not "no rows", so a client whose computed
+    page size reached zero was handed every participant's name, address and phone
+    number. Refused loudly rather than answered with the opposite of the request."""
+    assert client.get("/participants?limit=0", headers=admin_headers).status_code == 422
+
+
+def test_a_negative_limit_is_refused(client, admin_headers, population):
+    assert client.get("/participants?limit=-5", headers=admin_headers).status_code == 422
+
+
+def test_the_page_size_has_a_ceiling(client, admin_headers, population):
+    """The same failure by a different route: an unbounded limit dumps the whole
+    roster in one response without needing the zero quirk."""
+    from models import PAGE_LIMIT_MAX
+
+    assert client.get(f"/participants?limit={PAGE_LIMIT_MAX}",
+                      headers=admin_headers).status_code == 200
+    assert client.get(f"/participants?limit={PAGE_LIMIT_MAX + 1}",
+                      headers=admin_headers).status_code == 422
 
 
 # ---------------------------------------------------------------------------

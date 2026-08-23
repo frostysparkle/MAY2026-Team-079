@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set
@@ -11,6 +11,7 @@ from database import (
 import log_config
 from dependencies import get_current_staff
 from logger import email_local_part
+from models import PAGE_LIMIT_MAX
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit"])
 
@@ -313,7 +314,7 @@ def audit_log_summary(
 
 @router.get("")
 def view_audit_logs(
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=PAGE_LIMIT_MAX),
     target_id: Optional[str] = None,
     action: Optional[str] = None,
     since: Optional[str] = None,

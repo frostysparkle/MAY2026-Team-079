@@ -748,25 +748,52 @@ async def unknown_resume_frames(module, event):
     return frames_of(collected)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT: the resume loop marks every announcement as seen and only "
-           "stops when it reaches the client's Last-Event-ID, so an id that matches "
-           "nothing marks the whole history seen and the client is shown nothing at "
-           "all. Reachable whenever a client resumes with a stale id — after the "
-           "announcement it names has been removed, or against a different event.",
-)
 async def test_an_unknown_last_event_id_still_delivers_announcements(instant_sleep, event):
+    """A stale id used to mark the whole history seen, so a client resuming after its
+    announcement was removed — or against a different event — was shown nothing at
+    all, indefinitely. Treated as a fresh connection instead: a duplicate is
+    recoverable, silence is not."""
     from routers import events as module
 
     assert len(await unknown_resume_frames(module, event)) == 1
 
 
-async def test_an_unknown_last_event_id_currently_suppresses_everything(instant_sleep, event):
-    """Characterises today's behaviour, paired with the xfail above."""
+async def test_an_unknown_last_event_id_is_reported(instant_sleep, event, caplog):
+    """It means a client is resuming against something that is gone, which is worth
+    being able to see in the log."""
+    import logging
+
     from routers import events as module
 
-    assert await unknown_resume_frames(module, event) == []
+    with caplog.at_level(logging.INFO, logger="paradox.events"):
+        await unknown_resume_frames(module, event)
+
+    assert any(getattr(record, "reason", None) == "unknown_last_event_id"
+               for record in caplog.records)
+
+
+async def test_a_known_last_event_id_still_suppresses_what_it_names(instant_sleep, event):
+    """The fix must not cost the resume contract: an id that *is* in the history
+    still seeds everything up to and including itself."""
+    from routers import events as module
+
+    database.event_collection.update_one(
+        {"_id": event["_id"]},
+        {"$push": {"announcements": {"$each": [
+            factories.announcement("ANN1", "Seen", created_offset_seconds=-60),
+            factories.announcement("ANN2", "Also seen", created_offset_seconds=-30),
+            factories.announcement("ANN3", "New"),
+        ]}}},
+    )
+    collected = [
+        frame async for frame in module._announcement_stream(
+            "EVTEC1111", event["_id"],
+            FakeRequest(headers={"last-event-id": "ANN2"}, disconnect_after=1),
+        )
+    ]
+    messages = [json.loads(f.split("data: ", 1)[1].strip())["message"]
+                for f in frames_of(collected)]
+    assert messages == ["New"]
 
 
 async def test_the_stream_stops_when_the_client_disconnects(instant_sleep, event):

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from collections import Counter
 from datetime import datetime
 from typing import Optional
@@ -7,7 +7,7 @@ import re
 from database import participants_collection, backend_teams_collection
 from dependencies import get_current_staff
 from logger import log_audit, log_denied
-from models import ParticipantAdminUpdateRequest
+from models import PAGE_LIMIT_MAX, ParticipantAdminUpdateRequest
 
 router = APIRouter(prefix="/participants", tags=["Participants"])
 
@@ -142,7 +142,7 @@ def participant_statistics(current_user: dict = Depends(get_current_staff)):
 def list_participants(
     q: Optional[str] = None,
     house: Optional[str] = None,
-    limit: int = 200,
+    limit: int = Query(200, ge=1, le=PAGE_LIMIT_MAX),
     current_user: dict = Depends(get_current_staff),
 ):
     """
