@@ -24,7 +24,11 @@ export function NewStaffForm({
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('staff');
+  // `POST /backend_teams` only accepts `super_admin | admin | other | volunteer`
+  // (backend/models.py) — 'staff' was never one of them, so leaving this field
+  // untouched and clicking Create used to 422 on every submission. `'admin'` is
+  // a real option and the least-surprising default for a role field.
+  const [role, setRole] = useState('admin');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
 

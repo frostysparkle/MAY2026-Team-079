@@ -79,7 +79,7 @@ from database import (
 )
 from embedding_service import zero_embedding
 from id_generator import BackendTeamIDGenerator
-from models import COURSE_STAGES, HOUSES, MESS_PREFERENCE_TYPES, PROGRAMS
+from models import BACKEND_TEAM_DEPARTMENTS, COURSE_STAGES, HOUSES, MESS_PREFERENCE_TYPES, PROGRAMS
 from security import generate_rsa_key_pair, get_password_hash
 
 DEFAULT_API = "http://localhost:8000"
@@ -795,6 +795,57 @@ def assign_staff(
 # =============================================================================
 
 
+#: Migration map for a data-quality issue predating this script's current
+#: department vocabulary. `admin_slot` below has written `department:
+#: "technical"` (singular, matching `models.BACKEND_TEAM_DEPARTMENTS` and
+#: `EventCreateRequest.event_type`) for a while, but the bootstrap Super Admin
+#: account in the live database was created by an older run that wrote the
+#: plural "technicals" instead — the same drift `HOUSE_NAME_FIXUPS` in
+#: `seed_students.py` corrects for houses. Built from `BACKEND_TEAM_DEPARTMENTS`
+#: rather than hand-typed, so a value not in the closed set today can never be
+#: "fixed" into something equally wrong.
+DEPARTMENT_NAME_FIXUPS: dict[str, str] = {
+    f"{dept}s": dept for dept in BACKEND_TEAM_DEPARTMENTS if f"{dept}s" != dept
+}
+
+
+def fix_department_names(log=print) -> dict[str, int]:
+    """
+    Rewrite any ``backend_teams`` document whose ``department`` is a pluralised
+    form of one of ``models.BACKEND_TEAM_DEPARTMENTS`` to the singular the
+    schema actually validates against.
+
+    Idempotent, and scoped to exactly the plural forms in
+    ``DEPARTMENT_NAME_FIXUPS`` — an account already on a valid department has
+    nothing matching any of these keys, and a value outside the closed set
+    entirely (a genuine typo, say) is reported rather than guessed at.
+    """
+    tally: dict[str, int] = {dept: 0 for dept in BACKEND_TEAM_DEPARTMENTS}
+
+    for plural, singular in DEPARTMENT_NAME_FIXUPS.items():
+        result = backend_teams_collection.update_many(
+            {"department": plural}, {"$set": {"department": singular}}
+        )
+        if result.modified_count:
+            tally[singular] += result.modified_count
+
+    unrecognised = sorted(
+        backend_teams_collection.distinct(
+            "department", {"department": {"$nin": list(BACKEND_TEAM_DEPARTMENTS)}}
+        )
+    )
+
+    fixed = sum(tally.values())
+    log(f"  fixed {fixed} staff account(s)")
+    for dept in BACKEND_TEAM_DEPARTMENTS:
+        if tally[dept]:
+            log(f"    {dept:<10} +{tally[dept]}")
+    if unrecognised:
+        log(f"  still unrecognised: {unrecognised}")
+
+    return {"fixed": fixed, "unrecognised": len(unrecognised)}
+
+
 def wipe_seeded(log=print) -> dict[str, int]:
     """
     Remove every account this script created, staff and participant alike.
@@ -853,7 +904,29 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="Report what would happen, write nothing")
     parser.add_argument("--wipe", action="store_true", help="Remove every account this script created")
+    parser.add_argument(
+        "--fix-department-names",
+        action="store_true",
+        help=(
+            "rewrite any backend_teams document whose department is a pluralised "
+            "form ('technicals') to the singular models.BACKEND_TEAM_DEPARTMENTS "
+            "expects, then stop"
+        ),
+    )
     args = parser.parse_args()
+
+    if args.fix_department_names:
+        if not check_connection():
+            raise SystemExit("Database unreachable; cannot fix department names.")
+        if args.dry_run:
+            preview = sum(
+                backend_teams_collection.count_documents({"department": plural})
+                for plural in DEPARTMENT_NAME_FIXUPS
+            )
+            print(f"would fix {preview} staff account(s) [dry run]")
+        else:
+            fix_department_names()
+        return 0
 
     if args.wipe:
         if not check_connection():

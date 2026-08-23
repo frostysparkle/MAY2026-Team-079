@@ -7,6 +7,9 @@ node_modules/
 # Kiro local settings (MCP server config, machine-specific)
 .kiro/settings/
 
+# Playwright MCP browser session artifacts (console logs, traces, screenshots)
+.playwright-mcp/
+
 graphify-out/
 graphify-out
 

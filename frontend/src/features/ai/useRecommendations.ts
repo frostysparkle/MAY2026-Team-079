@@ -1,20 +1,20 @@
 /**
  * Client-side recommendation hook for events and workshops.
- * 
+ *
  * The backend stores embeddings on events/workshops and on each participant's profile.
  * This hook:
  * 1. Fetches the participant's saved embedding from their profile (if they typed a query before)
  * 2. Or generates a new embedding from a query string
  * 3. Calculates cosine similarity client-side against all items
  * 4. Returns items sorted by similarity (highest first)
- * 
+ *
  * The embeddings API call only happens when the user types a new query.
  * Reusing saved embeddings or sorting with no query requires no backend call.
  */
 
-import { useState, useCallback } from "react";
-import { cosineSimilarity, rankBySimilarity } from "../../utils/similarity";
-import { api } from "../../api/realApi";
+import { useState, useCallback } from 'react';
+import { rankBySimilarity } from '../../utils/similarity';
+import { api } from '../../api';
 
 interface UseRecommendationsOptions<T extends { embedding?: number[] | null }> {
   items: T[];
@@ -32,7 +32,7 @@ interface UseRecommendationsResult<T> {
 
 /**
  * Generic recommendation hook for any item type with embeddings.
- * 
+ *
  * @param items - The full catalogue (events or workshops) with embeddings
  * @param savedEmbedding - The participant's saved preference embedding (from profile)
  * @param onEmbeddingUpdate - Callback when a new embedding is generated (to persist to profile)
@@ -45,6 +45,25 @@ export function useRecommendations<T extends { embedding?: number[] | null }>({
   const [rankedItems, setRankedItems] = useState<Array<T & { similarity: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Rank items by the saved embedding (no API call needed).
+   * If no saved embedding exists, items are shown in their original order.
+   *
+   * Declared before `rankByQuery` (which calls it on an empty query) — a
+   * `const` function reference can't be read before its own declaration runs,
+   * so the two can't be defined the other way around.
+   */
+  const rankBySaved = useCallback(() => {
+    if (!savedEmbedding || savedEmbedding.length === 0) {
+      // No saved embedding: show items unsorted (similarity = 0 for all)
+      setRankedItems(items.map((item) => ({ ...item, similarity: 0 })));
+      return;
+    }
+
+    const ranked = rankBySimilarity(items, savedEmbedding);
+    setRankedItems(ranked);
+  }, [items, savedEmbedding]);
 
   /**
    * Generate embedding from query text and rank items by similarity.
@@ -76,30 +95,15 @@ export function useRecommendations<T extends { embedding?: number[] | null }>({
         const ranked = rankBySimilarity(items, queryEmbedding);
         setRankedItems(ranked);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to generate embedding");
+        setError(err instanceof Error ? err.message : 'Failed to generate embedding');
         // Fall back to unsorted items
-        setRankedItems(items.map(item => ({ ...item, similarity: 0 })));
+        setRankedItems(items.map((item) => ({ ...item, similarity: 0 })));
       } finally {
         setIsGenerating(false);
       }
     },
-    [items, onEmbeddingUpdate]
+    [items, onEmbeddingUpdate, rankBySaved],
   );
-
-  /**
-   * Rank items by the saved embedding (no API call needed).
-   * If no saved embedding exists, items are shown in their original order.
-   */
-  const rankBySaved = useCallback(() => {
-    if (!savedEmbedding || savedEmbedding.length === 0) {
-      // No saved embedding: show items unsorted (similarity = 0 for all)
-      setRankedItems(items.map(item => ({ ...item, similarity: 0 })));
-      return;
-    }
-
-    const ranked = rankBySimilarity(items, savedEmbedding);
-    setRankedItems(ranked);
-  }, [items, savedEmbedding]);
 
   return {
     rankedItems,

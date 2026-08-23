@@ -76,6 +76,28 @@ class HostelCreateRequest(BaseModel):
         return self
 
 
+class HostelUpdateRequest(BaseModel):
+    """
+    Every field optional: a caller updates only what it names. Mirrors
+    `mess.MessUpdateRequest`'s shape and the same reasoning: `PATCH`-like
+    semantics on top of a `PUT`, because the two admin dashboards this backs
+    (mess halls, hostel blocks) always edit one field of a body at a time.
+
+    `gender` and the rooming fields (`sharing`, `num_rooms`) are deliberately
+    absent — the same restriction `HostelCreateRequest`'s own doc comment
+    already states for `gender` ("cannot be changed afterwards by any route in
+    this file"), extended to rooming for the same reason: `rooms` holds live
+    `occupants` arrays keyed by room index, and neither growing nor shrinking
+    that array can be done as a same-shaped `$set` the way `name`/`capacity`
+    can — it needs a real migration of who is assigned where, which is exactly
+    the "an organiser's decision, not a seed script's" judgement `seed.py`
+    already makes about hostel drift in general. Only the two fields with no
+    such structural entanglement are editable here.
+    """
+    name: Optional[str] = None
+    capacity: Optional[int] = Field(None, gt=0)
+
+
 class HostelAssignTeamRequest(BaseModel):
     user_id: str  # must reference an existing backend_teams member with role "other"
     role: str  # hostel_volunteer | guard
@@ -141,6 +163,72 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
         "beds": request.num_rooms * request.sharing,
     })
     return {"message": "Hostel created", "hostel_id": hostel_id}
+
+@router.put("/{hostel_id}")
+def update_hostel(
+    hostel_id: str, request: HostelUpdateRequest, current_user: dict = Depends(get_current_staff)
+):
+    """
+    Edit a block's `name` or `capacity`, Super Admin only.
+
+    Mirrors `mess.update_mess`: every field optional, nothing to update is a
+    400, and a `capacity` cut below the block's real bed ceiling
+    (`min(capacity, sharing * num_rooms)`, the same ceiling `allocate_hostels`
+    enforces) is logged rather than refused — the residents already assigned
+    keep their beds, and allocation simply stops placing anyone new here until
+    capacity is raised again or beds free up. Rooming (`sharing`/`num_rooms`)
+    and `gender` are not editable through this route; see
+    `HostelUpdateRequest`.
+    """
+    _require_super_admin(current_user, "update")
+
+    existing = hostel_collection.find_one({"hostel_id": hostel_id})
+    if not existing:
+        log_denied(
+            current_user, "UPDATE_HOSTEL_DENIED", hostel_id,
+            reason="hostel_not_found", details={"status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Hostel not found")
+
+    update_data = {k: v for k, v in request.model_dump(exclude_unset=True).items() if v is not None}
+    if not update_data:
+        log_denied(
+            current_user, "UPDATE_HOSTEL_DENIED", hostel_id,
+            reason="nothing_to_update", details={"status": 400}, audit=False,
+        )
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    beds = existing.get("sharing", 1) * len(existing.get("rooms") or [])
+    real_ceiling = min(existing.get("capacity", 0), beds)
+    if "capacity" in update_data and update_data["capacity"] < real_ceiling:
+        log_config.warning(
+            _log,
+            "hostel capacity reduced below the block's real bed ceiling",
+            {
+                "hostel_id": hostel_id,
+                "reason": "capacity_below_occupancy",
+                "new_capacity": update_data["capacity"],
+                "previous_capacity": existing.get("capacity"),
+                "current_occupancy": existing.get("current_occupancy"),
+                "beds": beds,
+            },
+        )
+
+    update_data["updated_at"] = datetime.utcnow()
+    hostel_collection.update_one({"hostel_id": hostel_id}, {"$set": update_data})
+    log_audit(
+        current_user,
+        "UPDATE_HOSTEL",
+        hostel_id,
+        {
+            **update_data,
+            "previous_name": existing.get("name") if "name" in update_data else None,
+            "previous_capacity": existing.get("capacity") if "capacity" in update_data else None,
+            "current_occupancy": existing.get("current_occupancy"),
+        },
+    )
+    return {"message": "Hostel updated"}
+
 
 @router.get("")
 def list_hostels(current_user: dict = Depends(get_current_user)):

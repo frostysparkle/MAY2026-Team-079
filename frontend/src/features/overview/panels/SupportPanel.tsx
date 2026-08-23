@@ -136,7 +136,13 @@ export function SupportPanel({
           label="Open faults"
           value={issues === null ? '—' : issueCounts.outstanding.toLocaleString()}
           note={`${issueCounts.in_progress.toLocaleString()} being worked on`}
-          tone={issueCounts.open > 0 ? 'warn' : 'good'}
+          // Tone has to track the same figure that's displayed (`outstanding` =
+          // open + in_progress), or a fault that's actively being worked on
+          // (open: 0, in_progress: 1) shows "1" painted "good" — the number and
+          // its own color disagreeing. The query figure right above already
+          // gets this right (`queryCounts.outstanding`); this one previously
+          // checked `issueCounts.open` alone.
+          tone={issueCounts.outstanding > 0 ? 'warn' : 'good'}
         />
         <Figure
           label="Faults fixed"

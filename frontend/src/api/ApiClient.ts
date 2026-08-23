@@ -31,6 +31,7 @@ import type {
   HostelScanResponse,
   HostelStatisticsResponse,
   HostelCreateRequest,
+  HostelUpdateRequest,
   HostelAssignTeamRequest,
   Event,
   PublicEventRecord,
@@ -131,6 +132,8 @@ export interface ApiClient {
   // ---- hostels ----
   listHostels(): Promise<Hostel[]>;
   createHostel(req: HostelCreateRequest): Promise<MessageResponse>;
+  /** `name` and/or `capacity` only — see `HostelUpdateRequest` for why gender and rooming are not editable here. */
+  updateHostel(hostelId: string, req: HostelUpdateRequest): Promise<MessageResponse>;
   assignHostelTeam(hostelId: string, req: HostelAssignTeamRequest): Promise<MessageResponse>;
   /** `attendance`, not `logging` — the query param `toggle_hostel_scan` actually binds. */
   toggleHostelScan(hostelId: string, userId: string, attendance: boolean): Promise<MessageResponse>;

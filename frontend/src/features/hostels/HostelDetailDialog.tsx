@@ -3,6 +3,7 @@ import {
   BedDouble,
   DoorOpen,
   Download,
+  Pencil,
   ScanLine,
   ToggleLeft,
   ToggleRight,
@@ -10,7 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import type { HostelStatisticsResponse } from '@/api/types';
+import type { HostelStatisticsResponse, HostelUpdateRequest } from '@/api/types';
 import {
   Button,
   EmptyState,
@@ -48,6 +49,7 @@ export function HostelDetailDialog({
   onAssignTeam,
   onToggleScan,
   onOpenScanner,
+  onUpdate,
 }: {
   row: HostelRow;
   stat: HostelStatisticsResponse | undefined;
@@ -59,9 +61,17 @@ export function HostelDetailDialog({
   onAssignTeam: (userId: string, role: HostelTeamRole) => void;
   onToggleScan: (userId: string, logging: boolean) => void;
   onOpenScanner: () => void;
+  /**
+   * `name`/`capacity` only — `PUT /hostels/{id}` (`HostelUpdateRequest`) has no
+   * `gender`/`sharing`/`num_rooms` fields; see that type's doc comment for why.
+   */
+  onUpdate: (req: HostelUpdateRequest) => void;
 }) {
   const [teamUserId, setTeamUserId] = useState('');
   const [teamRole, setTeamRole] = useState<HostelTeamRole>(HOSTEL_VOLUNTEER_ROLE);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(row.name);
+  const [editCapacity, setEditCapacity] = useState(String(row.capacity));
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -102,18 +112,87 @@ export function HostelDetailDialog({
       >
         <header className="flex items-start gap-3 border-b border-line p-5">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 id="hostel-detail-title" className="text-lg font-black text-ink">
-                {row.name}
-              </h2>
-              <StatusBadge tone={row.category === 'women' ? 'danger' : 'info'}>
-                {row.categoryLabel}
-              </StatusBadge>
-              {status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              {row.id} · {row.capacity} beds
-            </p>
+            {editing ? (
+              <div className="flex flex-col gap-2">
+                <TextInput
+                  label="Name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  autoFocus
+                />
+                <TextInput
+                  label="Capacity"
+                  type="number"
+                  min={1}
+                  value={editCapacity}
+                  onChange={(e) => setEditCapacity(e.target.value)}
+                  // A cut below the block's real bed ceiling is allowed
+                  // server-side (see `HostelUpdateRequest`'s doc comment) — the
+                  // residents already assigned keep their beds, allocation just
+                  // stops placing anyone new here until this is raised again.
+                  hint={
+                    Number(editCapacity) < (row.allocated ?? 0)
+                      ? `${row.allocated} already allocated — new capacity will not remove anyone.`
+                      : undefined
+                  }
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    loading={busy}
+                    disabled={!editName.trim() || Number(editCapacity) <= 0}
+                    onClick={() => {
+                      const req: HostelUpdateRequest = {};
+                      if (editName.trim() !== row.name) req.name = editName.trim();
+                      if (Number(editCapacity) !== row.capacity)
+                        req.capacity = Number(editCapacity);
+                      if (Object.keys(req).length > 0) onUpdate(req);
+                      setEditing(false);
+                    }}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditName(row.name);
+                      setEditCapacity(String(row.capacity));
+                      setEditing(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 id="hostel-detail-title" className="text-lg font-black text-ink">
+                    {row.name}
+                  </h2>
+                  <StatusBadge tone={row.category === 'women' ? 'danger' : 'info'}>
+                    {row.categoryLabel}
+                  </StatusBadge>
+                  {status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditName(row.name);
+                      setEditCapacity(String(row.capacity));
+                      setEditing(true);
+                    }}
+                    aria-label="Edit name and capacity"
+                    className="tap flex h-6 w-6 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink"
+                  >
+                    <Pencil size={13} strokeWidth={2.25} aria-hidden />
+                  </button>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {row.id} · {row.capacity} beds
+                </p>
+              </>
+            )}
           </div>
           {row.percent !== null && (
             <ProgressRing

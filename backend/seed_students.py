@@ -2187,6 +2187,67 @@ def wipe_seeded(log=print) -> dict[str, int]:
     }
 
 
+#: Migration map for a data-quality issue this script itself caused before it
+#: started importing `HOUSES` from `models` — see the note on that import,
+#: above. An older version of this file carried a *local* house-name table with
+#: a `" House"` suffix ("Bandipur House"), so every participant it seeded has
+#: that suffixed form sitting in `profile.house` in the live database, even
+#: though `models.HOUSES`/`ProfileCompleteRequest` have used the bare form for
+#: a long time. Built from `models.HOUSES` rather than hand-typed, so it can
+#: never map two houses onto the same key or fall out of step with the current
+#: vocabulary.
+HOUSE_NAME_FIXUPS: dict[str, str] = {f"{house} House": house for house in HOUSES}
+
+
+def fix_house_names(log=print) -> dict[str, int]:
+    """
+    Rewrite every already-seeded participant's suffixed house name to the bare
+    form ``models.HOUSES`` expects, in place.
+
+    Scoped to the twelve known suffixed forms (``HOUSE_NAME_FIXUPS``) rather than
+    a blanket ``profile.house`` rewrite, so a house value this migration does not
+    recognise is left untouched and reported instead of silently coerced into
+    something wrong. Idempotent: a participant already on the bare form has
+    nothing matching any of these keys, so a second run touches zero documents.
+
+    Deliberately not scoped to ``seed_source`` — the fix is for the value
+    itself, wherever it is found, not for who wrote it. A bare-name-only backend
+    validator (``ProfileCompleteRequest``) means no *real* participant could
+    ever have written the suffixed form through the API in the first place, so
+    this can only ever touch what an earlier run of this script wrote.
+    """
+    tally: dict[str, int] = {house: 0 for house in HOUSES}
+    unmapped: Counter = Counter()
+
+    for suffixed, bare in HOUSE_NAME_FIXUPS.items():
+        result = participants_collection.update_many(
+            {"profile.house": suffixed}, {"$set": {"profile.house": bare}}
+        )
+        if result.modified_count:
+            tally[bare] += result.modified_count
+
+    # Anything still not one of the twelve bare names, after the known fixups,
+    # is a genuinely unrecognised value worth surfacing rather than papering
+    # over — a typo or a house retired since this dataset was written, say.
+    for row in participants_collection.find(
+        {"profile.house": {"$exists": True, "$nin": [None, *HOUSES]}},
+        {"profile.house": 1},
+    ):
+        unmapped[row["profile"]["house"]] += 1
+
+    fixed = sum(tally.values())
+    log(f"  fixed {fixed} participant(s) across {sum(1 for v in tally.values() if v)} house(s)")
+    for house in HOUSES:
+        if tally[house]:
+            log(f"    {house:<12} +{tally[house]}")
+    if unmapped:
+        log(f"  {sum(unmapped.values())} participant(s) still have an unrecognised house value:")
+        for value, count in unmapped.most_common():
+            log(f"    {value!r}  x{count}")
+
+    return {"fixed": fixed, "unmapped": sum(unmapped.values())}
+
+
 def _as_object_id(value: str):
     try:
         return ObjectId(value)
@@ -2928,6 +2989,13 @@ def main() -> int:
         help="remove students a previous run of this script wrote, and stop",
     )
     parser.add_argument(
+        "--fix-house-names", action="store_true",
+        help=(
+            "rewrite any already-seeded participant's suffixed house name "
+            "('Bandipur House') to the bare form models.HOUSES expects, then stop"
+        ),
+    )
+    parser.add_argument(
         "--demo-catalogue", action="store_true",
         help="fill empty event/workshop/hostel/mess collections from the frontend datasets",
     )
@@ -2941,6 +3009,18 @@ def main() -> int:
 
     print(f"Paradox student seed — rng seed {seed}"
           + ("  [dry run]" if args.dry_run else ""))
+
+    if args.fix_house_names:
+        print("\nFixing suffixed house names…")
+        if args.dry_run:
+            preview = sum(
+                participants_collection.count_documents({"profile.house": suffixed})
+                for suffixed in HOUSE_NAME_FIXUPS
+            )
+            print(f"  would fix {preview} participant(s)")
+        else:
+            fix_house_names()
+        return 0
 
     if args.wipe or args.wipe_only:
         print("\nRemoving previously seeded students…")

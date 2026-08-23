@@ -18,6 +18,7 @@ import type {
   MessAssignTeamRequest,
   MessMenuRequest,
   HostelCreateRequest,
+  HostelUpdateRequest,
   HostelAssignTeamRequest,
   EventRegistrationInput,
   EventCreateRequest,
@@ -152,6 +153,8 @@ export const realApi: ApiClient = {
   listHostels: () => request('/hostels'),
   createHostel: (req: HostelCreateRequest) =>
     request('/hostels', { method: 'POST', body: JSON.stringify(req) }),
+  updateHostel: (hostelId, req: HostelUpdateRequest) =>
+    request(`/hostels/${hostelId}`, { method: 'PUT', body: JSON.stringify(req) }),
   assignHostelTeam: (hostelId, req: HostelAssignTeamRequest) =>
     request(`/hostels/${hostelId}/team`, { method: 'POST', body: JSON.stringify(req) }),
   toggleHostelScan: (hostelId, userId, attendance) =>
@@ -208,11 +211,11 @@ export const realApi: ApiClient = {
 
   // ---- embeddings ----
   generateEmbedding: async (input: string | string[]) => {
-    const response = await request<{ data: Array<{ embedding: number[] }> }>(
-      '/embeddings',
-      { method: 'POST', body: JSON.stringify({ input }) }
-    );
-    return response.data.map(item => item.embedding);
+    const response = await request<{ data: Array<{ embedding: number[] }> }>('/embeddings', {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    });
+    return response.data.map((item) => item.embedding);
   },
 
   // ---- workshop slots ----

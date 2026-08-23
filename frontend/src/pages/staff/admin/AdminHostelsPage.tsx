@@ -338,6 +338,9 @@ export default function AdminHostelsPage() {
             )
           }
           onOpenScanner={() => navigate(path(ROUTES.scanHostel, { hostelId: detailRow.id }))}
+          onUpdate={(req) =>
+            void run(() => api.updateHostel(detailRow.id, req), 'Could not update hostel.')
+          }
         />
       )}
     </FestivalScreen>

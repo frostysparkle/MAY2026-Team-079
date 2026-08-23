@@ -102,6 +102,12 @@ export default function EventsListPage() {
     [registrations],
   );
 
+  // `rankedItems` from `useRecommendations` starts as `[]` and is never
+  // `null`, so a search is only actually active once it holds items with a
+  // real (non-zero) similarity score — otherwise this is just the initial
+  // empty state and the normal category sections below should render.
+  const recommendationsActive = recommended.length > 0 && recommended.some((e) => e.similarity > 0);
+
   // Group into the three public categories, then anything unlisted.
   const sections = useMemo<Section[]>(() => {
     if (!events) return [];
@@ -171,7 +177,7 @@ export default function EventsListPage() {
         <AiRecommendBar
           noun="events"
           placeholder="e.g. dance, coding, quizzes…"
-          active={recommended.length > 0 && recommended.some(e => e.similarity > 0)}
+          active={recommendationsActive}
           loading={recommendLoading}
           onSearch={handleRecommend}
           onClear={clearRecommendations}
@@ -195,7 +201,7 @@ export default function EventsListPage() {
           description="The programme appears here as soon as the organisers publish it."
           icon={Ticket}
         />
-      ) : recommended !== null ? (
+      ) : recommendationsActive ? (
         <SectionBlock
           title="Recommended for you"
           meta={`${recommended.length} event${recommended.length === 1 ? '' : 's'} · ranked by match`}

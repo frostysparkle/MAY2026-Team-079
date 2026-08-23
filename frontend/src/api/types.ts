@@ -359,6 +359,22 @@ export interface HostelAssignTeamRequest {
   attendance?: boolean;
 }
 
+/**
+ * `PUT /hostels/{id}` — every field optional, only what is sent is written.
+ * Mirrors `MessUpdateRequest`'s shape.
+ *
+ * `gender` and the rooming fields (`sharing`, `num_rooms`) are not accepted:
+ * the backend's `HostelUpdateRequest` does not have them. `gender` decides
+ * which participants allocation will ever place here and cannot be changed
+ * after creation by any route; the rooming fields hold live `occupants`
+ * arrays keyed by room index, which a same-shaped `$set` cannot safely grow or
+ * shrink. Only `name` and `capacity` are editable once a block exists.
+ */
+export interface HostelUpdateRequest {
+  name?: string;
+  capacity?: number;
+}
+
 /* ----------------------------------------------------------------- events --- */
 
 export interface TeamRule {
@@ -426,6 +442,14 @@ export interface Event {
   schedule: ScheduleRound[];
   registration_fields: RegistrationField[];
   event_team: EventTeamMember[];
+  /**
+   * The description's embedding vector, generated server-side
+   * (`embedding_service.generate_embedding`) and carried on both `GET /events`
+   * and `GET /events/public` — never filtered out by either projection. Only
+   * consumed client-side for cosine-similarity ranking (`useRecommendations`);
+   * nothing in the UI renders it.
+   */
+  embedding?: number[] | null;
 }
 
 /**
@@ -674,6 +698,12 @@ export interface Workshop {
    */
   registration_open?: boolean | null;
   workshop_team?: WorkshopVolunteer[];
+  /**
+   * The description's embedding vector — see `Event.embedding`. Same deal:
+   * generated server-side, carried on both the staff and public workshop
+   * responses, consumed only for client-side similarity ranking.
+   */
+  embedding?: number[] | null;
 }
 
 /**
