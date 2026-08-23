@@ -10,11 +10,41 @@ Run from the ``backend/`` directory (``database.py`` loads
     python seed_students.py --total 800 --seed 7   # smaller, reproducible cohort
     TESTING=1 python seed_students.py --demo-catalogue   # in-memory smoke run
 
-Nothing under ``backend/`` is modified by this script and no API contract
-changes: it writes the same document shapes ``POST /auth/register``,
+Run it **after** the staff and catalogue seeds, which it hangs its registrations
+off::
+
+    python seed_staff.py --bootstrap --roster
+    python seed.py --email <admin>          # hostels
+    python seed_mess.py --email <admin>     # halls + menus
+    python seed_events.py --email <admin>
+    python seed_workshops.py --email <admin>
+    python seed_staff.py --assign
+    python seed_students.py
+
+Unlike those five, this one writes to Mongo directly rather than through the API:
+a few thousand participants through ``POST /auth/register`` would take minutes of
+bcrypt, and the ``seed_source`` marker ``--wipe`` depends on has no field in any
+request model.
+
+It writes the same document shapes ``POST /auth/register``,
 ``PATCH /profile/complete``, ``POST /events/{id}/register`` and
-``POST /workshops/{id}/register`` produce, so every existing endpoint reads the
+``POST /workshops/{id}/register`` produce — checked field for field against
+``testing/factories.py``, which mirrors each route — so every endpoint reads the
 seeded rows exactly as it reads real ones.
+
+── Timestamps are anchored to now, not to a fixed 2026 calendar ───────────────
+Every registration, scan and payment sits just behind the current moment,
+because the catalogue's own registration windows do too (see ``seed_calendar``).
+The academic calendar — entry years, roll numbers, ages — stays fixed, because
+that is a property of the population rather than of when the seed ran.
+
+── Attendance is seeded, not just registration ────────────────────────────────
+Workshop attendance (``attended``, ``participant_count``, ``workshop_logs``),
+event attendance scans (``event_logs``), meal scans (``mess.scans`` *and* the
+``MESS_SCAN`` audit rows the dashboard's meal figure is actually reduced from),
+hostel entry state (``inside`` / ``arrival`` / ``departure``) and the mock mess
+and hostel fees are all populated, so the organisers' screens have something to
+show.
 
 ── What "realistic" means here ─────────────────────────────────────────────────
 Every distribution is sampled, never laid out. Counts are drawn per cohort with
@@ -32,8 +62,9 @@ being pinned to them. The rules that must hold, hold absolutely:
   not the academic level; level is a separate field.
 * Email domain follows the degree; roll number, email, phone are each unique.
 * Name, nationality, location and phone format agree with each other.
-* No event or workshop registration is timestamped before 25 May, the day the
-  Paradox registration window opened.
+* No event or workshop registration falls outside the window the catalogue itself
+  advertises — not before it opened, and not in the future. A registration
+  outside it is one the API would have refused.
 
 ── Where the extra fields live ────────────────────────────────────────────────
 ``profile`` carries the fourteen keys ``PATCH /profile/complete`` writes plus the
@@ -46,6 +77,12 @@ knowing: the canonical ``program`` / ``course_stage`` pair is always derived fro
 and ``PATCH /profile/complete`` replaces ``profile`` wholesale, so a seeded
 student who re-submits the profile form loses the added keys (their canonical
 fields survive, because the form collects those).
+
+``house`` is a bare name from ``models.HOUSES`` ("Bandipur", not "Bandipur
+House"), and ``mess_preference`` is a combined ``{cuisine}__{diet}`` value from
+``models.MESS_PREFERENCE_TYPES`` — both closed vocabularies imported from the
+model rather than restated here, because a local copy is exactly how the previous
+version drifted into writing values the profile validator now rejects.
 
 ``mess_preference`` is set only for students who actually took mess, matching the
 profile flow where the meal question lives on the Accommodation & Mess step
@@ -81,39 +118,58 @@ from bson import ObjectId
 
 from database import (
     event_collection,
+    event_logs_collection,
     hostel_collection,
     mess_collection,
     participants_collection,
+    system_logs_collection,
     workshop_logs_collection,
+    workshop_slots_collection,
     workshops_collection,
 )
 from embedding_service import generate_embedding, zero_embedding
+from models import HOUSES, MESS_PREFERENCE_TYPES
+from payments import simulate_payment
 from security import generate_rsa_key_pair, get_password_hash
 
+import seed_calendar
 import seed_students_data as bank
 
 
 # =============================================================================
 # Fest calendar
 # =============================================================================
+#
+# Two different calendars are in play here, and conflating them is what made the
+# old version of this script produce a database nobody could test against.
+#
+# The *academic* calendar — entry years, roll numbers, ages — is a property of
+# the student population and stays fixed. A 2023 entrant is a 2023 entrant
+# whenever the seed happens to run.
+#
+# The *activity* calendar — when accounts were created, when events and
+# workshops were registered for — has to sit just behind "now", because the
+# catalogue's own registration windows are anchored to now (see
+# `seed_calendar`). A registration dated May 2026 against a window that opened
+# ten days ago is a row the API would never have written.
 
-FEST_YEAR = 2026
+# The opening day of the fest, which is today. `age` and `dob` are computed "as
+# at" this date, so the two can never drift apart depending on when the seed runs.
+AGE_REFERENCE = seed_calendar.FEST_DAY_1
+FEST_YEAR = AGE_REFERENCE.year
 
-# The hard floor from the brief: Paradox registration opened on 25 May. Nothing
-# this script writes may be timestamped earlier.
-REGISTRATION_OPENS = datetime(FEST_YEAR, 5, 25, 6, 0)
-# Registrations taper off as the fest starts on 10 June.
-REGISTRATION_CLOSES = datetime(FEST_YEAR, 6, 9, 23, 30)
+# The activity window. `REGISTRATION_OPENS` matches the catalogue's own window
+# exactly, so no seeded registration predates the event or workshop it is for.
+REGISTRATION_OPENS = seed_calendar.REGISTRATION_OPENS
+# Registrations run right up to the present. Not to `seed_calendar`'s closing
+# bound, which is in the future: a student cannot have registered tomorrow.
+REGISTRATION_CLOSES = seed_calendar.NOW - timedelta(minutes=1)
 
 # When accounts were created. Sign-ups begin before the activity registration
 # window opens, which is why a student's own registrations are always clamped to
-# start after both their account and 25 May.
-SIGNUP_OPENS = datetime(FEST_YEAR, 5, 4, 7, 0)
-SIGNUP_CLOSES = datetime(FEST_YEAR, 6, 5, 22, 0)
-
-# Ages are "as at" the opening day of the fest, so `age` and `dob` cannot drift
-# apart depending on when the seed happens to be run.
-AGE_REFERENCE = date(FEST_YEAR, 6, 10)
+# start after both their account and `REGISTRATION_OPENS`.
+SIGNUP_OPENS = REGISTRATION_OPENS - timedelta(days=21)
+SIGNUP_CLOSES = seed_calendar.NOW - timedelta(hours=1)
 
 # Registrations cluster in the evening, the way a working adult cohort actually
 # signs up. Index = hour of day.
@@ -289,20 +345,28 @@ DEGREE_TYPES: tuple[tuple[str, float], ...] = (
 # right" roll number is a wrong roll number.
 ROLL_PATTERN = re.compile(r"^\d{2}F[123]\d{6}$")
 
-# The twelve IITM BS houses, mirroring frontend/src/config/houses.ts. Duplicated
-# rather than imported because that file is TypeScript; the validation report
-# prints the list so a drift is visible.
-HOUSES: tuple[str, ...] = (
-    "Bandipur House", "Corbett House", "Gir House", "Kanha House",
-    "Kaziranga House", "Nallamala House", "Namdapha House", "Nilgiri House",
-    "Pichavaram House", "Saranda House", "Sundarbans House", "Wayanad House",
-)
+# The twelve IITM BS houses are imported from `models.HOUSES` rather than
+# restated here. They used to be a local copy carrying a " House" suffix
+# ("Bandipur House"), which `ProfileCompleteRequest` now rejects outright — the
+# stored form is bare. A local copy is exactly how that drift happened, so there
+# is no longer one: see the import at the top of this file.
 
-# `mess.preference` on the hall documents, and so the only values
-# `POST /mess/allocate` can match a student against.
+# `profile.mess_preference`, validated against `models.MESS_PREFERENCE_TYPES`.
+#
+# The vocabulary changed shape: the old independent `preference`
+# (veg | non_veg | jain) and `cuisines` pair collapsed into one combined
+# "{cuisine}__{diet}" value, plus a standalone "jain". A bare "veg" is no longer
+# a value a profile may hold.
+#
+# `POST /mess/allocate` still matches on the dietary half alone (`_diet_of`), so
+# the weights below are chosen so the diets they collapse to stay close to the
+# old veg/non_veg/jain split — the halls are stocked for that, not for the
+# cuisine split.
 MESS_PREFERENCES: tuple[tuple[str, float], ...] = (
-    ("veg", 0.55),
-    ("non_veg", 0.38),
+    ("north_indian__veg", 0.30),
+    ("south_indian__veg", 0.25),
+    ("north_indian__non_veg", 0.20),
+    ("south_indian__non_veg", 0.18),
     ("jain", 0.07),
 )
 
@@ -356,6 +420,46 @@ AFFINITY_BOOST = 1.45          # applied when an item matches the degree's theme
 AFFINITY_OFF_THEME_BOOST = 0.2  # small pull towards other technical themes
 
 SEED_MARKER = "seed_students"
+
+
+# =============================================================================
+# Attendance, scans and payments
+# =============================================================================
+#
+# What share of the cohort has turned up, eaten, and paid. Attendance is what the
+# organisers' dashboards actually display, and a fest whose every counter reads
+# zero tells a tester nothing about whether those screens work.
+
+#: Share of workshop bookings marked as attended.
+WORKSHOP_ATTENDED_SHARE = 0.62
+#: Share of workshop bookings taken at the door rather than booked ahead. These
+#: charge a seat the same way `registration_count` is charged by a pre-booking.
+WORKSHOP_ON_SPOT_SHARE = 0.08
+#: Share of event registrations with at least one attendance scan against them.
+EVENT_SCANNED_SHARE = 0.55
+#: Share of allotted diners who have scanned a meal, and the share of that
+#: hall's *past* sittings each of them scanned.
+MESS_SCANNED_SHARE = 0.7
+MESS_SITTING_SCANNED_SHARE = 0.75
+#: Share of residents currently inside their block, and the share who have
+#: checked out for good.
+HOSTEL_INSIDE_SHARE = 0.33
+HOSTEL_DEPARTED_SHARE = 0.06
+#: Share of those who requested mess / a room who have settled the mock fee.
+MESS_PAID_SHARE = 0.68
+HOSTEL_PAID_SHARE = 0.74
+
+#: Team ids are minted here rather than taken from a name bank.
+#: `participants.events[].team_id` holds a backend-assigned id
+#: (`TM<TYPE><counter>` from `EventIDGenerator.next_team_id`), never a display
+#: name — the old version of this script stored "Cosmic Falcons" there, which no
+#: route would ever have written and which `PUT
+#: /events/{id}/participant_teams/{id}` would not recognise.
+#:
+#: The counter starts far above the generator's own 111111 because that counter
+#: is in-memory and restarts on every process restart, so a low seeded id would
+#: be handed out again by the first team a real participant creates.
+TEAM_ID_SEQUENCE_BASE = 900_001
 
 
 # =============================================================================
@@ -453,6 +557,36 @@ def affinity_themes(text: str) -> set[str]:
     }
 
 
+def diet_of(mess_type: str) -> str:
+    """
+    The dietary axis of a hall's combined ``type``, e.g. ``"north_indian__veg"``
+    -> ``"veg"``.
+
+    Mirrors ``routers.mess._diet_of`` rather than importing it, for the reason
+    ``participant_id_for`` mirrors ``main.generate_participant_id``: importing
+    the router would pull FastAPI and every dependency into a script that needs
+    one line of string handling. This is what lets a student's combined
+    preference be matched against a hall the same way ``POST /mess/allocate``
+    matches it.
+    """
+    if mess_type == "jain":
+        return "jain"
+    return (mess_type or "").rsplit("__", 1)[-1]
+
+
+def mint_team_id(event_type: str, sequence: int) -> str:
+    """
+    A team id in the form ``EventIDGenerator.next_team_id`` produces:
+    ``"TM" + event_type[:3].upper() + counter``.
+
+    Mirrored rather than imported so the counter can start from this script's own
+    reserved base — the generator's instance counter is in-memory and would
+    restart at 111111 in the API process, handing out ids this script had
+    already used.
+    """
+    return f"TM{(event_type or 'others')[:3].upper()}{sequence}"
+
+
 # =============================================================================
 # Generated student
 # =============================================================================
@@ -493,12 +627,31 @@ class Student:
     mess_preference: str | None = None
     hostel_id: str | None = None
     room: str | None = None
-    logged_in: bool = False
+    # Which room of that block, by index. `POST /hostels/allocate` writes
+    # `rooms.{index}.occupants`, so the mirror pass needs the index and not only
+    # the room number.
+    room_index: int | None = None
+    # `accommodation.inside` / `arrival` / `departure`, as a hostel entry scan
+    # would have left them. `logged_in` used to stand in for `inside`; that field
+    # does not exist on the participant document.
+    inside: bool = False
+    arrival: datetime | None = None
+    departure: datetime | None = None
     mess_oid: Any = None
+    # `mess.scans[day_key][slot]`, in the shape `scan_mess` writes.
+    mess_scans: dict[str, dict[str, Any]] = field(default_factory=dict)
+    mess_payment: dict[str, Any] | None = None
+    accommodation_payment: dict[str, Any] | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     workshops: list[dict[str, Any]] = field(default_factory=list)
     event_logs: list[tuple[Any, datetime]] = field(default_factory=list)
     workshop_logs: list[tuple[Any, datetime]] = field(default_factory=list)
+    # Attendance scans, as `(event_oid, scanned_by, when)` and
+    # `(workshop_oid, when)` — written to `event_logs` / `workshop_logs` and, for
+    # mess, to the audit trail.
+    event_scans: list[tuple[Any, str, datetime]] = field(default_factory=list)
+    workshop_attendance: list[tuple[Any, datetime]] = field(default_factory=list)
+    mess_scan_rows: list[tuple[str, str, int, datetime]] = field(default_factory=list)
 
 
 # =============================================================================
@@ -950,13 +1103,22 @@ def assign_stay(rng: random.Random, students: list[Student]) -> None:
 
 def allocate_hostels(rng: random.Random, students: list[Student], hostels: list[dict]) -> int:
     """
-    Place most accommodation requests into a gender-matched block.
+    Place most accommodation requests into a real room of a gender-matched block.
 
     A slice is left unplaced on purpose. ``POST /hostels/allocate`` selects on
     ``{"accommodation.registered": True, "accommodation.hostel_id": None}``, so
     those students are a live queue for the organisers' batch — and the
     "awaiting allocation" state on the student's own Stay screen has real data
     behind it.
+
+    Two things this now matches that it did not before. Rooms are taken from the
+    block's own ``rooms`` array, filling each up to its ``sharing`` limit, rather
+    than the room number being invented from a running count — so the seeded
+    ``accommodation.room`` is a room that exists, and the occupants can be
+    mirrored onto the block. And the ceiling is
+    ``min(capacity, sharing * len(rooms))``, which is exactly what
+    ``allocate_hostels`` enforces: a block created with more beds than capacity
+    still only takes ``capacity`` residents.
     """
     by_gender: dict[str, list[dict]] = defaultdict(list)
     for hostel in hostels:
@@ -964,7 +1126,23 @@ def allocate_hostels(rng: random.Random, students: list[Student], hostels: list[
     for blocks in by_gender.values():
         blocks.sort(key=lambda h: h.get("hostel_id", ""))
 
-    occupancy: Counter = Counter()
+    # Live room occupancy per block, seeded from whatever is already stored so a
+    # re-run cannot double-fill a room.
+    room_fill: dict[str, list[int]] = {
+        h["hostel_id"]: [len(room.get("occupants") or []) for room in (h.get("rooms") or [])]
+        for h in hostels
+    }
+    ceiling = {
+        h["hostel_id"]: min(
+            int(h.get("capacity", 0) or 0),
+            int(h.get("sharing", 1) or 1) * len(h.get("rooms") or []),
+        )
+        for h in hostels
+    }
+    occupancy: Counter = Counter(
+        {h["hostel_id"]: int(h.get("current_occupancy", 0) or 0) for h in hostels}
+    )
+
     placed = 0
     waiting = [s for s in students if s.stay in ("both", "accommodation")]
     rng.shuffle(waiting)
@@ -972,26 +1150,45 @@ def allocate_hostels(rng: random.Random, students: list[Student], hostels: list[
     to_place = int(len(waiting) * rng.uniform(0.79, 0.87))
 
     for student in waiting[:to_place]:
-        blocks = by_gender.get(student.gender, [])
-        room_available = [
-            b for b in blocks if occupancy[b["hostel_id"]] < int(b.get("capacity", 0))
+        blocks = [
+            b for b in by_gender.get(student.gender, [])
+            if occupancy[b["hostel_id"]] < ceiling[b["hostel_id"]]
         ]
-        if not room_available:
+        if not blocks:
             continue
         # Weighted by remaining space, so blocks fill unevenly but nothing
         # overflows.
         block = rng.choices(
-            room_available,
-            weights=[
-                int(b.get("capacity", 0)) - occupancy[b["hostel_id"]] for b in room_available
-            ],
+            blocks,
+            weights=[ceiling[b["hostel_id"]] - occupancy[b["hostel_id"]] for b in blocks],
             k=1,
         )[0]
-        occupancy[block["hostel_id"]] += 1
-        student.hostel_id = block["hostel_id"]
-        student.room = str(100 + occupancy[block["hostel_id"]])
-        # A third are inside their block at the moment the snapshot is taken.
-        student.logged_in = rng.random() < 0.33
+
+        hostel_id = block["hostel_id"]
+        sharing = int(block.get("sharing", 1) or 1)
+        rooms = block.get("rooms") or []
+        room_index = next(
+            (i for i, taken in enumerate(room_fill[hostel_id]) if taken < sharing), None
+        )
+        if room_index is None:
+            continue
+
+        room_fill[hostel_id][room_index] += 1
+        occupancy[hostel_id] += 1
+        student.hostel_id = hostel_id
+        student.room_index = room_index
+        student.room = str(rooms[room_index].get("room_number"))
+
+        # Arrival, and whether they are inside right now, as entry/exit scans
+        # would have left them. `departure` is only ever set on somebody who has
+        # been inside, and it implies they are not inside now — the same
+        # invariant `scan_hostel` enforces.
+        student.arrival = timestamp_between(rng, REGISTRATION_OPENS, REGISTRATION_CLOSES)
+        if rng.random() < HOSTEL_DEPARTED_SHARE:
+            student.departure = timestamp_between(rng, student.arrival, REGISTRATION_CLOSES)
+            student.inside = False
+        else:
+            student.inside = rng.random() < HOSTEL_INSIDE_SHARE
         placed += 1
     return placed
 
@@ -1000,13 +1197,18 @@ def allocate_mess(rng: random.Random, students: list[Student], halls: list[dict]
     """
     Place most mess requests into a hall that serves what they eat.
 
-    ``POST /mess/allocate`` groups halls by ``preference`` and matches the
-    student's ``profile.mess_preference``, so the pairing here is the one the
-    batch would make. As with hostels, a slice is left unplaced.
+    ``POST /mess/allocate`` buckets halls by the dietary axis of their ``type``
+    (``mess._diet_of``) and matches a student's ``profile.mess_preference``
+    through the same collapse, so the pairing here is the one the batch would
+    make. The old version grouped on a ``preference`` field the hall documents no
+    longer have, which meant every bucket was empty and nobody was ever placed.
+
+    As with hostels, a slice is left unplaced so the organisers' batch has a
+    queue.
     """
-    by_preference: dict[str, list[dict]] = defaultdict(list)
+    by_diet: dict[str, list[dict]] = defaultdict(list)
     for hall in halls:
-        by_preference[str(hall.get("preference", "")).lower()].append(hall)
+        by_diet[diet_of(str(hall.get("type", "")))].append(hall)
 
     occupancy: Counter = Counter()
     placed = 0
@@ -1016,7 +1218,7 @@ def allocate_mess(rng: random.Random, students: list[Student], halls: list[dict]
 
     for student in waiting[:to_place]:
         options = [
-            h for h in by_preference.get(student.mess_preference or "", [])
+            h for h in by_diet.get(diet_of(student.mess_preference or ""), [])
             if occupancy[str(h["_id"])] < int(h.get("capacity", 0))
         ]
         if not options:
@@ -1028,6 +1230,93 @@ def allocate_mess(rng: random.Random, students: list[Student], halls: list[dict]
         student.mess_oid = hall["_id"]
         placed += 1
     return placed
+
+
+def assign_mess_scans(rng: random.Random, students: list[Student], halls: list[dict]) -> int:
+    """
+    Give most allotted diners a scan history against their hall's own menu.
+
+    ``mess.scans`` is keyed exactly as the hall's ``menu`` is — ``day_1``,
+    ``day_2``, ... each holding ``breakfast`` / ``lunch`` / ``dinner`` — and
+    ``GET /mess/my_mess`` derives its whole display list by merging the two, so a
+    scan against a sitting the hall does not serve would simply not appear.
+
+    Only sittings that have already *finished* are marked. A scan recorded
+    against tomorrow's dinner is a row no scanner could have produced, and it
+    would make the meal counts on the dashboard exceed the meals actually
+    served.
+    """
+    halls_by_oid = {h["_id"]: h for h in halls}
+    scanned = 0
+
+    for student in students:
+        if not student.mess_oid or rng.random() > MESS_SCANNED_SHARE:
+            continue
+        hall = halls_by_oid.get(student.mess_oid)
+        if hall is None:
+            continue
+
+        mess_id = str(hall.get("mess_id"))
+        for day_key, sittings in (hall.get("menu") or {}).items():
+            for slot, sitting in (sittings or {}).items():
+                end = sitting.get("end_time")
+                if not isinstance(end, datetime) or end >= seed_calendar.NOW:
+                    continue
+                if rng.random() > MESS_SITTING_SCANNED_SHARE:
+                    continue
+                start = sitting.get("start_time") or end
+                when = timestamp_between(rng, start, end)
+                student.mess_scans.setdefault(day_key, {})[slot] = {
+                    "scanned": True,
+                    "scanned_at": when,
+                }
+                # The audit row is what the dashboard's meal figure is actually
+                # reduced from — see `audit._meal_summary`, which counts distinct
+                # diners out of `MESS_SCAN` rows rather than reading `mess.scans`.
+                student.mess_scan_rows.append((mess_id, slot, int(day_key.split("_")[1]), when))
+                scanned += 1
+
+    return scanned
+
+
+def assign_payments(rng: random.Random, students: list[Student]) -> tuple[int, int]:
+    """
+    Settle the mock mess and hostel fees for most of those who asked for them.
+
+    Uses ``payments.simulate_payment``, the same function ``POST /mess/pay`` and
+    ``POST /hostels/pay`` call, so the stored receipt is byte-for-byte the shape
+    those routes write — including the ``PDX-MESS-…`` / ``PDX-HOSTEL-…``
+    transaction id prefix a support conversation would search for.
+
+    Deliberately independent of allocation, exactly as the routes are: paying
+    does not opt a participant into allocation, and being allotted does not
+    require having paid.
+    """
+    from routers.hostels import HOSTEL_FEE
+    from routers.mess import MESS_FEE
+
+    mess_paid = hostel_paid = 0
+    methods = ("upi", "card", "netbanking")
+
+    for student in students:
+        if student.stay in ("both", "mess") and rng.random() < MESS_PAID_SHARE:
+            student.mess_payment = simulate_payment(
+                "mess", MESS_FEE, rng.choice(methods)
+            )
+            student.mess_payment["paid_at"] = timestamp_between(
+                rng, student.created_at, REGISTRATION_CLOSES
+            )
+            mess_paid += 1
+        if student.stay in ("both", "accommodation") and rng.random() < HOSTEL_PAID_SHARE:
+            student.accommodation_payment = simulate_payment(
+                "hostel", HOSTEL_FEE, rng.choice(methods)
+            )
+            student.accommodation_payment["paid_at"] = timestamp_between(
+                rng, student.created_at, REGISTRATION_CLOSES
+            )
+            hostel_paid += 1
+
+    return mess_paid, hostel_paid
 
 
 # =============================================================================
@@ -1048,17 +1337,31 @@ def assign_event_registrations(
     student-event pair gets a fresh random multiplier on top of the degree lean,
     so no two students of the same degree pick the same list.
 
-    Both sides of the registration are written, as ``POST
-    /events/{id}/register`` does: the participant's embedded ``events`` entry
-    keyed on the event's ObjectId, and a row on the event's own ``logs`` roster.
+    Only the participant side is written, because that is now the only side there
+    is. The event document used to carry a ``logs`` roster mirroring every
+    registration; the restructure removed it, and ``GET /events/{id}/capacity``
+    and ``GET /events/{id}/participation`` both count ``participants.events``
+    directly. Writing to it now would create a field no reader consults.
+
+    Attendance scans *are* written, to ``event_logs`` — the collection
+    ``POST /events/{id}/scan`` writes and ``_unique_attendance_today`` reduces —
+    attributed to a real member of that event's own ``event_team``.
     """
     if not events:
         return
 
     popularity = [rng.lognormvariate(0, 0.62) for _ in events]
     themes = [affinity_themes(f"{e.get('name', '')} {e.get('description', '')}") for e in events]
-    # Team events can carry a team name; solo events never do.
+    # Team events can carry a team; solo events never do.
     is_team = [int((e.get("team") or {}).get("max", 1) or 1) > 1 for e in events]
+    # Who could plausibly have scanned for each event: its own team. An empty list
+    # means `seed_staff.py --assign` has not run, in which case no scan is
+    # recorded rather than one being attributed to nobody.
+    scanners = [
+        [m.get("user_id") for m in (e.get("event_team") or []) if m.get("user_id")]
+        for e in events
+    ]
+    team_sequence = TEAM_ID_SEQUENCE_BASE
 
     for student in students:
         low, high = pick_pair(rng, tuple((band[:2], band[2]) for band in EVENT_ACTIVITY_TIERS))
@@ -1086,17 +1389,31 @@ def assign_event_registrations(
             event = events[index]
             team_id = None
             if is_team[index] and rng.random() < 0.45:
-                team_id = f"{rng.choice(bank.TEAM_ADJECTIVES)} {rng.choice(bank.TEAM_NOUNS)}"
+                # A backend-assigned id, not a display name. `team_name` is what a
+                # client sends; the id it gets back is what is stored, and it is
+                # what a teammate later sends to join.
+                team_id = mint_team_id(event.get("event_type", "others"), team_sequence)
+                team_sequence += 1
             student.events.append({
                 "team_id": team_id,
                 "event_id": event["_id"],
-                # Matches the backend: naming a team makes you its leader.
+                # Matches the backend: creating a team makes you its leader, and
+                # everybody else — solo registrants included — is a "member".
                 "team_role": "leader" if team_id else "member",
                 "registration_data": {},
             })
-            student.event_logs.append(
-                (event["_id"], timestamp_between(rng, earliest, REGISTRATION_CLOSES))
-            )
+            registered_at = timestamp_between(rng, earliest, REGISTRATION_CLOSES)
+            student.event_logs.append((event["_id"], registered_at))
+
+            # An attendance scan, by somebody who could actually have taken it.
+            if scanners[index] and rng.random() < EVENT_SCANNED_SHARE:
+                student.event_scans.append(
+                    (
+                        event["_id"],
+                        rng.choice(scanners[index]),
+                        timestamp_between(rng, registered_at, REGISTRATION_CLOSES),
+                    )
+                )
 
 
 def assign_workshop_registrations(
@@ -1159,15 +1476,27 @@ def assign_workshop_registrations(
             booked_slots.add(slot)
             seats_taken[workshop["_id"]] += 1
             added[workshop["_id"]] += 1
+
+            # A seat taken at the door rather than booked ahead. Both charge a
+            # seat against `registration_count`; what differs is `booking_type`,
+            # and an on-spot attendee is present by definition.
+            on_spot = rng.random() < WORKSHOP_ON_SPOT_SHARE
+            attended = True if on_spot else rng.random() < WORKSHOP_ATTENDED_SHARE
+
             student.workshops.append({
                 "slot_id": slot,
-                "booking_type": "pre-registered",
+                "booking_type": "on-spot" if on_spot else "pre-registered",
                 "workshop_id": workshop["_id"],
-                "attended": False,
+                "attended": attended,
             })
-            student.workshop_logs.append(
-                (workshop["_id"], timestamp_between(rng, earliest, REGISTRATION_CLOSES))
-            )
+            registered_at = timestamp_between(rng, earliest, REGISTRATION_CLOSES)
+            student.workshop_logs.append((workshop["_id"], registered_at))
+            if attended:
+                # `participant_count` follows this, and a log row records the scan
+                # the same way `workshop_attendance` does.
+                student.workshop_attendance.append(
+                    (workshop["_id"], timestamp_between(rng, registered_at, REGISTRATION_CLOSES))
+                )
 
     return dict(added)
 
@@ -1175,21 +1504,6 @@ def assign_workshop_registrations(
 # =============================================================================
 # Documents
 # =============================================================================
-
-
-def blank_mess_entries() -> list[dict[str, Any]]:
-    """The five-day, three-slot meal card ``POST /auth/register`` creates."""
-    return [
-        {
-            "day": day,
-            "slots": [
-                {"slot": "breakfast", "logged": False},
-                {"slot": "lunch", "logged": False},
-                {"slot": "dinner", "logged": False},
-            ],
-        }
-        for day in range(1, 6)
-    ]
 
 
 def to_document(
@@ -1246,18 +1560,28 @@ def to_document(
             "nationality": student.nationality,
             "age": student.age,
         },
+        # Both sub-documents are written key-for-key as `POST /auth/register`
+        # writes them (and as `testing/factories.participant_doc` mirrors), because
+        # every read path projects specific keys out of them. The old shapes —
+        # `mess.entries` and `accommodation.logged_in` — do not exist in the
+        # schema: `entries` was replaced by `scans`, keyed by the hall's own menu,
+        # and `logged_in` by `inside`.
         "mess": {
             "registered": takes_mess,
             "mess_id": student.mess_oid,
-            "entries": blank_mess_entries(),
+            "scans": student.mess_scans,
+            "payment": student.mess_payment,
         },
         "accommodation": {
             "registered": takes_room,
             # Explicitly None, never absent: `POST /hostels/allocate` selects on
-            # `hostel_id: None`, and a missing key would not match.
+            # `hostel_id: None`, and a missing key would not match that filter.
             "hostel_id": student.hostel_id,
             "room": student.room,
-            "logged_in": student.logged_in,
+            "arrival": student.arrival,
+            "inside": student.inside,
+            "departure": student.departure,
+            "payment": student.accommodation_payment,
         },
         "photo": student.photo,
         "qr_secrets": {"private_key": private_key, "public_key": public_key},
@@ -1300,22 +1624,32 @@ def read_existing() -> dict[str, set[str]]:
 def load_catalogues() -> dict[str, list[dict]]:
     """The events, workshops, hostels and mess halls the seed hangs off."""
     return {
+        # `event_team` is projected in because attendance scans are attributed to
+        # a real member of the event's own team.
         "events": list(
             event_collection.find({}, {"_id": 1, "event_id": 1, "event_type": 1,
-                                       "name": 1, "description": 1, "team": 1})
+                                       "name": 1, "description": 1, "team": 1,
+                                       "event_team": 1})
         ),
         "workshops": list(
             workshops_collection.find({}, {"_id": 1, "workshop_id": 1, "slot_id": 1,
                                            "name": 1, "description": 1, "capacity": 1,
-                                           "registration_count": 1})
+                                           "registration_count": 1,
+                                           "participant_count": 1})
         ),
+        # `sharing` and `rooms` are what allocation actually places against — the
+        # ceiling is `min(capacity, sharing * len(rooms))` and the room number
+        # comes from the array, so neither can be left out.
         "hostels": list(
             hostel_collection.find({}, {"_id": 1, "hostel_id": 1, "gender": 1,
-                                        "capacity": 1, "name": 1})
+                                        "capacity": 1, "name": 1, "sharing": 1,
+                                        "rooms": 1, "current_occupancy": 1})
         ),
+        # `type` replaced the retired `preference`; `menu` is what mess scans are
+        # recorded against.
         "mess": list(
-            mess_collection.find({}, {"_id": 1, "mess_id": 1, "preference": 1,
-                                      "capacity": 1, "name": 1})
+            mess_collection.find({}, {"_id": 1, "mess_id": 1, "type": 1,
+                                      "capacity": 1, "name": 1, "menu": 1})
         ),
     }
 
@@ -1323,27 +1657,206 @@ def load_catalogues() -> dict[str, list[dict]]:
 DATA_DIR = Path(__file__).resolve().parent.parent / "frontend" / "src" / "data"
 
 
+_DATASET_FILES = {
+    "events": "paradoxEvents.json",
+    "workshops": "paradoxWorkshops.json",
+    "hostels": "paradoxHostels.json",
+    "mess": "paradoxMess.json",
+}
+
+
+def _dataset(kind: str) -> list[dict]:
+    return json.loads((DATA_DIR / _DATASET_FILES[kind]).read_text("utf-8"))
+
+
+# =============================================================================
+# Demo catalogue
+# =============================================================================
+#
+# Every builder below produces the document shape the corresponding route
+# produces today — cross-checked field by field against `testing/factories.py`,
+# which mirrors each route and cites it. They exist because the frontend datasets
+# are still written for the pre-restructure schema, and a demo catalogue in the
+# old shape is worse than none: allocation silently places nobody, and the seeded
+# cohort validates against documents the API would never have written.
+#
+# The old versions of these wrote `category`/`occupancy`/`coordinator` on hostels,
+# `preference`/`cuisines` on halls, `open`/`logs` on events, and workshops with no
+# slot, no start time and no registration window. None of those fields exist any
+# more, and the ones that replaced them were all missing.
+
+
+def _demo_hostel_docs(now: datetime) -> list[dict]:
+    """Hostels in the shape ``POST /hostels`` writes."""
+    records = sorted(_dataset("hostels"), key=lambda r: r["name"])
+    docs = []
+    for index, record in enumerate(records):
+        rooming = seed_calendar.hostel_rooming(record["name"], record["capacity"], index)
+        docs.append({
+            "hostel_id": record["hostel_id"],
+            "name": record["name"],
+            "capacity": record["capacity"],
+            "gender": record["gender"],
+            "sharing": rooming["sharing"],
+            "current_occupancy": 0,
+            "rooms": [
+                {"room_number": str(101 + i), "occupants": []}
+                for i in range(rooming["num_rooms"])
+            ],
+            "hostel_team": [],
+            "created_at": now,
+        })
+    return docs
+
+
+def _demo_mess_docs(now: datetime) -> list[dict]:
+    """
+    Halls in the shape ``POST /mess`` writes, menu included.
+
+    The menu uses ``seed_calendar.mess_menu_datetimes`` — real ``datetime``
+    objects, not ISO strings. ``mess._assert_mess_scan_window`` silently disables
+    itself for a sitting whose bounds are not datetimes, so strings here would
+    leave the hall scannable at any hour of any day.
+    """
+    menu = seed_calendar.mess_menu_datetimes()
+    return [
+        {
+            "mess_id": record["mess_id"],
+            "name": record["name"],
+            "capacity": record["capacity"],
+            "type": seed_calendar.mess_type(
+                record["mess_id"], record.get("preference"), record.get("cuisines")
+            ),
+            "menu": menu,
+            "mess_team": [],
+            "created_at": now,
+        }
+        for record in sorted(_dataset("mess"), key=lambda r: r["mess_id"])
+    ]
+
+
+def _demo_slot_docs(now: datetime) -> list[dict]:
+    """
+    The workshop slots, in the shape ``POST /workshop-slots`` writes.
+
+    Absent from the old demo catalogue entirely, which is why a workshop seeded
+    by it had no time at all: ``start_time`` is denormalized from the slot, and
+    with no slot there was nothing to denormalize.
+    """
+    return [
+        {
+            "slot_id": slot_id,
+            "start_time": bounds["start_time"],
+            "end_time": bounds["end_time"],
+            "created_by": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for slot_id, bounds in sorted(seed_calendar.SLOT_TIMES.items())
+    ]
+
+
+def _demo_workshop_docs(now: datetime) -> list[dict]:
+    """Workshops in the shape ``POST /workshops`` writes."""
+    window = seed_calendar.workshop_registration_window()
+    docs = []
+    for record in sorted(_dataset("workshops"), key=lambda r: r["name"]):
+        slot_id = seed_calendar.legacy_slot_id(record["slot_id"])
+        docs.append({
+            "workshop_id": record["workshop_id"],
+            "slot_id": slot_id,
+            "name": record["name"],
+            "description": record["description"],
+            "embedding": zero_embedding(),
+            "venue": record["venue"],
+            "capacity": record["capacity"],
+            "registration_count": 0,
+            "participant_count": 0,
+            "instructions": record.get("instructions", ""),
+            # Denormalized from the slot, exactly as `create_workshop` does.
+            "start_time": seed_calendar.SLOT_TIMES[slot_id]["start_time"],
+            **window,
+            "registration_closed_by_system": False,
+            "workshop_team": [],
+            "created_by": None,
+            "created_at": now,
+            "updated_at": now,
+        })
+    return docs
+
+
+def _demo_event_docs(now: datetime) -> list[dict]:
+    """Events in the shape ``POST /events`` writes."""
+    docs = []
+    for record in sorted(_dataset("events"), key=lambda r: r["name"]):
+        rounds = record.get("schedule") or []
+        times = seed_calendar.event_round_times(record["name"], len(rounds))
+        event_type = record["event_type"]
+        team = record.get("team") or {}
+        docs.append({
+            "event_id": record["event_id"],
+            "event_type": event_type,
+            "name": record["name"],
+            "description": record["description"],
+            "embedding": zero_embedding(),
+            "poster": record.get("poster", ""),
+            "team": {
+                "min": team.get("min", 1),
+                "max": team.get("max", 1),
+                # Renamed; the dataset still calls it `house`.
+                "house_vs_house_event": bool(team.get("house", False)),
+                "allow_single_registration": team.get("allow_single_registration", True),
+            },
+            "prize_money": record.get("prize_money", []),
+            # `{start_time, end_time, allowed}`. The dataset's own `registration`
+            # object is presentation copy (rulebook, faqs, meta) and has no place
+            # in the schema. `is_open` is never stored — it is computed per read.
+            "registration": seed_calendar.event_registration_window(),
+            "schedule": [
+                {
+                    "round_id": f"RND{event_type[:3].upper()}{11111 + i}",
+                    "name": rnd["name"],
+                    "description": rnd.get("description") or "",
+                    "start_time": seed_calendar.iso(start),
+                    "end_time": seed_calendar.iso(end),
+                    "venue": rnd.get("venue"),
+                }
+                for i, (rnd, (start, end)) in enumerate(zip(rounds, times))
+            ],
+            "registration_fields": record.get("registration_fields", []),
+            "event_team": [],
+            # Present and empty, as `create_event` writes it. There is no `logs`
+            # array and no top-level `open` flag any more.
+            "announcements": [],
+            "created_by": None,
+            "created_at": now,
+            "updated_at": now,
+        })
+    return docs
+
+
 def in_memory_catalogue(kind: str) -> list[dict]:
     """
-    A catalogue read straight from the frontend dataset, with invented ids.
+    A catalogue built from the frontend dataset, with invented ids.
 
     Only for ``--dry-run --demo-catalogue`` on a database whose catalogue is
-    empty: the run needs events and workshops to hang registrations off, and a
-    dry run is not allowed to create them. The ids are throwaway, which is fine
-    because nothing is written.
+    empty: the run needs events, workshops, blocks and halls to hang
+    registrations off, and a dry run is not allowed to create them. The ids are
+    throwaway, which is fine because nothing is written — but the *shapes* are
+    the real ones, so the allocation and scan passes behave exactly as they will
+    against a real catalogue.
     """
-    files = {
-        "events": "paradoxEvents.json",
-        "workshops": "paradoxWorkshops.json",
-        "hostels": "paradoxHostels.json",
-        "mess": "paradoxMess.json",
+    now = datetime.utcnow()
+    builders = {
+        "events": _demo_event_docs,
+        "workshops": _demo_workshop_docs,
+        "hostels": _demo_hostel_docs,
+        "mess": _demo_mess_docs,
     }
-    records = json.loads((DATA_DIR / files[kind]).read_text("utf-8"))
-    for record in records:
-        record["_id"] = ObjectId()
-        if kind == "workshops":
-            record.setdefault("registration_count", 0)
-    return records
+    docs = builders[kind](now)
+    for doc in docs:
+        doc["_id"] = ObjectId()
+    return docs
 
 
 def seed_demo_catalogue(log=print) -> None:
@@ -1352,104 +1865,82 @@ def seed_demo_catalogue(log=print) -> None:
 
     A convenience for an empty local database and the only way to exercise this
     script against the in-memory ``TESTING=1`` client, which starts with nothing
-    in it. The real path for a deployment is ``seed.py`` / ``seed_mess.py`` /
-    ``seed_events.py`` / ``seed_workshops.py``; this only ever fills a collection
-    that is completely empty, so it can never overwrite what those wrote.
+    in it. The real path for a deployment is ``seed_staff.py`` then ``seed.py`` /
+    ``seed_mess.py`` / ``seed_events.py`` / ``seed_workshops.py``, all of which go
+    through the API; this writes directly, and only ever fills a collection that
+    is completely empty, so it can never overwrite what those wrote.
     """
     now = datetime.utcnow()
 
-    if hostel_collection.count_documents({}) == 0:
-        records = json.loads((DATA_DIR / "paradoxHostels.json").read_text("utf-8"))
-        hostel_collection.insert_many([
-            {
-                "hostel_id": r["hostel_id"], "name": r["name"], "category": r["category"],
-                "gender": r["gender"], "capacity": r["capacity"], "occupancy": 0,
-                "coordinator": {}, "hostel_team": [], "created_at": now, "updated_at": now,
-            }
-            for r in records
-        ])
-        log(f"  demo catalogue: {len(records)} hostels")
-
-    if mess_collection.count_documents({}) == 0:
-        records = json.loads((DATA_DIR / "paradoxMess.json").read_text("utf-8"))
-        mess_collection.insert_many([
-            {
-                "mess_id": r["mess_id"], "name": r["name"], "capacity": r["capacity"],
-                "preference": r["preference"], "cuisines": r["cuisines"],
-                "mess_team": [], "created_at": now, "updated_at": now,
-            }
-            for r in records
-        ])
-        log(f"  demo catalogue: {len(records)} mess halls")
-
-    if event_collection.count_documents({}) == 0:
-        records = json.loads((DATA_DIR / "paradoxEvents.json").read_text("utf-8"))
-        event_collection.insert_many([
-            {
-                "event_id": r["event_id"], "event_type": r["event_type"], "name": r["name"],
-                "description": r["description"], "embedding": zero_embedding(),
-                "poster": r.get("poster", ""), "team": r["team"], "open": True,
-                "prize_money": r.get("prize_money", []), "registration": r.get("registration", {}),
-                "schedule": r.get("schedule", []),
-                "registration_fields": r.get("registration_fields", []),
-                "event_team": [], "created_by": None,
-                "created_at": now, "updated_at": now, "logs": [],
-            }
-            for r in records
-        ])
-        log(f"  demo catalogue: {len(records)} events")
-
-    if workshops_collection.count_documents({}) == 0:
-        records = json.loads((DATA_DIR / "paradoxWorkshops.json").read_text("utf-8"))
-        workshops_collection.insert_many([
-            {
-                "workshop_id": r["workshop_id"], "slot_id": r["slot_id"], "name": r["name"],
-                "description": r["description"], "embedding": zero_embedding(),
-                "venue": r["venue"], "capacity": r["capacity"], "registration_count": 0,
-                "participant_count": 0, "instructions": r.get("instructions", ""),
-                "workshop_team": [], "created_by": None,
-                "created_at": now, "updated_at": now,
-            }
-            for r in records
-        ])
-        log(f"  demo catalogue: {len(records)} workshops")
+    for collection, builder, label in (
+        (hostel_collection, _demo_hostel_docs, "hostels"),
+        (mess_collection, _demo_mess_docs, "mess halls"),
+        (workshop_slots_collection, _demo_slot_docs, "workshop slots"),
+        (workshops_collection, _demo_workshop_docs, "workshops"),
+        (event_collection, _demo_event_docs, "events"),
+    ):
+        if collection.count_documents({}) == 0:
+            docs = builder(now)
+            collection.insert_many(docs)
+            log(f"  demo catalogue: {len(docs)} {label}")
 
 
 def write_students(students: list[Student], documents: list[dict], log=print) -> None:
     """
-    Insert the participants and mirror their registrations onto the catalogues.
+    Insert the participants, then mirror everything that lives outside their own
+    documents.
 
-    Registration is a dual write in this schema and the mirror is what the
-    organisers' screens read: ``GET /events/{id}/participation`` serves the
-    event's ``logs`` roster, and ``registration_count`` is what the workshop seat
-    counter and the "workshop is full" check both use. Seeding only the
-    participant side would leave every event looking empty and every workshop
-    looking wide open.
+    Four mirrors, each one because some screen reads it rather than reading the
+    participant:
+
+    * ``hostel.rooms[].occupants`` and ``current_occupancy`` — what
+      ``GET /hostels/{id}/statistics`` and the allocation ceiling both read.
+      Without it a block looks empty while its residents think they have a room.
+    * ``workshops.registration_count`` / ``participant_count`` — the seat counter,
+      the "workshop is full" check, and the attendance figure.
+    * ``workshop_logs`` and ``event_logs`` — the scan trails
+      ``GET /workshops/{id}/logs``, ``GET /events/{id}/logs`` and
+      ``_unique_attendance_today`` serve.
+    * ``system_logs`` — the audit trail, which is where the dashboard's meal
+      count actually comes from (``audit._meal_summary`` reduces ``MESS_SCAN``
+      rows; it never looks at ``mess.scans``).
+
+    The event document is deliberately *not* touched. It used to carry a ``logs``
+    roster of every registration and that field no longer exists — registration
+    state lives only on ``participants.events``.
     """
     for start in range(0, len(documents), 400):
         participants_collection.insert_many(documents[start:start + 400])
     log(f"  participants inserted: {len(documents)}")
 
-    event_pushes: dict[Any, list[dict]] = defaultdict(list)
+    # --- hostel occupancy ----------------------------------------------------
+    room_pushes: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
     for student in students:
-        for event_oid, when in student.event_logs:
-            event_pushes[event_oid].append({
-                "action": "registration",
-                "participant_id": student.participant_id,
-                "time": when,
-            })
-    # One update per event rather than a bulk write: the number of operations is
-    # bounded by the size of the catalogue, not the cohort, so there is nothing to
-    # batch — and this stays runnable against the in-memory client the backend
-    # test suite uses, whose bulk_write support does not track pymongo.
-    for oid, entries in event_pushes.items():
-        event_collection.update_one({"_id": oid}, {"$push": {"logs": {"$each": entries}}})
-    if event_pushes:
-        log(f"  event roster rows: {sum(len(v) for v in event_pushes.values())} "
-            f"across {len(event_pushes)} events")
+        if student.hostel_id and student.room_index is not None:
+            room_pushes[student.hostel_id][student.room_index].append(student.participant_id)
+    placed = 0
+    for hostel_id, rooms in room_pushes.items():
+        update: dict[str, Any] = {}
+        count = 0
+        for room_index, occupants in rooms.items():
+            update[f"rooms.{room_index}.occupants"] = {"$each": occupants}
+            count += len(occupants)
+        # Indexed rather than positional (`$`) for the reason
+        # `hostels.allocate_hostels` gives: mongomock does not reliably resolve
+        # `$` when the filter mixes a top-level field with an array match, and the
+        # index is already known here.
+        hostel_collection.update_one(
+            {"hostel_id": hostel_id},
+            {"$push": update, "$inc": {"current_occupancy": count}},
+        )
+        placed += count
+    if placed:
+        log(f"  hostel occupants: {placed} across {len(room_pushes)} block(s)")
 
+    # --- workshop counters and logs -----------------------------------------
     workshop_logs: list[dict] = []
-    increments: Counter = Counter()
+    registrations: Counter = Counter()
+    attendances: Counter = Counter()
     for student in students:
         for workshop_oid, when in student.workshop_logs:
             workshop_logs.append({
@@ -1458,55 +1949,242 @@ def write_students(students: list[Student], documents: list[dict], log=print) ->
                 "participant_id": student.participant_id,
                 "timestamp": when,
             })
-            increments[workshop_oid] += 1
+            registrations[workshop_oid] += 1
+        for workshop_oid, when in student.workshop_attendance:
+            workshop_logs.append({
+                "workshop_id": str(workshop_oid),
+                "action": "attendance",
+                "participant_id": student.participant_id,
+                "timestamp": when,
+            })
+            attendances[workshop_oid] += 1
+
     if workshop_logs:
         for start in range(0, len(workshop_logs), 1000):
             workshop_logs_collection.insert_many(workshop_logs[start:start + 1000])
-        for oid, count in increments.items():
+        # One update per workshop rather than a bulk write: the number of
+        # operations is bounded by the catalogue, not the cohort, so there is
+        # nothing to batch — and this stays runnable against the in-memory client,
+        # whose bulk_write support does not track pymongo.
+        for oid in set(registrations) | set(attendances):
             workshops_collection.update_one(
                 {"_id": oid},
-                {"$inc": {"registration_count": count},
-                 "$set": {"updated_at": datetime.utcnow()}},
+                {
+                    "$inc": {
+                        "registration_count": registrations.get(oid, 0),
+                        "participant_count": attendances.get(oid, 0),
+                    },
+                    "$set": {"updated_at": datetime.utcnow()},
+                },
             )
-        log(f"  workshop log rows: {len(workshop_logs)} across {len(increments)} workshops")
+        log(
+            f"  workshop log rows: {len(workshop_logs)} "
+            f"({sum(registrations.values())} registrations, "
+            f"{sum(attendances.values())} attendances)"
+        )
+
+    # --- event attendance scans ---------------------------------------------
+    # `POST /events/{id}/scan` writes one row per participant per scanner per day,
+    # keyed exactly like this, and `_unique_attendance_today` counts distinct
+    # participants out of it.
+    event_scan_rows = [
+        {
+            "event_id": str(event_oid),
+            "participant_id": student.participant_id,
+            "scanned_by": scanned_by,
+            "day": when.strftime("%Y-%m-%d"),
+            "timestamp": when,
+        }
+        for student in students
+        for event_oid, scanned_by, when in student.event_scans
+    ]
+    if event_scan_rows:
+        for start in range(0, len(event_scan_rows), 1000):
+            event_logs_collection.insert_many(event_scan_rows[start:start + 1000])
+        log(f"  event scan rows: {len(event_scan_rows)}")
+
+    # --- audit trail ---------------------------------------------------------
+    audit_rows = [
+        row for student in students for row in _audit_rows_for(student)
+    ]
+    if audit_rows:
+        for start in range(0, len(audit_rows), 1000):
+            system_logs_collection.insert_many(audit_rows[start:start + 1000])
+        log(f"  audit rows: {len(audit_rows)}")
+
+
+def _audit_rows_for(student: Student) -> list[dict]:
+    """
+    The audit rows a student's own actions would have left behind.
+
+    Shaped exactly as ``logger.log_audit`` writes them (and as
+    ``testing/factories.audit_row`` mirrors), because ``GET /audit-logs`` and
+    ``GET /audit-logs/summary`` read this collection directly. The ``MESS_SCAN``
+    rows are the load-bearing ones: the dashboard's "meals served" figure is
+    reduced from them, de-duplicated per diner, and populating ``mess.scans``
+    alone leaves that figure at zero.
+
+    ``seed_source`` is carried on every row so ``--wipe`` can remove exactly
+    these and nothing else.
+    """
+    rows: list[dict] = []
+
+    def row(action: str, target_id: Any, when: datetime, details: dict) -> dict:
+        return {
+            "timestamp": when,
+            "actor_id": student.participant_id,
+            "actor_name": student.full_name,
+            "actor_type": "participant",
+            "actor_role": "participant",
+            "action": action,
+            "target_id": target_id,
+            "details": details,
+            "seed_source": SEED_MARKER,
+        }
+
+    rows.append(
+        row("REGISTER", student.participant_id, student.created_at,
+            {"email_local": student.email.split("@")[0], "program": student.degree.code})
+    )
+    for mess_id, slot, day, when in student.mess_scan_rows:
+        rows.append(
+            row("MESS_SCAN", mess_id, when,
+                {"participant_id": student.participant_id, "slot": slot, "day": day})
+        )
+    if student.mess_payment:
+        rows.append(
+            row("MESS_PAYMENT", student.participant_id, student.mess_payment["paid_at"],
+                {
+                    "transaction_id": student.mess_payment["transaction_id"],
+                    "amount": student.mess_payment["amount"],
+                    "method": student.mess_payment.get("method"),
+                })
+        )
+    if student.accommodation_payment:
+        rows.append(
+            row("HOSTEL_PAYMENT", student.participant_id,
+                student.accommodation_payment["paid_at"],
+                {
+                    "transaction_id": student.accommodation_payment["transaction_id"],
+                    "amount": student.accommodation_payment["amount"],
+                    "method": student.accommodation_payment.get("method"),
+                })
+        )
+    return rows
 
 
 def wipe_seeded(log=print) -> dict[str, int]:
     """
-    Remove everything a previous run of *this script* wrote.
+    Remove everything a previous run of *this script* wrote, mirrors included.
 
     Scoped by ``seed_source``, which no API path ever sets, so a participant who
-    signed up for real cannot be caught by it. The catalogue mirrors are undone
-    too: roster rows are pulled by participant id and each workshop's
-    ``registration_count`` is decremented by exactly the number of seeded
-    registration logs removed, so a real on-spot attendance recorded against the
-    same workshop keeps its seat.
+    signed up for real cannot be caught by it.
+
+    Every mirror ``write_students`` creates is undone symmetrically, by the exact
+    amount this cohort contributed rather than by resetting to zero — so a real
+    registration or a real walk-in recorded against the same workshop or block
+    keeps its seat:
+
+    * ``registration_count`` and ``participant_count`` are decremented by the
+      seeded registration and attendance log rows respectively.
+    * seeded ``participant_id`` values are pulled out of every
+      ``hostel.rooms[].occupants``, and ``current_occupancy`` is decremented to
+      match.
+    * ``workshop_logs``, ``event_logs`` and the seeded ``system_logs`` audit rows
+      are deleted by participant id.
+
+    The event document is not touched: its ``logs`` roster no longer exists, so
+    there is nothing there to pull.
     """
     seeded = list(
         participants_collection.find({"seed_source": SEED_MARKER}, {"participant_id": 1})
     )
     ids = [doc["participant_id"] for doc in seeded]
+    empty = {
+        "participants": 0, "workshop_logs": 0, "event_logs": 0,
+        "audit_rows": 0, "occupants": 0,
+    }
     if not ids:
         log("  nothing to remove")
-        return {"participants": 0, "workshop_logs": 0}
+        return empty
 
-    per_workshop: Counter = Counter()
+    registrations: Counter = Counter()
+    attendances: Counter = Counter()
     for row in workshop_logs_collection.find(
-        {"participant_id": {"$in": ids}, "action": "registration"}, {"workshop_id": 1}
+        {"participant_id": {"$in": ids}}, {"workshop_id": 1, "action": 1}
     ):
-        per_workshop[row["workshop_id"]] += 1
+        if row.get("action") == "registration":
+            registrations[row["workshop_id"]] += 1
+        elif row.get("action") == "attendance":
+            attendances[row["workshop_id"]] += 1
 
-    event_collection.update_many({}, {"$pull": {"logs": {"participant_id": {"$in": ids}}}})
-    removed_logs = workshop_logs_collection.delete_many(
+    for workshop_id in set(registrations) | set(attendances):
+        workshops_collection.update_one(
+            {"_id": _as_object_id(workshop_id)},
+            {
+                "$inc": {
+                    "registration_count": -registrations.get(workshop_id, 0),
+                    "participant_count": -attendances.get(workshop_id, 0),
+                }
+            },
+        )
+
+    # Occupants are pulled block by block and the counter decremented by however
+    # many actually came out of that block, so the two cannot disagree.
+    #
+    # The filtered `rooms` array is rebuilt here and `$set` wholesale rather than
+    # using `$pull` with the all-positional `rooms.$[].occupants`: mongomock — the
+    # in-memory client `TESTING=1` uses — does not support that operator, and a
+    # wipe that silently left every occupant in place would be worse than a slower
+    # one. Only blocks actually holding a seeded occupant are rewritten.
+    occupants_removed = 0
+    id_set = set(ids)
+    for block in hostel_collection.find({}, {"hostel_id": 1, "rooms": 1}):
+        rooms = block.get("rooms") or []
+        seeded_here = sum(
+            1
+            for room in rooms
+            for occupant in (room.get("occupants") or [])
+            if occupant in id_set
+        )
+        if not seeded_here:
+            continue
+        cleaned = [
+            {
+                **room,
+                "occupants": [o for o in (room.get("occupants") or []) if o not in id_set],
+            }
+            for room in rooms
+        ]
+        hostel_collection.update_one(
+            {"hostel_id": block["hostel_id"]},
+            {"$set": {"rooms": cleaned}, "$inc": {"current_occupancy": -seeded_here}},
+        )
+        occupants_removed += seeded_here
+
+    removed_workshop_logs = workshop_logs_collection.delete_many(
         {"participant_id": {"$in": ids}}
     ).deleted_count
-    for wid, count in per_workshop.items():
-        workshops_collection.update_one(
-            {"_id": _as_object_id(wid)}, {"$inc": {"registration_count": -count}}
-        )
+    removed_event_logs = event_logs_collection.delete_many(
+        {"participant_id": {"$in": ids}}
+    ).deleted_count
+    removed_audit = system_logs_collection.delete_many(
+        {"seed_source": SEED_MARKER, "actor_id": {"$in": ids}}
+    ).deleted_count
     removed = participants_collection.delete_many({"seed_source": SEED_MARKER}).deleted_count
-    log(f"  removed {removed} seeded participants, {removed_logs} workshop log rows")
-    return {"participants": removed, "workshop_logs": removed_logs}
+
+    log(
+        f"  removed {removed} seeded participants, {removed_workshop_logs} workshop log rows, "
+        f"{removed_event_logs} event scan rows, {removed_audit} audit rows, "
+        f"{occupants_removed} hostel occupant entries"
+    )
+    return {
+        "participants": removed,
+        "workshop_logs": removed_workshop_logs,
+        "event_logs": removed_event_logs,
+        "audit_rows": removed_audit,
+        "occupants": occupants_removed,
+    }
 
 
 def _as_object_id(value: str):
@@ -1539,9 +2217,9 @@ def build_report(
     describes what landed in the database, not what the script intended.
 
     ``registration_times`` is every event and workshop registration timestamp, so
-    the 25 May rule is checked against the timestamps themselves. Reading them
-    back off the catalogue mirrors instead would mean a dry run examined nothing
-    and still reported a pass.
+    the registration-window rule is checked against the timestamps themselves.
+    Reading them back off the catalogue mirrors instead would mean a dry run
+    examined nothing and still reported a pass.
 
     ``events`` and ``workshops`` are the snapshots taken *before* writing, which
     is what makes the capacity arithmetic work either way: prior count plus what
@@ -1579,6 +2257,11 @@ def build_report(
     mess_registered = mess_allotted = 0
     event_registrations = workshop_registrations = 0
     workshop_seats_added: Counter = Counter()
+    workshop_attendance_added: Counter = Counter()
+    workshops_attended = workshops_on_spot = 0
+    mess_scans_recorded = 0
+    residents_inside = residents_departed = 0
+    mess_payments = hostel_payments = 0
     problems: list[str] = []
 
     for doc in documents:
@@ -1677,6 +2360,32 @@ def build_report(
         counts["stay"][stay] += 1
         if takes_room:
             hostel_registered += 1
+        if accommodation.get("payment"):
+            hostel_payments += 1
+        if mess.get("payment"):
+            mess_payments += 1
+        for day_slots in (mess.get("scans") or {}).values():
+            mess_scans_recorded += sum(
+                1 for marker in (day_slots or {}).values() if (marker or {}).get("scanned")
+            )
+        if accommodation.get("inside"):
+            residents_inside += 1
+        if accommodation.get("departure"):
+            residents_departed += 1
+
+        # `scan_hostel`'s own invariants, which a seeded snapshot has to satisfy or
+        # it describes a state no scan sequence could have produced.
+        if accommodation.get("inside") and accommodation.get("departure"):
+            problems.append(f"{roll}: inside the block but marked permanently departed")
+        if accommodation.get("inside") and not accommodation.get("arrival"):
+            problems.append(f"{roll}: inside the block with no arrival stamped")
+        if accommodation.get("departure") and not accommodation.get("arrival"):
+            problems.append(f"{roll}: departed without ever arriving")
+        if accommodation.get("room") and not accommodation.get("hostel_id"):
+            problems.append(f"{roll}: has a room number but no block")
+        if (mess.get("scans") or {}) and not mess.get("mess_id"):
+            problems.append(f"{roll}: has meal scans without an allotted hall")
+
         if accommodation.get("hostel_id"):
             hostel_allotted += 1
             if not takes_room:
@@ -1708,10 +2417,14 @@ def build_report(
                 problems.append(f"{roll}: allotted to an unknown mess hall")
             else:
                 hall_occupancy[hall["_id"]] += 1
-                if str(hall.get("preference", "")).lower() != profile.get("mess_preference"):
+                # Matched on the dietary axis alone, because that is all
+                # `POST /mess/allocate` matches on: a `south_indian__veg` student
+                # in a `north_indian__veg` hall is a placement the batch would
+                # happily make, since the hall serves what they eat.
+                if diet_of(str(hall.get("type", ""))) != diet_of(profile.get("mess_preference") or ""):
                     problems.append(
                         f"{roll}: eats {profile.get('mess_preference')} but was placed in a "
-                        f"{hall.get('preference')} hall"
+                        f"{hall.get('type')} hall"
                     )
         if not takes_mess and profile.get("mess_preference"):
             problems.append(f"{roll}: has a meal preference without taking mess")
@@ -1749,14 +2462,34 @@ def build_report(
             else:
                 counts["workshop_popularity"][workshop.get("name")] += 1
                 workshop_seats_added[oid] += 1
+                if entry.get("attended"):
+                    workshop_attendance_added[oid] += 1
+                    workshops_attended += 1
+                if entry.get("booking_type") == "on-spot":
+                    workshops_on_spot += 1
+                elif entry.get("booking_type") != "pre-registered":
+                    problems.append(
+                        f"{roll}: workshop booking_type {entry.get('booking_type')!r} is "
+                        "neither 'pre-registered' nor 'on-spot'"
+                    )
 
-    # --- the 25 May rule, checked against the timestamps themselves -----------
+    # --- registrations sit inside the catalogue's own window ------------------
+    # The rule used to be a fixed date ("nothing before 25 May"). It is now the
+    # window the catalogue itself advertises, because that window is anchored to
+    # now: a registration outside it is one the API would have refused with
+    # "Registration is closed for this event".
     window_opens = REGISTRATION_OPENS.replace(hour=0, minute=0, second=0, microsecond=0)
     earliest_registration = min(registration_times) if registration_times else None
     early = [when for when in registration_times if when < window_opens]
     if early:
         problems.append(
-            f"{len(early)} registrations are dated before 25 May (earliest {min(early)})"
+            f"{len(early)} registrations predate the registration window opening "
+            f"{window_opens.date().isoformat()} (earliest {min(early)})"
+        )
+    late = [when for when in registration_times if when > seed_calendar.NOW]
+    if late:
+        problems.append(
+            f"{len(late)} registrations are dated in the future (latest {max(late)})"
         )
     if len(registration_times) != event_registrations + workshop_registrations:
         problems.append(
@@ -1769,12 +2502,32 @@ def build_report(
 
     # --- blocks and halls stay within capacity, rooms stay unique ------------
     for hostel_id, occupied in block_occupancy.items():
-        capacity = int(hostels_by_id[hostel_id].get("capacity", 0) or 0)
-        if occupied > capacity:
-            problems.append(f"{hostel_id}: {occupied} students in {capacity} beds")
-        shared = [room for room, count in block_rooms[hostel_id].items() if count > 1]
-        if shared:
-            problems.append(f"{hostel_id}: {len(shared)} room number(s) allotted more than once")
+        block = hostels_by_id[hostel_id]
+        sharing = int(block.get("sharing", 1) or 1)
+        rooms = block.get("rooms") or []
+        room_numbers = {str(room.get("room_number")) for room in rooms}
+        # The allocator's real ceiling, not the stated capacity: a block whose
+        # rooms cannot hold `capacity` residents fills up sooner than its
+        # capacity suggests.
+        ceiling = min(int(block.get("capacity", 0) or 0), sharing * len(rooms))
+        if occupied > ceiling:
+            problems.append(f"{hostel_id}: {occupied} students in {ceiling} beds")
+
+        # Rooms are *shared* — up to `sharing` occupants each. The old check
+        # flagged any room allotted twice, which was right only while room numbers
+        # were being invented one per student.
+        overfull = [
+            room for room, count in block_rooms[hostel_id].items() if count > sharing
+        ]
+        if overfull:
+            problems.append(
+                f"{hostel_id}: {len(overfull)} room(s) hold more than {sharing} occupant(s)"
+            )
+        unknown = [room for room in block_rooms[hostel_id] if str(room) not in room_numbers]
+        if unknown:
+            problems.append(
+                f"{hostel_id}: {len(unknown)} allotted room number(s) do not exist in the block"
+            )
     for hall_oid, occupied in hall_occupancy.items():
         capacity = int(halls_by_oid[hall_oid].get("capacity", 0) or 0)
         if occupied > capacity:
@@ -1795,40 +2548,87 @@ def build_report(
         elif booked == capacity and capacity:
             sold_out += 1
 
-    # --- the dual write landed on both sides ---------------------------------
+    # --- every mirror landed, and agrees with the participant side ------------
+    event_scan_rows = 0
+    audit_rows = 0
     if written:
         seeded_ids = [doc["participant_id"] for doc in documents]
-        id_set = set(seeded_ids)
-        roster_rows = sum(
-            1
-            for event in event_collection.find({}, {"logs": 1})
-            for row in (event.get("logs") or [])
-            if row.get("action") == "registration" and row.get("participant_id") in id_set
+
+        # There is no event-side roster to check any more — the `logs` array was
+        # removed and registration state lives only on `participants.events`. The
+        # event-side mirror that *does* exist is the attendance scan trail.
+        event_scan_rows = event_logs_collection.count_documents(
+            {"participant_id": {"$in": seeded_ids}}
         )
-        if roster_rows != event_registrations:
-            problems.append(
-                f"event rosters hold {roster_rows} rows for {event_registrations} "
-                "participant-side registrations"
-            )
-        log_rows = workshop_logs_collection.count_documents(
+        audit_rows = system_logs_collection.count_documents(
+            {"seed_source": SEED_MARKER, "actor_id": {"$in": seeded_ids}}
+        )
+
+        registration_rows = workshop_logs_collection.count_documents(
             {"participant_id": {"$in": seeded_ids}, "action": "registration"}
         )
-        if log_rows != workshop_registrations:
+        if registration_rows != workshop_registrations:
             problems.append(
-                f"workshop_logs holds {log_rows} rows for {workshop_registrations} "
-                "participant-side registrations"
+                f"workshop_logs holds {registration_rows} registration rows for "
+                f"{workshop_registrations} participant-side registrations"
             )
+        attendance_rows = workshop_logs_collection.count_documents(
+            {"participant_id": {"$in": seeded_ids}, "action": "attendance"}
+        )
+        if attendance_rows != workshops_attended:
+            problems.append(
+                f"workshop_logs holds {attendance_rows} attendance rows for "
+                f"{workshops_attended} participants marked attended"
+            )
+
         for workshop in workshops:
             stored = workshops_collection.find_one(
-                {"_id": workshop["_id"]}, {"registration_count": 1}
+                {"_id": workshop["_id"]}, {"registration_count": 1, "participant_count": 1}
+            ) or {}
+            expected_registrations = (
+                int(workshop.get("registration_count", 0) or 0)
+                + workshop_seats_added[workshop["_id"]]
             )
-            expected = int(workshop.get("registration_count", 0) or 0) + workshop_seats_added[
-                workshop["_id"]
-            ]
-            if int((stored or {}).get("registration_count", 0) or 0) != expected:
+            if int(stored.get("registration_count", 0) or 0) != expected_registrations:
                 problems.append(
                     f"{workshop.get('name')}: registration_count is "
-                    f"{(stored or {}).get('registration_count')}, expected {expected}"
+                    f"{stored.get('registration_count')}, expected {expected_registrations}"
+                )
+            expected_attendance = (
+                int(workshop.get("participant_count", 0) or 0)
+                + workshop_attendance_added[workshop["_id"]]
+            )
+            if int(stored.get("participant_count", 0) or 0) != expected_attendance:
+                problems.append(
+                    f"{workshop.get('name')}: participant_count is "
+                    f"{stored.get('participant_count')}, expected {expected_attendance}"
+                )
+
+        # Hostel occupancy: every allotted student must appear in their block's own
+        # room, and `current_occupancy` must have moved by exactly as many.
+        id_set = set(seeded_ids)
+        for hostel_id, seeded_here in block_occupancy.items():
+            stored = hostel_collection.find_one(
+                {"hostel_id": hostel_id}, {"rooms": 1, "current_occupancy": 1}
+            ) or {}
+            mirrored = sum(
+                1
+                for room in (stored.get("rooms") or [])
+                for occupant in (room.get("occupants") or [])
+                if occupant in id_set
+            )
+            if mirrored != seeded_here:
+                problems.append(
+                    f"{hostel_id}: {mirrored} seeded occupant(s) in the block's rooms for "
+                    f"{seeded_here} students allotted to it"
+                )
+            expected_occupancy = (
+                int(hostels_by_id[hostel_id].get("current_occupancy", 0) or 0) + seeded_here
+            )
+            if int(stored.get("current_occupancy", 0) or 0) != expected_occupancy:
+                problems.append(
+                    f"{hostel_id}: current_occupancy is {stored.get('current_occupancy')}, "
+                    f"expected {expected_occupancy}"
                 )
 
     duplicates = {
@@ -1876,6 +2676,9 @@ def build_report(
             "blocks_used": len(block_occupancy),
             "blocks_available": len(hostels),
             "occupancy": {hid: count for hid, count in sorted(block_occupancy.items())},
+            "inside": residents_inside,
+            "departed": residents_departed,
+            "paid": hostel_payments,
         },
         "mess": {
             "registered": mess_registered,
@@ -1885,9 +2688,15 @@ def build_report(
                 str(halls_by_oid[oid].get("name")): count
                 for oid, count in hall_occupancy.items()
             },
+            "scans": mess_scans_recorded,
+            "paid": mess_payments,
         },
         "event_registrations": event_registrations,
+        "event_scan_rows": event_scan_rows,
+        "audit_rows": audit_rows,
         "workshop_registrations": workshop_registrations,
+        "workshops_attended": workshops_attended,
+        "workshops_on_spot": workshops_on_spot,
         "events_in_catalogue": len(events),
         "workshops_in_catalogue": len(workshops),
         "workshops_sold_out": sold_out,
@@ -2007,8 +2816,13 @@ def print_report(report: dict[str, Any], log=print) -> None:
         f"{report['hostel']['allotted']} allotted across "
         f"{report['hostel']['blocks_used']} of {report['hostel']['blocks_available']} blocks, "
         f"{report['hostel']['pending']} awaiting allocation")
+    log(f"          {report['hostel']['inside']} currently inside, "
+        f"{report['hostel']['departed']} permanently departed, "
+        f"{report['hostel']['paid']} paid the fee")
     log(f"  mess:   {report['mess']['registered']} requested, "
         f"{report['mess']['allotted']} allotted, {report['mess']['pending']} awaiting allocation")
+    log(f"          {report['mess']['scans']} meal scans recorded, "
+        f"{report['mess']['paid']} paid the fee")
     if report["mess"]["occupancy"]:
         log("  hall occupancy: " + ", ".join(
             f"{name} {count}" for name, count in sorted(report["mess"]["occupancy"].items())
@@ -2021,6 +2835,7 @@ def print_report(report: dict[str, Any], log=print) -> None:
     section("Event registrations")
     log(f"  total registrations: {report['event_registrations']} "
         f"across {report['events_in_catalogue']} events")
+    log(f"  attendance scan rows: {report['event_scan_rows']}")
     log(f"  per student:")
     rows(counts["events_per_student"], sort_by_value=False)
     popularity = counts["event_popularity"]
@@ -2033,6 +2848,8 @@ def print_report(report: dict[str, Any], log=print) -> None:
     section("Workshop registrations")
     log(f"  total registrations: {report['workshop_registrations']} "
         f"across {report['workshops_in_catalogue']} workshops")
+    log(f"  attended: {report['workshops_attended']}   "
+        f"booked at the door: {report['workshops_on_spot']}")
     log(f"  per student:")
     rows(counts["workshops_per_student"], sort_by_value=False)
     popularity = counts["workshop_popularity"]
@@ -2047,6 +2864,7 @@ def print_report(report: dict[str, Any], log=print) -> None:
     rows(counts["photo_kind"])
 
     section("Checks")
+    log(f"  audit rows written: {report['audit_rows']}")
     if report["earliest_registration"]:
         total_registrations = report["event_registrations"] + report["workshop_registrations"]
         log(f"  earliest registration timestamp: {report['earliest_registration']} "
@@ -2163,10 +2981,16 @@ def main() -> int:
     placed_mess = allocate_mess(rng, students, catalogues["mess"])
     print(f"  {placed_rooms} rooms allotted, {placed_mess} mess seats allotted")
 
+    scans = assign_mess_scans(rng, students, catalogues["mess"])
+    mess_paid, hostel_paid = assign_payments(rng, students)
+    print(f"  {scans} meal scans, {mess_paid} mess fees and {hostel_paid} hostel fees settled")
+
     assign_event_registrations(rng, students, catalogues["events"])
     assign_workshop_registrations(rng, students, catalogues["workshops"])
-    print(f"  {sum(len(s.events) for s in students)} event registrations, "
-          f"{sum(len(s.workshops) for s in students)} workshop registrations")
+    print(f"  {sum(len(s.events) for s in students)} event registrations "
+          f"({sum(len(s.event_scans) for s in students)} scanned), "
+          f"{sum(len(s.workshops) for s in students)} workshop registrations "
+          f"({sum(len(s.workshop_attendance) for s in students)} attended)")
 
     print(f"\nHashing password and generating {args.keys} QR keypairs…")
     password_hash = get_password_hash(args.password)
@@ -2196,7 +3020,11 @@ def main() -> int:
         report_documents = list(
             participants_collection.find(
                 {"seed_source": SEED_MARKER, "seed_batch": batch},
-                {"password_hash": 0, "qr_secrets": 0, "embedding": 0, "mess.entries": 0},
+                # `mess.scans` is deliberately *kept*: the report counts the meal
+                # markers. Only the three genuinely bulky, unreportable fields are
+                # dropped. (`mess.entries` used to be excluded here; that field no
+                # longer exists.)
+                {"password_hash": 0, "qr_secrets": 0, "embedding": 0},
             )
         )
         print(f"  read back {len(report_documents)} documents for validation")
