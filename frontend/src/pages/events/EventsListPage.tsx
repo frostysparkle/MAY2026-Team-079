@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Sparkles, Ticket } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Event, MyEventRegistration, RecommendedEvent } from '@/api/types';
+import type { Event, MyEventRegistration } from '@/api/types';
+import { useRecommendations } from '@/features/ai/useRecommendations';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
@@ -62,13 +63,15 @@ export default function EventsListPage() {
   const [registrations, setRegistrations] = useState<MyEventRegistration[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // The AI-ranked view, when active: every event the plain list already has,
-  // just carrying a `similarity` score and sorted by it. `null` means the
-  // banner has never been used (or has been cleared) — render the normal
-  // category-grouped grid instead.
-  const [recommended, setRecommended] = useState<RecommendedEvent[] | null>(null);
-  const [recommendLoading, setRecommendLoading] = useState(false);
-  const [recommendError, setRecommendError] = useState<string | null>(null);
+  // Client-side recommendations hook - no backend call except for embedding generation
+  const { rankedItems: recommended, isGenerating: recommendLoading, error: recommendError, rankByQuery, rankBySaved } = useRecommendations({
+    items: events || [],
+    savedEmbedding: null, // TODO: Get from profile when available
+    onEmbeddingUpdate: (embedding) => {
+      // TODO: Save to profile via PATCH /profile/complete
+      console.log('New event embedding generated:', embedding.slice(0, 5), '...');
+    },
+  });
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -85,23 +88,13 @@ export default function EventsListPage() {
   }
   useEffect(load, []);
 
-  function handleRecommend(query: string) {
-    setRecommendLoading(true);
-    setRecommendError(null);
-    api
-      .recommendEvents({ query: query || null })
-      .then((ranked) => setRecommended(ranked))
-      .catch((e) =>
-        setRecommendError(
-          e instanceof ApiClientError ? e.message : 'Could not get recommendations.',
-        ),
-      )
-      .finally(() => setRecommendLoading(false));
+  async function handleRecommend(query: string) {
+    await rankByQuery(query);
   }
 
   function clearRecommendations() {
-    setRecommended(null);
-    setRecommendError(null);
+    // Reset to empty so the banner shows "not active"
+    rankBySaved();
   }
 
   const registeredIds = useMemo(
@@ -178,14 +171,11 @@ export default function EventsListPage() {
         <AiRecommendBar
           noun="events"
           placeholder="e.g. dance, coding, quizzes…"
-          active={recommended !== null}
+          active={recommended.length > 0 && recommended.some(e => e.similarity > 0)}
           loading={recommendLoading}
           onSearch={handleRecommend}
           onClear={clearRecommendations}
-          // `POST /events/recommendations` is not implemented on the backend
-          // (405 Method Not Allowed) — see `AiRecommendBar`'s `available` prop.
-          // Disabled rather than left to fail silently on first tap.
-          available={false}
+          available={true}
         />
       )}
 

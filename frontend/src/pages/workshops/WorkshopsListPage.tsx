@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Sparkles, Wrench } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { RecommendedWorkshop, Workshop } from '@/api/types';
+import type { Workshop } from '@/api/types';
+import { useRecommendations } from '@/features/ai/useRecommendations';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
@@ -60,13 +61,15 @@ export default function WorkshopsListPage() {
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // The AI-ranked view, when active — every workshop the plain list already
-  // has, carrying a `similarity` score and sorted by it. `null` means the
-  // banner has never been used (or was cleared): render the normal
-  // day-grouped grid instead.
-  const [recommended, setRecommended] = useState<RecommendedWorkshop[] | null>(null);
-  const [recommendLoading, setRecommendLoading] = useState(false);
-  const [recommendError, setRecommendError] = useState<string | null>(null);
+  // Client-side recommendations hook - no backend call except for embedding generation
+  const { rankedItems: recommended, isGenerating: recommendLoading, error: recommendError, rankByQuery, rankBySaved } = useRecommendations({
+    items: workshops || [],
+    savedEmbedding: null, // TODO: Get from profile when available
+    onEmbeddingUpdate: (embedding) => {
+      // TODO: Save to profile via PATCH /profile/complete
+      console.log('New workshop embedding generated:', embedding.slice(0, 5), '...');
+    },
+  });
 
   // The slots this participant already holds, read from
   // `GET /workshops/my_registrations` — so a clash stays greyed out after a
@@ -88,29 +91,24 @@ export default function WorkshopsListPage() {
   }
   useEffect(load, []);
 
-  function handleRecommend(query: string) {
-    setRecommendLoading(true);
-    setRecommendError(null);
-    api
-      .recommendWorkshops({ query: query || null })
-      .then((ranked) => setRecommended(ranked))
-      .catch((e) =>
-        setRecommendError(
-          e instanceof ApiClientError ? e.message : 'Could not get recommendations.',
-        ),
-      )
-      .finally(() => setRecommendLoading(false));
+  async function handleRecommend(query: string) {
+    await rankByQuery(query);
   }
 
   function clearRecommendations() {
-    setRecommended(null);
-    setRecommendError(null);
+    // Reset to empty so the banner shows "not active"
+    rankBySaved();
   }
 
-  // Kept in the backend's similarity order — most-similar-first — rather than
+  // Kept in the similarity order — most-similar-first — rather than
   // run through `sortWorkshops`, which reorders chronologically. Re-ranking by
   // match is the entire point of this view.
-  const recommendedViews = useMemo(() => recommended?.map(workshopView) ?? null, [recommended]);
+  const recommendedViews = useMemo(() => 
+    recommended.length > 0 && recommended.some(w => w.similarity > 0)
+      ? recommended.map(workshopView) 
+      : null, 
+    [recommended]
+  );
 
   const sections = useMemo<Section[]>(() => {
     if (!workshops) return [];
@@ -170,10 +168,7 @@ export default function WorkshopsListPage() {
           loading={recommendLoading}
           onSearch={handleRecommend}
           onClear={clearRecommendations}
-          // `POST /workshops/recommendations` is not implemented on the backend
-          // (405 Method Not Allowed) — see `AiRecommendBar`'s `available` prop.
-          // Disabled rather than left to fail silently on first tap.
-          available={false}
+          available={true}
         />
       )}
 
