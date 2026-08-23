@@ -43,7 +43,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
-from logger import log_audit
+from logger import log_audit, log_denied
 from database import (
     queries_collection,
     query_team_collection,
@@ -93,12 +93,29 @@ def _require_query_access(current_user: dict) -> str:
     """
     paradox_id = current_user.get("paradox_id")
     if not (_is_super_admin(paradox_id) or _is_query_team_member(paradox_id)):
+        # Queries carry participants' free text, which is the one place in this API a
+        # student writes something a different user reads back. Refusing access to it
+        # is worth a durable row.
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_on_query_team",
+            details={"resource": "queries", "status": 403},
+        )
         raise HTTPException(status_code=403, detail="Not authorized to access queries")
     return paradox_id
 
 
 def _require_super_admin(current_user: dict) -> None:
     if not _is_super_admin(current_user.get("paradox_id")):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"resource": "query_team", "status": 403},
+        )
         raise HTTPException(status_code=403, detail="Only Super Admins can manage the query team")
 
 
@@ -273,18 +290,34 @@ def reply_to_query(query_id: str, request: QueryReplyRequest, current_user: dict
     """
     query = queries_collection.find_one({"query_id": query_id})
     if not query:
+        log_denied(
+            current_user, "REPLY_QUERY_DENIED", query_id,
+            reason="query_not_found", details={"status": 404}, audit=False,
+        )
         raise HTTPException(status_code=404, detail="Query not found")
 
     is_staff = "paradox_id" in current_user
     if is_staff:
         author_id = current_user["paradox_id"]
         if not (_is_super_admin(author_id) or _is_query_team_member(author_id)):
+            log_denied(
+                current_user, "REPLY_QUERY_DENIED", query_id,
+                reason="not_on_query_team", details={"status": 403},
+            )
             raise HTTPException(status_code=403, detail="Not authorized to handle this query")
         author_name = current_user.get("designation") or current_user.get("role") or "Fest team"
         author_type = "staff"
     else:
         author_id = current_user["participant_id"]
         if query.get("participant_id") != author_id:
+            # A participant reaching for a thread that is not theirs. Recorded because
+            # the threads contain other students' words, so an attempt to read or
+            # append to one is worth being able to review afterwards.
+            log_denied(
+                current_user, "REPLY_QUERY_DENIED", query_id,
+                reason="not_query_author",
+                details={"status": 403, "owner_participant_id": query.get("participant_id")},
+            )
             raise HTTPException(status_code=403, detail="Not your query")
         author_name = (current_user.get("profile") or {}).get("full_name") or "Participant"
         author_type = "participant"

@@ -24,7 +24,7 @@ touched by this module.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from logger import log_audit
+from logger import log_audit, log_denied
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -273,6 +273,15 @@ def report_issue(
 
     placement = _placement_error(current_user, facility_type, facility)
     if placement:
+        # Somebody reporting a fault in a facility they are not placed in. Often a
+        # genuine confusion about which block or hall they were allotted, which is
+        # itself worth seeing — a run of these against one facility suggests the
+        # allocation people were told does not match the one on record.
+        log_denied(
+            current_user, "ISSUE_REPORT_DENIED", request.facility_id,
+            reason="not_placed_in_facility",
+            details={"facility_type": facility_type, "category": category, "status": 403},
+        )
         raise HTTPException(status_code=403, detail=placement)
 
     outstanding = issues_collection.count_documents({
@@ -282,6 +291,20 @@ def report_issue(
         "status": {"$ne": "resolved"},
     })
     if outstanding >= MAX_OPEN_PER_FACILITY:
+        # A participant blocked from reporting a fault. Worth a durable row rather
+        # than only a file line: hitting the cap means ten of their reports are
+        # sitting unresolved, so this is as much a signal about the facility team's
+        # backlog as about the reporter.
+        log_denied(
+            current_user, "ISSUE_REPORT_DENIED", request.facility_id,
+            reason="open_report_cap_reached",
+            details={
+                "facility_type": facility_type,
+                "category": category,
+                "outstanding": outstanding,
+                "cap": MAX_OPEN_PER_FACILITY,
+            },
+        )
         raise HTTPException(
             status_code=400,
             detail=(
@@ -426,6 +449,15 @@ def update_issue(
     if not _is_super_admin(user_id):
         duty = _duty_facilities(user_id)
         if issue["facility_id"] not in duty.get(issue["facility_type"], []):
+            log_denied(
+                current_user, "ISSUE_UPDATE_DENIED", issue_id,
+                reason="not_on_facility_team",
+                details={
+                    "facility_type": issue.get("facility_type"),
+                    "facility_id": issue.get("facility_id"),
+                    "status": 403,
+                },
+            )
             raise HTTPException(
                 status_code=403,
                 detail="Not authorized to answer for this facility",

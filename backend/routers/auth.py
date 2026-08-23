@@ -3,16 +3,21 @@ Authentication endpoints — registration, participant/staff login, and password
 management. Extracted from main.py so all auth-focused routes live in one
 file, matching the pattern already used by workshops, mess, events, etc.
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timedelta
 import re
 
+import log_config
 from models import (
     RegisterRequest, LoginRequest, ForgotPasswordRequest,
     ResetPasswordRequest, ChangePasswordRequest
 )
 from dependencies import get_current_user
 from database import participants_collection, backend_teams_collection
+from log_redaction import safe_email
+from logger import log_audit, log_denied
 from security import (
     get_password_hash, verify_password, create_access_token,
     generate_rsa_key_pair, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -20,6 +25,39 @@ from security import (
 from embedding_service import zero_embedding
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+_log = log_config.get_logger("paradox.auth")
+
+
+def _log_failed_login(email: str, account_exists: bool, portal: str):
+    """
+    A failed sign-in attempt.
+
+    This is the gap that mattered most in this file: both login routes answered a
+    bad attempt with one 401 and recorded nothing at all. There was no way to
+    answer "has someone been trying to get into the Super Admin account", and no
+    way to help a volunteer who insisted they were typing the right password — the
+    attempts they were making left no evidence they had happened.
+
+    `account_exists` is written to the log but never to the response. The client
+    keeps receiving one indistinguishable "Invalid credentials" for both an unknown
+    email and a wrong password, because telling them apart is how an attacker
+    enumerates valid accounts. In the log the distinction is exactly what is
+    needed: a run of `wrong_password` against one real account is an intrusion
+    attempt, while a run of `unknown_account` is a misconfigured client or a typo.
+
+    The email is reduced to its local part — the roll number for a participant —
+    so the trail identifies who was trying without recording a contactable
+    address.
+    """
+    reason = "wrong_password" if account_exists else "unknown_account"
+    log_denied(
+        None,
+        "LOGIN_FAILED",
+        None,
+        reason=reason,
+        details={"email_local": safe_email(email), "portal": portal, "account_exists": account_exists},
+    )
 
 
 def generate_participant_id(email: str) -> str:
@@ -36,9 +74,34 @@ def generate_participant_id(email: str) -> str:
 def register(request: RegisterRequest):
     # Enforce IITM email domain
     if not re.match(r'^[^@]+@[a-z]+\.study\.iitm\.ac\.in$', request.email.lower()):
+        log_denied(
+            None,
+            "REGISTER_DENIED",
+            None,
+            reason="non_iitm_email",
+            details={"email_local": safe_email(request.email)},
+            audit=False,
+        )
         raise HTTPException(status_code=400, detail="Must be an @*.study.iitm.ac.in email")
 
-    if participants_collection.find_one({"email": request.email}) or backend_teams_collection.find_one({"email": request.email}):
+    existing_participant = participants_collection.find_one({"email": request.email})
+    existing_staff = backend_teams_collection.find_one({"email": request.email})
+    if existing_participant or existing_staff:
+        # Which collection already holds the address is the useful part: a
+        # participant hitting this is somebody who forgot they had signed up,
+        # while a *staff* address colliding here is a volunteer unable to create
+        # the participant account that several roles require them to have.
+        log_denied(
+            None,
+            "REGISTER_DENIED",
+            None,
+            reason="email_already_registered",
+            details={
+                "email_local": safe_email(request.email),
+                "existing_as": "participant" if existing_participant else "staff",
+            },
+            audit=False,
+        )
         raise HTTPException(status_code=400, detail="Email already registered")
     
     participant_id = generate_participant_id(request.email)
@@ -100,6 +163,15 @@ def register(request: RegisterRequest):
     }
     
     participants_collection.insert_one(new_user)
+    # The first event in any participant's history, and until now the only trace
+    # of it was the document's own `created_at`. An audit row means the account's
+    # creation sits in the same trail as everything the account later does.
+    log_audit(
+        new_user,
+        "REGISTER",
+        participant_id,
+        {"email_local": safe_email(request.email), "program": participant_id[:2]},
+    )
     return {"message": "Registration successful", "participant_id": participant_id}
 
 
@@ -109,6 +181,7 @@ def login(request: LoginRequest):
     user = participants_collection.find_one({"email": request.email})
 
     if not user or not verify_password(request.password, user.get("password_hash")):
+        _log_failed_login(request.email, account_exists=bool(user), portal="participant")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     user_id = user.get("participant_id")
@@ -116,6 +189,17 @@ def login(request: LoginRequest):
     participants_collection.update_one(
         {"_id": user["_id"]}, 
         {"$set": {"updated_at": datetime.utcnow()}}
+    )
+
+    # Successful sign-ins are recorded as well as failed ones. Without them the
+    # failures cannot be read in context: three refusals followed by a success is
+    # somebody who mistyped their password, while three refusals and no success is
+    # somebody locked out or somebody guessing.
+    log_audit(
+        user,
+        "LOGIN",
+        user_id,
+        {"portal": "participant", "profile_complete": bool((user.get("profile") or {}).get("full_name"))},
     )
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -151,6 +235,7 @@ def admin_login(request: LoginRequest):
     user = backend_teams_collection.find_one({"email": request.email})
 
     if not user or not verify_password(request.password, user.get("password_hash")):
+        _log_failed_login(request.email, account_exists=bool(user), portal="staff")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user_id = user.get("paradox_id")
@@ -158,6 +243,16 @@ def admin_login(request: LoginRequest):
     backend_teams_collection.update_one(
         {"_id": user["_id"]},
         {"$set": {"updated_at": datetime.utcnow()}}
+    )
+
+    # Staff sign-ins carry the role and department, because "which privileged
+    # accounts were active during the window this went wrong" is the first
+    # question asked of any staff-side incident.
+    log_audit(
+        user,
+        "LOGIN",
+        user_id,
+        {"portal": "staff", "role": user.get("role"), "department": user.get("department")},
     )
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -178,6 +273,22 @@ def admin_login(request: LoginRequest):
 
 @router.post("/password/forgot")
 def forgot_password(request: ForgotPasswordRequest):
+    # Logged at WARNING despite returning 200, because this endpoint is a stub
+    # that reports success without doing anything: no token is minted, nothing is
+    # stored, no mail is sent. Anyone debugging "the reset link never arrived"
+    # would otherwise find a successful request and no explanation — the most
+    # expensive kind of silence, since the trail actively points away from the
+    # cause.
+    log_config.log_call(
+        _log,
+        logging.WARNING,
+        "password reset requested against a stub endpoint — no email is sent and no token is issued",
+        {
+            "email_local": safe_email(request.email),
+            "reason": "stub_endpoint",
+            "endpoint": "/auth/password/forgot",
+        },
+    )
     return {
         "message": "If the account exists, a reset link has been sent.",
         "dev_reset_url": "http://localhost:5173/reset-password?token=mock_token_123"
@@ -186,18 +297,35 @@ def forgot_password(request: ForgotPasswordRequest):
 
 @router.post("/password/reset")
 def reset_password(request: ResetPasswordRequest):
+    # As above, and worse: this reports a password as changed while changing
+    # nothing. A participant who "reset" their password and then cannot sign in is
+    # the predictable outcome, and this line is what connects the two.
+    log_config.log_call(
+        _log,
+        logging.WARNING,
+        "password reset accepted by a stub endpoint — no password was changed",
+        {"reason": "stub_endpoint", "endpoint": "/auth/password/reset"},
+    )
     return {"message": "Password reset successfully."}
 
 
 @router.post("/password/change")
 def change_password(request: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    is_staff = "paradox_id" in current_user
+    user_id_field = "paradox_id" if is_staff else "participant_id"
+
     if not verify_password(request.current_password, current_user.get("password_hash")):
+        log_denied(
+            current_user,
+            "PASSWORD_CHANGE_DENIED",
+            current_user.get(user_id_field),
+            reason="wrong_current_password",
+            details={"account_type": "staff" if is_staff else "participant"},
+        )
         raise HTTPException(status_code=400, detail="Incorrect current password")
     
     hashed_password = get_password_hash(request.new_password)
     
-    is_staff = "paradox_id" in current_user
-    user_id_field = "paradox_id" if is_staff else "participant_id"
     collection = backend_teams_collection if is_staff else participants_collection
     
     collection.update_one(
@@ -206,6 +334,16 @@ def change_password(request: ChangePasswordRequest, current_user: dict = Depends
     )
     
     user_id = current_user[user_id_field]
+
+    # A credential change, recorded. Never the password itself, in either form —
+    # the fact and the time are the whole of what an audit trail needs, and are
+    # what answers "was this account's password changed before the incident".
+    log_audit(
+        current_user,
+        "PASSWORD_CHANGED",
+        user_id,
+        {"account_type": "staff" if is_staff else "participant", "token_reissued": True},
+    )
     token_type = "staff" if is_staff else "participant"
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(

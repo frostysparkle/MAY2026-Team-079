@@ -58,10 +58,15 @@ import uuid
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from logger import log_audit
+from logger import (
+    OUTCOME_ALLOWED, OUTCOME_DENIED, OUTCOME_DUPLICATE,
+    log_audit, log_batch, log_denied, log_integrity, log_scan,
+)
 from typing import Optional, List
 from datetime import datetime
 import random
+
+import log_config
 
 from models import (
     EventCreateRequest,
@@ -82,6 +87,8 @@ generator = EventIDGenerator()
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
+_log = log_config.get_logger("paradox.events")
+
 
 # ── shared helpers ───────────────────────────────────────────────────────────
 
@@ -95,6 +102,13 @@ def _is_super_admin(current_user: dict) -> bool:
 
 def _require_super_admin(current_user: dict) -> None:
     if not _is_super_admin(current_user):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"resource": "events", "status": 403},
+        )
         raise HTTPException(status_code=403, detail="Only Super Admins can perform this action")
 
 
@@ -116,6 +130,19 @@ def _registration_open(event: dict) -> bool:
         start_dt = parse_instant_utc(start, "start_time")
         end_dt = parse_instant_utc(end, "end_time")
     except ValueError:
+        # Registration reads as closed forever, for every participant, with no
+        # symptom other than an event nobody can sign up for. An admin looking at
+        # the event sees `allowed: true` and a window that has not passed, and no
+        # explanation anywhere. This is the explanation.
+        log_integrity(
+            "event registration treated as closed: its window will not parse",
+            reason="registration_window_unparseable",
+            details={
+                "event_id": event.get("event_id"),
+                "start_type": type(start).__name__,
+                "end_type": type(end).__name__,
+            },
+        )
         return False
     now = datetime.utcnow()
     return start_dt <= now <= end_dt
@@ -543,7 +570,21 @@ def edit_event_registration(event_id: str, reg_input: EventRegistrationInput, cu
         {"$set": {"events.$.registration_data": reg_input.registration_data}}
     )
     if result.matched_count == 0:
+        log_denied(
+            current_user, "EVENT_REGISTRATION_EDIT_DENIED", event_id,
+            reason="not_registered_for_event",
+            details={"participant_id": current_user.get("participant_id")},
+        )
         raise HTTPException(status_code=404, detail="Not registered for this event")
+
+    # `EVENT_REGISTER` and `EVENT_DEREGISTER` were both audited; the edit in between
+    # was not, so a registration's answers could be rewritten with no record. Field
+    # *names* only — `registration_data` holds whatever the event asked for, which
+    # for many events is personal information.
+    log_audit(current_user, "EVENT_REGISTRATION_EDIT", event_id, {
+        "participant_id": current_user.get("participant_id"),
+        "fields_updated": sorted((reg_input.registration_data or {}).keys()),
+    })
     return {"message": "Registration updated"}
 
 
@@ -561,7 +602,20 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_par
         {"_id": current_user["_id"]},
         {"$pull": {"events": {"event_id": event["_id"]}}}
     )
-    log_audit(current_user, "EVENT_DEREGISTER", event_id)
+    log_audit(current_user, "EVENT_DEREGISTER", event_id, {
+        # The team they were in, captured before the pull removes it. Losing a member
+        # can drop a team below `team.min`, and afterwards nothing links this person
+        # to the team they left.
+        "participant_id": current_user.get("participant_id"),
+        "team_id": next(
+            (
+                ev.get("team_id")
+                for ev in current_user.get("events") or []
+                if str(ev.get("event_id")) == str(event["_id"])
+            ),
+            None,
+        ),
+    })
     return {"message": "Deregistered successfully"}
 
 
@@ -722,9 +776,17 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event:
+        log_denied(
+            current_user, "ALLOCATE_EVENT_TEAMS_DENIED", event_id,
+            reason="event_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Event not found")
 
     if not _is_event_head(event, user_id):
+        log_denied(
+            current_user, "ALLOCATE_EVENT_TEAMS_DENIED", event_id,
+            reason="not_event_head", details={"status": 403},
+        )
         raise HTTPException(status_code=403, detail="Only Event Heads are authorized to allocate teams")
 
     team_rules = event.get("team", {})
@@ -732,6 +794,20 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
     max_size = team_rules.get("max", 1)
 
     if max_size <= 1:
+        # A 200 that did nothing, and unaudited. An Event Head who runs allocation on
+        # a solo event gets "Not a team event" and no record that they tried — and if
+        # `team.max` is missing from the document entirely it defaults to 1 and lands
+        # here too, which looks the same but is a data problem.
+        log_config.info(
+            _log,
+            f"team allocation skipped for {event_id}: not a team event",
+            {
+                "event_id": event_id,
+                "reason": "not_a_team_event",
+                "team_max": team_rules.get("max"),
+                "team_rules_present": bool(team_rules),
+            },
+        )
         return {"message": "Not a team event"}
 
     participants = list(participants_collection.find({"events.event_id": event["_id"]}))
@@ -744,6 +820,24 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
 
     random.shuffle(solo_players)
     teams_created = 0
+    # Participants this run leaves without a team, and the groups that were too
+    # small to form one. Collected so the summary can report the complement of
+    # `teams_created` rather than only the successes.
+    unteamed: List[Optional[str]] = []
+    dropped_chunks: List[dict] = []
+
+    log_config.info(
+        _log,
+        f"event team allocation starting for {event_id}",
+        {
+            "event_id": event_id,
+            "registered": len(participants),
+            "unteamed_candidates": len(solo_players),
+            "team_min": min_size,
+            "team_max": max_size,
+            "house_vs_house": bool(team_rules.get("house_vs_house_event", False)),
+        },
+    )
 
     if team_rules.get("house_vs_house_event", False):
         # Group by house
@@ -761,11 +855,31 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
                     # auto-allocated — comes from the one counter.
                     team_id = generator.next_team_id(event.get("event_type", "others"))
                     for p in team_chunk:
-                        participants_collection.update_one(
+                        assign_result = participants_collection.update_one(
                             {"_id": p["_id"], "events.event_id": event["_id"]},
                             {"$set": {"events.$.team_id": team_id, "events.$.team_role": "member"}}
                         )
+                        if assign_result.matched_count == 0:
+                            log_integrity(
+                                "team assignment matched no registration",
+                                reason="team_assign_not_applied",
+                                details={
+                                    "participant_id": p.get("participant_id"),
+                                    "event_id": event_id,
+                                    "team_id": team_id,
+                                },
+                            )
                     teams_created += 1
+                else:
+                    # A trailing group too small to form a team. Because this runs once
+                    # per house, an event with many small houses can leave a large
+                    # fraction of its entrants teamless — and every one of them keeps
+                    # `team_id: None`, which is indistinguishable from never having
+                    # been through allocation at all. They are named here.
+                    unteamed.extend(p.get("participant_id") for p in team_chunk)
+                    dropped_chunks.append(
+                        {"house": house, "size": len(team_chunk), "min_required": min_size}
+                    )
     else:
         # Mixed random
         for i in range(0, len(solo_players), max_size):
@@ -773,27 +887,99 @@ def allocate_teams(event_id: str, current_user: dict = Depends(get_current_staff
             if len(team_chunk) >= min_size:
                 team_id = generator.next_team_id(event.get("event_type", "others"))
                 for p in team_chunk:
-                    participants_collection.update_one(
+                    assign_result = participants_collection.update_one(
                         {"_id": p["_id"], "events.event_id": event["_id"]},
                         {"$set": {"events.$.team_id": team_id, "events.$.team_role": "member"}}
                     )
+                    if assign_result.matched_count == 0:
+                        log_integrity(
+                            "team assignment matched no registration",
+                            reason="team_assign_not_applied",
+                            details={
+                                "participant_id": p.get("participant_id"),
+                                "event_id": event_id,
+                                "team_id": team_id,
+                            },
+                        )
                 teams_created += 1
+            else:
+                unteamed.extend(p.get("participant_id") for p in team_chunk)
+                dropped_chunks.append({"house": None, "size": len(team_chunk), "min_required": min_size})
 
-    log_audit(current_user, "ALLOCATE_EVENT_TEAMS", event_id, {"teams_created": teams_created})
+    for participant_id in unteamed:
+        log_denied(
+            current_user,
+            "EVENT_TEAM_ALLOCATION_SKIPPED",
+            participant_id,
+            reason="group_below_minimum_size",
+            details={"event_id": event_id, "team_min": min_size, "team_max": max_size},
+        )
+
+    log_batch(
+        current_user,
+        "ALLOCATE_EVENT_TEAMS",
+        event_id,
+        {
+            # Unchanged and still first, for existing readers.
+            "teams_created": teams_created,
+            "candidates": len(solo_players),
+            "teamed_count": len(solo_players) - len(unteamed),
+            "unteamed_count": len(unteamed),
+            "unteamed": [pid for pid in unteamed if pid],
+            "dropped_groups": dropped_chunks,
+            "team_min": min_size,
+            "team_max": max_size,
+        },
+    )
+    if unteamed:
+        log_config.warning(
+            _log,
+            f"event team allocation left {len(unteamed)} of {len(solo_players)} candidate(s) without a team",
+            {
+                "event_id": event_id,
+                "reason": "groups_below_minimum_size",
+                "unteamed_count": len(unteamed),
+                "dropped_groups": dropped_chunks,
+            },
+        )
     return {"message": f"Allocated {teams_created} teams"}
 
 
 @router.post("/{event_id}/scan")
 def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: dict = Depends(get_current_staff)):
+    """
+    Admit one participant at an event gate.
+
+    This route had the largest blind spot in the system. A scan of somebody not
+    registered for the event returned **200** with `is_participating: false` and
+    wrote nothing at all — no log row, no audit row — so a refused entry was
+    indistinguishable from no scan ever having happened. It was also the only scan
+    endpoint in the codebase with no `log_audit` call of any kind, successful or
+    otherwise.
+
+    The response is deliberately unchanged, including the 200 for a non-participant:
+    the gate app decides what to show from `is_participating`, and changing the
+    status code would break it. What changes is that all three outcomes — admitted,
+    refused, and already-scanned — now leave a record.
+    """
     user_id = current_user.get("paradox_id")
     event = event_collection.find_one({"event_id": event_id})
     if not event:
+        log_denied(
+            current_user, "EVENT_SCAN_DENIED", event_id,
+            reason="event_not_found", details={"scan_domain": "event"},
+        )
         raise HTTPException(status_code=404, detail="Event not found")
 
     if not _is_event_team_member(event, user_id):
+        log_denied(
+            current_user, "EVENT_SCAN_DENIED", event_id,
+            reason="not_on_event_team",
+            details={"scan_domain": "event", "team_size": len(event.get("event_team") or [])},
+        )
         raise HTTPException(status_code=403, detail="Not authorized to scan for this event")
 
-    target_user, _ = verify_qr(request)
+    target_user, _ = verify_qr(request, actor=current_user, domain="event", target_id=event_id)
 
     is_participating = any(str(ev.get("event_id")) == str(event["_id"]) for ev in target_user.get("events", []))
 
@@ -808,9 +994,49 @@ def scan_event_participant(event_id: str, request: ScanQRRequest, current_user: 
             "scanned_by": user_id,
             "day": day_str
         }
-        if not event_logs_collection.find_one(log_filter):
+        already_logged = event_logs_collection.find_one(log_filter)
+        if not already_logged:
             log_entry = {**log_filter, "timestamp": now}
             event_logs_collection.insert_one(log_entry)
+            log_scan(
+                current_user, "event", "EVENT_SCAN", OUTCOME_ALLOWED,
+                participant_id=target_user.get("participant_id"),
+                target_id=event_id,
+                details={"day": day_str, "event_oid": str(event["_id"])},
+            )
+        else:
+            # A repeat scan by the same volunteer on the same day. The dedupe made
+            # this a silent no-op returning 200, so a queue being scanned twice and
+            # a queue being scanned once looked identical. Recorded as `duplicate`,
+            # not `denied` — the participant is admitted either way — and it is what
+            # explains why a volunteer's own `my_daily_scans` tally is lower than the
+            # number of people they physically scanned.
+            log_scan(
+                current_user, "event", "EVENT_SCAN_DUPLICATE", OUTCOME_DUPLICATE,
+                participant_id=target_user.get("participant_id"),
+                target_id=event_id,
+                reason="already_scanned_today_by_this_scanner",
+                details={"day": day_str, "first_scanned_at": already_logged.get("timestamp")},
+            )
+    else:
+        # The refusal that left no trace whatsoever. A student turned away from an
+        # event they believe they registered for now produces a row naming them, the
+        # gate, the volunteer, and how many events they *are* registered for — which
+        # is what separates "never registered" from "registered for a different
+        # event" from "deregistered without realising".
+        log_scan(
+            current_user, "event", "EVENT_SCAN_UNREGISTERED", OUTCOME_DENIED,
+            participant_id=target_user.get("participant_id"),
+            target_id=event_id,
+            reason="not_registered_for_event",
+            details={
+                "event_oid": str(event["_id"]),
+                "registrations_held": len(target_user.get("events") or []),
+                # 200 is still returned; this makes clear in the trail that the gate
+                # app, not this endpoint, decided whether to let them in.
+                "http_status": 200,
+            },
+        )
 
     return {
         "name": target_user.get("profile", {}).get("full_name"),
@@ -866,6 +1092,7 @@ def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
         .find({"event_id": str(event["_id"])}, {"_id": 0})
         .sort("timestamp", -1)
     )
+    log_audit(current_user, "READ_EVENT_LOGS", event_id, {"returned": len(logs)})
     return {"logs": logs}
 
 
@@ -882,16 +1109,43 @@ def update_participant_team(event_id: str, participant_id: str, payload: TeamUpd
         raise HTTPException(status_code=404, detail="Event not found")
 
     if not _is_event_head(event, user_id):
+        log_denied(
+            current_user, "UPDATE_EVENT_TEAM_DENIED", event_id,
+            reason="not_event_head",
+            details={"participant_id": participant_id, "status": 403},
+        )
         raise HTTPException(status_code=403, detail="Only Event Heads are authorized to modify participant teams")
 
     participant = participants_collection.find_one({"participant_id": participant_id, "events.event_id": event["_id"]})
     if not participant:
+        log_denied(
+            current_user, "UPDATE_EVENT_TEAM_DENIED", event_id,
+            reason="participant_not_registered",
+            details={"participant_id": participant_id},
+        )
         raise HTTPException(status_code=404, detail="Participant not registered for this event")
+
+    previous = next(
+        (ev for ev in participant.get("events") or [] if str(ev.get("event_id")) == str(event["_id"])),
+        {},
+    )
 
     participants_collection.update_one(
         {"participant_id": participant_id, "events.event_id": event["_id"]},
         {"$set": {"events.$.team_id": payload.team_id, "events.$.team_role": payload.team_role}}
     )
+    # Previously unaudited: an Event Head could move anybody between teams, or clear
+    # their team entirely, with no trace. In a house-versus-house event that is the
+    # difference between a result standing and being contested, so the row carries
+    # both the old and the new team.
+    log_audit(current_user, "UPDATE_EVENT_TEAM", event_id, {
+        "participant_id": participant_id,
+        "team_id": payload.team_id,
+        "team_role": payload.team_role,
+        "previous_team_id": previous.get("team_id"),
+        "previous_team_role": previous.get("team_role"),
+        "team_cleared": payload.team_id is None,
+    })
     return {"message": "Participant team updated"}
 
 

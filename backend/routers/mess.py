@@ -1,10 +1,14 @@
 import re
 from fastapi import APIRouter, HTTPException, Depends
-from logger import log_audit
+from logger import (
+    OUTCOME_ALLOWED, OUTCOME_DENIED,
+    log_audit, log_batch, log_denied, log_integrity, log_scan,
+)
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+import log_config
 from database import mess_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from models import (
@@ -14,6 +18,26 @@ from models import (
 from payments import simulate_payment
 
 router = APIRouter(prefix="/mess", tags=["Mess"])
+
+# `log_config.info(...)` rather than `logging.info(...)` throughout this file:
+# `assign_mess_team` has a local variable named `logging` and `toggle_mess_scan`
+# has a parameter of that name, either of which would shadow the module.
+_log = log_config.get_logger("paradox.mess")
+
+
+def _require_super_admin(current_user: dict, operation: str) -> str:
+    """The Super Admin gate shared by this router's administrative routes."""
+    user_id = current_user.get("paradox_id")
+    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"operation": operation, "resource": "mess", "status": 403},
+        )
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return user_id
 
 # ---------------------------------------------------------------------------
 # Mess type — the single field replacing the old, independent `preference`
@@ -173,11 +197,16 @@ class MessMenuRequest(BaseModel):
 
 @router.post("")
 def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    user_id = _require_super_admin(current_user, "create")
 
     if mess_collection.find_one({"mess_id": request.mess_id}):
+        log_denied(
+            current_user,
+            "CREATE_MESS_DENIED",
+            request.mess_id,
+            reason="mess_id_already_exists",
+            details={"type": request.type, "capacity": request.capacity},
+        )
         raise HTTPException(status_code=409, detail="A mess with this mess_id already exists")
 
     mess_doc = {
@@ -199,71 +228,178 @@ def list_messes(current_user: dict = Depends(get_current_user)):
 
 @router.put("/{mess_id}")
 def update_mess(mess_id: str, request: MessUpdateRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "update")
 
-    if not mess_collection.find_one({"mess_id": mess_id}):
+    existing = mess_collection.find_one({"mess_id": mess_id})
+    if not existing:
+        log_denied(
+            current_user, "UPDATE_MESS_DENIED", mess_id,
+            reason="mess_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Mess not found")
 
     update_data = {k: v for k, v in request.model_dump(exclude_unset=True).items() if v is not None}
     if not update_data:
+        log_denied(
+            current_user, "UPDATE_MESS_DENIED", mess_id,
+            reason="nothing_to_update", details={"status": 400}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="Nothing to update")
+
+    # A capacity cut below the number already seated is worth flagging rather than
+    # refusing: allocation reads capacity as its ceiling, so from this point the
+    # hall is over-subscribed and no further placement will be made, while the
+    # participants already seated stay seated. Nothing in the response says so.
+    seated = participants_collection.count_documents({"mess.mess_id": existing["_id"]})
+    if "capacity" in update_data and update_data["capacity"] < seated:
+        log_config.warning(
+            _log,
+            "mess capacity reduced below the number already seated",
+            {
+                "mess_id": mess_id,
+                "reason": "capacity_below_occupancy",
+                "new_capacity": update_data["capacity"],
+                "previous_capacity": existing.get("capacity"),
+                "seated": seated,
+            },
+        )
 
     update_data["updated_at"] = datetime.utcnow()
     mess_collection.update_one({"mess_id": mess_id}, {"$set": update_data})
-    log_audit(current_user, "UPDATE_MESS", mess_id, update_data)
+    # `type` is the field allocation matches a participant's diet against, so a
+    # change here silently re-purposes the hall: everybody already seated keeps a
+    # place in a hall that now serves something else. The previous value goes into
+    # the row so that mismatch can be explained afterwards.
+    log_audit(
+        current_user,
+        "UPDATE_MESS",
+        mess_id,
+        {
+            **update_data,
+            "previous_type": existing.get("type") if "type" in update_data else None,
+            "previous_capacity": existing.get("capacity") if "capacity" in update_data else None,
+            "seated": seated,
+        },
+    )
     return {"message": "Mess updated"}
 
 @router.delete("/{mess_id}")
 def delete_mess(mess_id: str, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "delete")
 
     mess = mess_collection.find_one({"mess_id": mess_id})
     if not mess:
+        log_denied(
+            current_user, "DELETE_MESS_DENIED", mess_id,
+            reason="mess_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Mess not found")
+
+    # Who is about to be affected, captured *before* the cascade runs — afterwards
+    # the link is gone and this is unanswerable. This is the most destructive
+    # operation in the file: it discards every scan marker for every participant
+    # seated here, so a meal somebody was recorded as having eaten stops existing
+    # on their document. The audit rows written by those scans survive, which is
+    # what makes reconstruction possible at all.
+    affected = [
+        p.get("participant_id")
+        for p in participants_collection.find({"mess.mess_id": mess["_id"]}, {"participant_id": 1})
+    ]
 
     # Nobody is left holding a seat in a hall that no longer exists: every
     # participant seated here is released back to unallocated, with their scan
     # history cleared alongside it since it names slots on a menu that is gone.
-    participants_collection.update_many(
+    result = participants_collection.update_many(
         {"mess.mess_id": mess["_id"]},
         {"$set": {"mess.mess_id": None, "mess.scans": {}}}
     )
     mess_collection.delete_one({"mess_id": mess_id})
-    log_audit(current_user, "DELETE_MESS", mess_id)
+    log_audit(
+        current_user,
+        "DELETE_MESS",
+        mess_id,
+        {
+            "name": mess.get("name"),
+            "type": mess.get("type"),
+            "capacity": mess.get("capacity"),
+            "menu_days": len(mess.get("menu") or {}),
+            "team_size": len(mess.get("mess_team") or []),
+            "participants_released": result.modified_count,
+            "scan_history_cleared_for": affected,
+        },
+    )
+    log_config.warning(
+        _log,
+        f"mess {mess_id} deleted, releasing {result.modified_count} participant(s) and clearing their scan markers",
+        {"mess_id": mess_id, "participants_released": result.modified_count, "destructive": True},
+    )
     return {"message": "Mess deleted"}
 
 @router.put("/{mess_id}/menu")
 def update_mess_menu(mess_id: str, request: MessMenuRequest, current_user: dict = Depends(get_current_staff)):
     user_id = current_user.get("paradox_id")
     mess = mess_collection.find_one({"mess_id": mess_id})
-    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
+    if not mess:
+        log_denied(
+            current_user, "UPDATE_MESS_MENU_DENIED", mess_id,
+            reason="mess_not_found", details={"status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Mess not found")
 
     is_super = backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"})
     on_team = any(m.get("user_id") == user_id for m in mess.get("mess_team", []))
     if not (is_super or on_team):
+        log_denied(
+            current_user, "UPDATE_MESS_MENU_DENIED", mess_id,
+            reason="not_super_admin_or_team", details={"status": 403},
+        )
         raise HTTPException(status_code=403, detail="Not authorized to edit this menu")
 
     menu_dict = {
         day_key: {slot_name: slot.model_dump() for slot_name, slot in slots.items()}
         for day_key, slots in request.menu.items()
     }
+
+    # The menu is what every scan window is derived from, and this route replaces
+    # it wholesale. A day or slot present before and absent now means the scan
+    # window for that sitting has ceased to exist, and `scan_mess` will refuse it
+    # with "No {slot} scheduled for day {n}" — which reads like a scanner fault to
+    # the volunteer holding it. Recording what was removed is what connects the
+    # two events.
+    previous = mess.get("menu") or {}
+    previous_slots = {f"{d}.{s}" for d, day in previous.items() for s in (day or {})}
+    new_slots = {f"{d}.{s}" for d, day in menu_dict.items() for s in (day or {})}
+    removed = sorted(previous_slots - new_slots)
+    added = sorted(new_slots - previous_slots)
+
     mess_collection.update_one(
         {"mess_id": mess_id},
         {"$set": {"menu": menu_dict, "updated_at": datetime.utcnow(), "updated_by": user_id}}
     )
-    log_audit(current_user, "UPDATE_MESS_MENU", mess_id, {"days": len(menu_dict)})
+    log_audit(
+        current_user,
+        "UPDATE_MESS_MENU",
+        mess_id,
+        {
+            "days": len(menu_dict),
+            "slots": len(new_slots),
+            "slots_added": added,
+            "slots_removed": removed,
+            "edited_as": "super_admin" if is_super else "mess_team",
+        },
+    )
+    if removed:
+        log_config.warning(
+            _log,
+            f"menu update removed {len(removed)} existing meal slot(s) from {mess_id}",
+            {"mess_id": mess_id, "reason": "menu_slots_removed", "slots_removed": removed},
+        )
     return {"message": "Menu updated"}
 
 @router.post("/{mess_id}/team")
 def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
+    _require_super_admin(current_user, "assign_team")
+
     # Both roles a mess team can hold scan on assignment. This used to be
     # `role == "other"` only, which meant a member created as a `volunteer` -- the
     # role the word "volunteer" maps to -- landed with scanning off and needed an
@@ -282,29 +418,95 @@ def assign_mess_team(mess_id: str, request: MessAssignTeamRequest, current_user:
     }
     existing = mess_collection.find_one({"mess_id": mess_id, "mess_team.user_id": request.user_id})
     if existing and request.user_id:
+        log_denied(
+            current_user, "ASSIGN_MESS_TEAM_DENIED", mess_id,
+            reason="already_on_team",
+            details={"team_user_id": request.user_id, "role": request.role},
+        )
         raise HTTPException(status_code=409, detail="Team member already assigned to this mess")
-    mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
-    log_audit(current_user, "ASSIGN_MESS_TEAM", mess_id, {"team_user_id": request.user_id, "role": request.role})
+
+    if not logging:
+        # An unrecognised `role` produces a team member who cannot scan, and the
+        # response still says "Team member assigned". The volunteer then stands at
+        # a counter being refused with "Scanning disabled for you" and no
+        # indication that the cause was a typo at assignment time, hours earlier.
+        log_config.warning(
+            _log,
+            f"mess team member assigned with scanning off: role {request.role!r} is not a scanning role",
+            {
+                "mess_id": mess_id,
+                "team_user_id": request.user_id,
+                "role": request.role,
+                "reason": "unrecognised_team_role",
+            },
+        )
+
+    result = mess_collection.update_one({"mess_id": mess_id}, {"$push": {"mess_team": team_member}})
+    if result.matched_count == 0:
+        # This route never checked that the hall exists — the push simply matches
+        # nothing — so assigning a team to a mistyped `mess_id` returned success
+        # and did nothing at all. Logged rather than turned into a 404, since
+        # changing the status code would change the contract.
+        log_integrity(
+            "mess team assignment matched no hall",
+            reason="mess_not_found_on_assign",
+            details={"mess_id": mess_id, "team_user_id": request.user_id, "role": request.role},
+        )
+
+    log_audit(
+        current_user,
+        "ASSIGN_MESS_TEAM",
+        mess_id,
+        {
+            "team_user_id": request.user_id,
+            "role": request.role,
+            "scanning_enabled": logging,
+            "hall_exists": result.matched_count > 0,
+        },
+    )
     return {"message": "Team member assigned"}
 
 @router.put("/{mess_id}/team/{team_user_id}/toggle_scan")
 def toggle_mess_scan(mess_id: str, team_user_id: str, logging: bool, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
-    mess_collection.update_one(
+    _require_super_admin(current_user, "toggle_scan")
+
+    result = mess_collection.update_one(
         {"mess_id": mess_id, "mess_team.user_id": team_user_id},
         {"$set": {"mess_team.$.logging": logging}}
+    )
+
+    if result.matched_count == 0:
+        # A mistyped hall or team id matches nothing, and the route still answers
+        # "Scanning toggled". An admin who believes they have just re-enabled a
+        # volunteer has in fact changed nothing, and will not find out until that
+        # volunteer is refused at the counter.
+        log_integrity(
+            "scan toggle matched no mess team member",
+            reason="team_member_not_found_on_toggle",
+            details={"mess_id": mess_id, "team_user_id": team_user_id, "requested_state": logging},
+        )
+
+    # This had no audit row, which made it the natural blind spot behind "the
+    # scanner stopped working": a volunteer's scanning privilege could be revoked
+    # and there was nothing to show it had happened, or who did it. The refusal
+    # they then hit at the counter (`Scanning disabled for you`) is now traceable
+    # back to this row.
+    log_audit(
+        current_user,
+        "TOGGLE_MESS_SCAN",
+        mess_id,
+        {
+            "team_user_id": team_user_id,
+            "scanning_enabled": logging,
+            "applied": result.matched_count > 0,
+        },
     )
     return {"message": "Scanning toggled"}
 
 @router.post("/allocate")
 def allocate_messes(current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
+    _require_super_admin(current_user, "allocate")
+
     messes = list(mess_collection.find())
     pref_groups = {}
     for m in messes:
@@ -332,6 +534,22 @@ def allocate_messes(current_user: dict = Depends(get_current_staff)):
         for m in messes
     }
 
+    # Collected so the batch summary can report why each unplaced participant was
+    # unplaced, rather than only how many were placed.
+    skipped_by_reason: Dict[str, int] = {}
+    placements: List[dict] = []
+
+    log_config.info(
+        _log,
+        f"mess allocation starting for {len(participants)} candidate(s)",
+        {
+            "candidates": len(participants),
+            "halls": len(messes),
+            "diets_available": sorted(pref_groups.keys()),
+            "seats_free": sum(max(m.get("capacity", 0) - seated[m["_id"]], 0) for m in messes),
+        },
+    )
+
     for p in participants:
         # `.get(key, default)` does not fire when the key exists holding None, and
         # a profile that never chose a preference stores exactly that. Treating
@@ -356,9 +574,67 @@ def allocate_messes(current_user: dict = Depends(get_current_staff)):
                 seated[chosen_mess["_id"]] += 1
                 allocated += 1
                 assigned = True
+                placements.append(
+                    {"participant_id": p.get("participant_id"), "mess_id": chosen_mess.get("mess_id"), "diet": pref}
+                )
                 break
-            
-    log_audit(current_user, "ALLOCATE_MESSES", None, {"allocated_count": allocated})
+
+        if not assigned:
+            # `assigned` was already being computed here and then never read — the
+            # branch it was clearly meant to drive did not exist. This is it.
+            #
+            # Two distinct failures reach this point and they need completely
+            # different responses. `no_hall_for_diet` means the fest has nowhere
+            # that serves what this student eats, and no amount of re-running
+            # allocation will place them; somebody has to open a hall or change
+            # their preference. `capacity_exhausted` means the halls exist but are
+            # full, which is a capacity decision. Reported per participant, because
+            # "23 people were not placed" is not something anybody can act on.
+            reason = "no_hall_for_diet" if not available_messes else "capacity_exhausted"
+            skipped_by_reason[reason] = skipped_by_reason.get(reason, 0) + 1
+            log_denied(
+                current_user,
+                "MESS_ALLOCATION_SKIPPED",
+                p.get("participant_id"),
+                reason=reason,
+                details={
+                    "diet": pref,
+                    "raw_preference": raw_pref,
+                    "halls_for_diet": [m.get("mess_id") for m in available_messes],
+                    "diets_available": sorted(pref_groups.keys()),
+                },
+            )
+
+    unplaceable = sum(skipped_by_reason.values())
+    log_batch(
+        current_user,
+        "ALLOCATE_MESSES",
+        None,
+        {
+            # Unchanged, and still the first field: existing readers and the
+            # dashboard key off it.
+            "allocated_count": allocated,
+            # The complement, which is the half that was missing. A run that placed
+            # 7 of 30 and a run that placed 7 of 7 reported the same number before.
+            "candidates": len(participants),
+            "skipped_count": unplaceable,
+            "skipped_by_reason": skipped_by_reason,
+            "seats_remaining": {
+                m.get("mess_id"): max(m.get("capacity", 0) - seated[m["_id"]], 0) for m in messes
+            },
+        },
+    )
+    if unplaceable:
+        log_config.warning(
+            _log,
+            f"mess allocation left {unplaceable} of {len(participants)} candidate(s) unplaced",
+            {
+                "allocated": allocated,
+                "skipped": unplaceable,
+                "skipped_by_reason": skipped_by_reason,
+                "reason": "incomplete_allocation",
+            },
+        )
     return {"message": f"Allocated {allocated} participants to messes"}
 
 @router.post("/pay")
@@ -374,15 +650,47 @@ def pay_mess_fee(request: MockPaymentRequest, current_user: dict = Depends(get_c
     hall, so it can be called in any order relative to those.
     """
     if "participant_id" not in current_user:
+        log_denied(
+            current_user, "MESS_PAYMENT_DENIED", None,
+            reason="not_a_participant", details={"status": 400}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="Only participants can pay the mess fee")
 
-    payment = simulate_payment("mess", MESS_FEE, request.method)
+    existing = (current_user.get("mess") or {}).get("payment")
+    payment = simulate_payment("mess", MESS_FEE, request.method, purpose_actor=current_user)
+
+    if existing:
+        # The route is not idempotent: this write replaces the stored payment
+        # outright, so the previous transaction id ceases to exist anywhere on the
+        # document. If a participant is ever charged twice, the earlier
+        # transaction survives only in this line and in its own audit row — which
+        # is precisely the evidence a refund conversation needs.
+        log_config.warning(
+            _log,
+            "mess payment overwrote an existing payment record",
+            {
+                "participant_id": current_user.get("participant_id"),
+                "reason": "payment_overwritten",
+                "previous_transaction_id": existing.get("transaction_id"),
+                "previous_amount": existing.get("amount"),
+                "previous_paid_at": existing.get("paid_at"),
+                "new_transaction_id": payment["transaction_id"],
+            },
+        )
+
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"mess.payment": payment}}
     )
-    log_audit(current_user, "MESS_PAYMENT", None, {
-        "transaction_id": payment["transaction_id"], "amount": payment["amount"]
+    # `target_id` was None, so the row named neither the payer nor the hall. The
+    # participant id goes in it now — the actor is the same person, but a payment
+    # is about an account, and every other row in the trail can be filtered by the
+    # entity it concerns.
+    log_audit(current_user, "MESS_PAYMENT", current_user.get("participant_id"), {
+        "transaction_id": payment["transaction_id"], "amount": payment["amount"],
+        "method": payment.get("method"),
+        "replaced_transaction_id": (existing or {}).get("transaction_id"),
+        "registered_for_mess": bool((current_user.get("mess") or {}).get("registered")),
     })
     return payment
 
@@ -426,7 +734,13 @@ def my_mess(current_user: dict = Depends(get_current_participant)):
         "slots": slots
     }
 
-def _assert_mess_scan_window(slot_doc: dict) -> None:
+def _assert_mess_scan_window(
+    slot_doc: dict,
+    mess_id: Optional[str] = None,
+    day: Optional[int] = None,
+    slot: Optional[str] = None,
+    actor: Optional[dict] = None,
+) -> None:
     """
     Raise 403 if `now` is outside this slot's scan window.
 
@@ -439,6 +753,24 @@ def _assert_mess_scan_window(slot_doc: dict) -> None:
     end = slot_doc.get("end_time")
     if not isinstance(start, datetime) or not isinstance(end, datetime):
         # Defensive only: MessMealSlot always writes both as real datetimes.
+        #
+        # But "defensive only" is exactly the assumption worth recording, because
+        # when it is wrong this `return` disables the window guard entirely and
+        # says nothing: the hall accepts scans at any hour of any day, and the
+        # only externally visible symptom is meals being served outside their
+        # sitting. A seeded or hand-edited menu is enough to reach it.
+        log_integrity(
+            "mess scan window guard skipped: slot times are not datetimes",
+            reason="mess_window_guard_disabled",
+            details={
+                "mess_id": mess_id,
+                "day": day,
+                "slot": slot,
+                "start_type": type(start).__name__,
+                "end_type": type(end).__name__,
+                "guard": "open",
+            },
+        )
         return
 
     now = datetime.utcnow()
@@ -446,68 +778,210 @@ def _assert_mess_scan_window(slot_doc: dict) -> None:
     closes_at = _naive_utc(end) + SCAN_WINDOW
 
     if now < opens_at:
+        # The minutes-until figure is what makes this actionable at the counter:
+        # "not yet open" plus "in 4 minutes" is a queue that should wait, while
+        # "in 380 minutes" is a volunteer scanning for the wrong sitting entirely.
+        log_denied(
+            actor,
+            "MESS_SCAN_DENIED",
+            mess_id,
+            reason="window_not_open",
+            details={
+                "day": day,
+                "slot": slot,
+                "opens_in_minutes": int((opens_at - now).total_seconds() // 60),
+                "opens_at": opens_at,
+                "scan_domain": "mess",
+            },
+        )
         raise HTTPException(status_code=403, detail="Scanning window not yet open for this slot")
     if now > closes_at:
+        log_denied(
+            actor,
+            "MESS_SCAN_DENIED",
+            mess_id,
+            reason="window_closed",
+            details={
+                "day": day,
+                "slot": slot,
+                "closed_minutes_ago": int((now - closes_at).total_seconds() // 60),
+                "closed_at": closes_at,
+                "scan_domain": "mess",
+            },
+        )
         raise HTTPException(status_code=403, detail="Scanning window closed for this slot")
 
 @router.post("/{mess_id}/scan")
 def scan_mess(mess_id: str, request: ScanQRRequest, slot: str, day: int, current_user: dict = Depends(get_current_staff)):
+    """
+    Admit one participant to one sitting.
+
+    Every refusal below is recorded with a reason. This is the endpoint a
+    participant is most likely to come back and dispute — "I was turned away from
+    dinner on day 2" — and before this the only trace a refusal left was a 400 on
+    a handheld device. Successful scans keep their original `MESS_SCAN` audit row
+    and its exact `details` keys, because `GET /audit-logs/summary` counts meals
+    from them.
+    """
     if slot not in MEAL_SLOTS:
+        # Not audited: a bad `slot` is a client bug, not an operational event, and
+        # it cannot be attributed to any particular sitting.
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="invalid_slot", details={"slot": slot, "day": day}, audit=False,
+        )
         raise HTTPException(status_code=400, detail=f"slot must be one of {MEAL_SLOTS}")
     if day < 1:
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="invalid_day", details={"slot": slot, "day": day}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="day must be a positive integer")
 
     user_id = current_user.get("paradox_id")
     mess = mess_collection.find_one({"mess_id": mess_id})
-    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
+    if not mess:
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="mess_not_found", details={"slot": slot, "day": day},
+        )
+        raise HTTPException(status_code=404, detail="Mess not found")
     
     team_member = next((m for m in mess.get("mess_team", []) if m.get("user_id") == user_id), None)
     
     if not team_member:
+        # Somebody is holding a scanner for a hall they are not on the team of.
+        # Usually a volunteer sent to the wrong counter; occasionally a volunteer
+        # whose team entry was never created. The team size distinguishes the two.
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="not_on_mess_team",
+            details={"slot": slot, "day": day, "team_size": len(mess.get("mess_team") or [])},
+        )
         raise HTTPException(status_code=403, detail="Not authorized to scan for this mess")
         
     if not team_member.get("logging"):
+        # Pairs with the `TOGGLE_MESS_SCAN` row: this is the counter-side symptom
+        # of a privilege that was switched off, and the two are now joinable.
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="scanning_disabled_for_member",
+            details={"slot": slot, "day": day, "member_role": team_member.get("role")},
+        )
         raise HTTPException(status_code=403, detail="Scanning disabled for you")
 
     day_key = f"day_{day}"
     slot_doc = (mess.get("menu") or {}).get(day_key, {}).get(slot)
     if not slot_doc:
+        # Reads as a scanner fault to the volunteer, but the cause is upstream: the
+        # menu has no such sitting, often because a menu update replaced it. The
+        # days actually on the menu are recorded so the mismatch is obvious.
+        log_denied(
+            current_user, "MESS_SCAN_DENIED", mess_id,
+            reason="slot_not_on_menu",
+            details={
+                "slot": slot,
+                "day": day,
+                "menu_days": sorted((mess.get("menu") or {}).keys(), key=_day_sort_key),
+            },
+        )
         raise HTTPException(status_code=400, detail=f"No {slot} scheduled for day {day}")
 
     # QR scanning only works from 15 minutes before the slot's start time to
     # 15 minutes after it ends.
-    _assert_mess_scan_window(slot_doc)
+    _assert_mess_scan_window(slot_doc, mess_id=mess_id, day=day, slot=slot, actor=current_user)
 
-    target_user, _ = verify_qr(request)
+    target_user, _ = verify_qr(request, actor=current_user, domain="mess", target_id=mess_id)
     
     user_mess = target_user.get("mess", {})
     if user_mess.get("mess_id") != mess["_id"]:
+        # Both halls are named — the one they were sent to and the one they belong
+        # to — because that is what the volunteer needs in order to redirect the
+        # student, and what later distinguishes a misdirected participant from an
+        # allocation that never ran.
+        log_scan(
+            current_user, "mess", "MESS_SCAN_DENIED", OUTCOME_DENIED,
+            participant_id=target_user.get("participant_id"),
+            target_id=mess_id,
+            reason="not_allotted_to_this_mess",
+            details={
+                "slot": slot,
+                "day": day,
+                "allotted_mess_oid": str(user_mess.get("mess_id")) if user_mess.get("mess_id") else None,
+                "registered_for_mess": bool(user_mess.get("registered")),
+            },
+        )
         raise HTTPException(status_code=400, detail="Participant not allotted to this mess")
 
     scans = user_mess.get("scans") or {}
     day_scans = scans.get(day_key) or {}
 
     if day_scans.get(slot, {}).get("scanned"):
+        # The original scan's timestamp is the whole point of this line: it settles
+        # whether this is a double-swipe seconds apart at a busy counter, or a
+        # genuine second attempt hours later by someone claiming they were never
+        # served.
+        log_scan(
+            current_user, "mess", "MESS_SCAN_DENIED", OUTCOME_DENIED,
+            participant_id=target_user.get("participant_id"),
+            target_id=mess_id,
+            reason="already_scanned",
+            details={
+                "slot": slot,
+                "day": day,
+                "first_scanned_at": day_scans.get(slot, {}).get("scanned_at"),
+            },
+        )
         raise HTTPException(status_code=400, detail=f"Already logged in for {slot} on day {day}")
 
     day_scans[slot] = {"scanned": True, "scanned_at": datetime.utcnow()}
     scans[day_key] = day_scans
 
-    participants_collection.update_one(
+    # This writes the participant's entire `mess.scans` map back from the copy read
+    # at the top of the request, so a concurrent scan of the same person at another
+    # counter can be overwritten between the read and this write. The set of slots
+    # being written is recorded so a marker that later turns out to be missing can
+    # be traced to the request that flattened it.
+    result = participants_collection.update_one(
         {"_id": target_user["_id"]},
         {"$set": {"mess.scans": scans}}
     )
-    log_audit(current_user, "MESS_SCAN", mess_id, {"participant_id": target_user.get("participant_id"), "slot": slot, "day": day})
+    if result.modified_count == 0:
+        log_integrity(
+            "mess scan marker was not stored",
+            reason="scan_write_not_applied",
+            details={
+                "participant_id": target_user.get("participant_id"),
+                "mess_id": mess_id,
+                "day": day,
+                "slot": slot,
+                "matched": result.matched_count,
+            },
+        )
+
+    log_scan(
+        current_user, "mess", "MESS_SCAN", OUTCOME_ALLOWED,
+        participant_id=target_user.get("participant_id"),
+        target_id=mess_id,
+        # `slot` and `day` keep their exact original names and types: the meal
+        # figures in `GET /audit-logs/summary` de-duplicate on
+        # `details.participant_id` / `day` / `slot`, so renaming or reshaping any of
+        # the three would silently change every meal count on the dashboard.
+        details={"slot": slot, "day": day, "written_slots": sorted(day_scans.keys())},
+    )
     return {"message": "Scan successful, entry allowed"}
 
 @router.get("/{mess_id}/statistics")
 def mess_statistics(mess_id: str, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
-        
+    _require_super_admin(current_user, "statistics")
+
     mess = mess_collection.find_one({"mess_id": mess_id})
-    if not mess: raise HTTPException(status_code=404, detail="Mess not found")
+    if not mess:
+        log_denied(
+            current_user, "READ_MESS_ROSTER_DENIED", mess_id,
+            reason="mess_not_found", details={"status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Mess not found")
     
     participants = list(participants_collection.find({"mess.mess_id": mess["_id"]}))
     
@@ -521,6 +995,15 @@ def mess_statistics(mess_id: str, current_user: dict = Depends(get_current_staff
             "phone": prof.get("phone")
         })
         
+    # This response is a roster with names, emails, and phone numbers on it, so who
+    # read it is worth recording alongside who changed it.
+    log_audit(
+        current_user,
+        "READ_MESS_ROSTER",
+        mess_id,
+        {"returned": len(participants), "capacity": mess.get("capacity")},
+    )
+
     return {
         "total_allocated": len(participants),
         "capacity": mess.get("capacity"),

@@ -26,12 +26,15 @@ Document shape:
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 
-from logger import log_audit
+import log_config
+from logger import log_audit, log_denied
 from models import WorkshopSlotCreateRequest, WorkshopSlotUpdateRequest, parse_instant_utc
 from database import workshop_slots_collection, workshops_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_staff
 
 router = APIRouter(prefix="/workshop-slots", tags=["Workshop Slots"])
+
+_log = log_config.get_logger("paradox.workshop_slots")
 
 
 def _is_super_admin(current_user: dict) -> bool:
@@ -41,6 +44,13 @@ def _is_super_admin(current_user: dict) -> bool:
 
 def _require_super_admin(current_user: dict) -> None:
     if not _is_super_admin(current_user):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"resource": "workshop_slots", "status": 403},
+        )
         raise HTTPException(status_code=403, detail="Only Super Admins can perform this action")
 
 
@@ -49,6 +59,10 @@ def create_workshop_slot(request: WorkshopSlotCreateRequest, current_user: dict 
     _require_super_admin(current_user)
 
     if workshop_slots_collection.find_one({"slot_id": request.slot_id}):
+        log_denied(
+            current_user, "CREATE_WORKSHOP_SLOT_DENIED", request.slot_id,
+            reason="slot_id_already_exists", details={"status": 400},
+        )
         raise HTTPException(status_code=400, detail="A slot with this slot_id already exists")
 
     new_slot = {
@@ -80,10 +94,18 @@ def update_workshop_slot(slot_id: str, request: WorkshopSlotUpdateRequest, curre
 
     slot = workshop_slots_collection.find_one({"slot_id": slot_id})
     if not slot:
+        log_denied(
+            current_user, "UPDATE_WORKSHOP_SLOT_DENIED", slot_id,
+            reason="slot_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Workshop slot not found")
 
     update_data = {k: v for k, v in request.model_dump().items() if v is not None}
     if not update_data:
+        log_denied(
+            current_user, "UPDATE_WORKSHOP_SLOT_DENIED", slot_id,
+            reason="nothing_to_update", details={"status": 400}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="Nothing to update")
 
     # Merge onto the stored document before validating end > start, the same
@@ -112,7 +134,28 @@ def update_workshop_slot(slot_id: str, request: WorkshopSlotUpdateRequest, curre
         )
         affected = result.modified_count
 
-    log_audit(current_user, "UPDATE_WORKSHOP_SLOT", slot_id, {"workshops_updated": affected})
+    log_audit(current_user, "UPDATE_WORKSHOP_SLOT", slot_id, {
+        "workshops_updated": affected,
+        # Editing a slot's `start_time` moves the scan window of every workshop in it.
+        # A volunteer who was scanning happily a minute ago starts getting "Scanning
+        # window not yet open", and the cause is this request rather than anything at
+        # their desk. Both values go in so the shift is legible.
+        "previous_start_time": slot.get("start_time") if "start_time" in update_data else None,
+        "new_start_time": update_data.get("start_time"),
+        "fields_updated": sorted(k for k in update_data if k != "updated_at"),
+    })
+    if affected:
+        log_config.warning(
+            _log,
+            f"slot {slot_id} start_time changed, shifting the scan window of {affected} workshop(s)",
+            {
+                "slot_id": slot_id,
+                "reason": "slot_time_cascade",
+                "workshops_updated": affected,
+                "previous_start_time": slot.get("start_time"),
+                "new_start_time": update_data.get("start_time"),
+            },
+        )
     return {"message": "Workshop slot updated", "workshops_updated": affected}
 
 
@@ -131,19 +174,51 @@ def delete_workshop_slot(slot_id: str, current_user: dict = Depends(get_current_
 
     slot = workshop_slots_collection.find_one({"slot_id": slot_id})
     if not slot:
+        log_denied(
+            current_user, "DELETE_WORKSHOP_SLOT_DENIED", slot_id,
+            reason="slot_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Workshop slot not found")
 
     affected_workshops = list(workshops_collection.find({"slot_id": slot_id}))
+    # The widest-reaching delete in the API: one request removes a slot, every
+    # workshop in it, and every participant's booking for those workshops. Announced
+    # before it runs, with the scale stated, so the trail shows the intent as well as
+    # the individual results.
+    log_config.warning(
+        _log,
+        f"deleting slot {slot_id} will remove {len(affected_workshops)} workshop(s) and their bookings",
+        {
+            "slot_id": slot_id,
+            "reason": "slot_delete_cascade",
+            "workshops": [w.get("workshop_id") for w in affected_workshops],
+            "destructive": True,
+        },
+    )
+
+    bookings_removed = 0
     for workshop in affected_workshops:
         ws_doc_id = workshop["_id"]
-        participants_collection.update_many(
+        pull_result = participants_collection.update_many(
             {"workshops.workshop_id": ws_doc_id},
             {"$pull": {"workshops": {"workshop_id": ws_doc_id}}},
         )
+        bookings_removed += pull_result.modified_count
         workshops_collection.delete_one({"_id": ws_doc_id})
-        log_audit(current_user, "DELETE_WORKSHOP", workshop.get("workshop_id"), {"reason": "slot_deleted", "slot_id": slot_id})
+        log_audit(current_user, "DELETE_WORKSHOP", workshop.get("workshop_id"), {
+            "reason": "slot_deleted", "slot_id": slot_id,
+            "name": workshop.get("name"),
+            "registration_count": workshop.get("registration_count"),
+            "participant_count": workshop.get("participant_count"),
+            "bookings_removed": pull_result.modified_count,
+        })
 
     workshop_slots_collection.delete_one({"slot_id": slot_id})
-    log_audit(current_user, "DELETE_WORKSHOP_SLOT", slot_id, {"workshops_deleted": len(affected_workshops)})
+    log_audit(current_user, "DELETE_WORKSHOP_SLOT", slot_id, {
+        "workshops_deleted": len(affected_workshops),
+        "workshop_ids": [w.get("workshop_id") for w in affected_workshops],
+        "bookings_removed": bookings_removed,
+        "start_time": slot.get("start_time"),
+    })
 
     return {"message": "Workshop slot deleted", "workshops_deleted": len(affected_workshops)}

@@ -1,0 +1,12 @@
+# Log files are local diagnostic output, never committed. They contain
+# participant ids, staff ids, and IP addresses — identifying data that belongs
+# in a running deployment, not in version control.
+#
+# This directory is tracked (via this file alone) rather than created at
+# runtime, so a fresh clone has somewhere to write to and `logs/` never appears
+# as an untracked directory in `git status`.
+#
+# Kept here rather than in the repository root because the root `.gitignore`
+# covers the whole project, and this rule is entirely about `backend/logs`.
+*
+!.gitignore

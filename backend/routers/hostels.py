@@ -1,9 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
-from logger import log_audit
+from logger import (
+    OUTCOME_ALLOWED, OUTCOME_DENIED,
+    log_audit, log_batch, log_denied, log_integrity, log_scan,
+)
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+import log_config
 from database import hostel_collection, participants_collection, backend_teams_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from models import ScanQRRequest, MockPaymentRequest
@@ -13,6 +17,23 @@ from payments import simulate_payment
 generator = SequentialIDGenerator("HSTL")
 
 router = APIRouter(prefix="/hostels", tags=["Hostels"])
+
+_log = log_config.get_logger("paradox.hostels")
+
+
+def _require_super_admin(current_user: dict, operation: str) -> str:
+    """The Super Admin gate shared by this router's administrative routes."""
+    user_id = current_user.get("paradox_id")
+    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"operation": operation, "resource": "hostels", "status": 403},
+        )
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return user_id
 
 # The fixed hostel fee charged by the mock payment endpoint below. Never
 # accepted from the client — see `MockPaymentRequest`.
@@ -71,11 +92,27 @@ class HostelAssignTeamRequest(BaseModel):
 
 @router.post("")
 def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "create")
 
     hostel_id = generator.next_id()
+
+    # The id generator is an in-memory counter that restarts from its seed on every
+    # process restart and never consults the database, so a restarted process
+    # re-issues ids it has already handed out. There is no unique index behind
+    # `hostel_id`, so a collision would silently produce two blocks sharing one id
+    # — and every participant allotted to "that" block would resolve to whichever
+    # document Mongo returned first. Detected here rather than left to be
+    # discovered from the symptom.
+    if hostel_collection.find_one({"hostel_id": hostel_id}):
+        log_integrity(
+            "generated hostel_id already exists — the in-memory counter has wrapped after a restart",
+            reason="hostel_id_collision",
+            details={"hostel_id": hostel_id, "generator_prefix": "HSTL"},
+            actor=current_user,
+            action="ID_COLLISION",
+            target_id=hostel_id,
+            audit=True,
+        )
     rooms = [{"room_number": rn, "occupants": []} for rn in generate_room_numbers(request.num_rooms)]
 
     hostel_doc = {
@@ -95,7 +132,13 @@ def create_hostel(request: HostelCreateRequest, current_user: dict = Depends(get
     }
     hostel_collection.insert_one(hostel_doc)
     log_audit(current_user, "CREATE_HOSTEL", hostel_id, {
-        "capacity": request.capacity, "sharing": request.sharing, "num_rooms": request.num_rooms
+        "capacity": request.capacity, "sharing": request.sharing, "num_rooms": request.num_rooms,
+        # `gender` decides which participants allocation will ever consider for this
+        # block, and it cannot be changed afterwards by any route in this file, so
+        # this row is the only record of that decision.
+        "gender": request.gender,
+        "name": request.name,
+        "beds": request.num_rooms * request.sharing,
     })
     return {"message": "Hostel created", "hostel_id": hostel_id}
 
@@ -105,11 +148,14 @@ def list_hostels(current_user: dict = Depends(get_current_user)):
 
 @router.post("/{hostel_id}/team")
 def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "assign_team")
 
     if not hostel_collection.find_one({"hostel_id": hostel_id}):
+        log_denied(
+            current_user, "ASSIGN_HOSTEL_TEAM_DENIED", hostel_id,
+            reason="hostel_not_found",
+            details={"team_user_id": request.user_id, "status": 404},
+        )
         raise HTTPException(status_code=404, detail="Hostel not found")
 
     # `user_id` must be a real backend_teams member, and specifically one
@@ -119,6 +165,20 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
     # duty staff by mistake.
     staff = backend_teams_collection.find_one({"paradox_id": request.user_id, "role": "other"})
     if not staff:
+        # The message says what is required but not what was found, and the two
+        # failures behind it are different: no such staff account at all, versus an
+        # account that exists with a role other than `other`. The second is the
+        # confusing one — an admin trying to put a `volunteer` on a hostel door.
+        actual = backend_teams_collection.find_one({"paradox_id": request.user_id})
+        log_denied(
+            current_user, "ASSIGN_HOSTEL_TEAM_DENIED", hostel_id,
+            reason="staff_role_not_other" if actual else "staff_not_found",
+            details={
+                "team_user_id": request.user_id,
+                "requested_role": request.role,
+                "actual_staff_role": (actual or {}).get("role"),
+            },
+        )
         raise HTTPException(
             status_code=404,
             detail="user_id must reference an existing backend_teams member with role 'other'"
@@ -126,6 +186,11 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
 
     existing = hostel_collection.find_one({"hostel_id": hostel_id, "hostel_team.user_id": request.user_id})
     if existing:
+        log_denied(
+            current_user, "ASSIGN_HOSTEL_TEAM_DENIED", hostel_id,
+            reason="already_on_team",
+            details={"team_user_id": request.user_id, "role": request.role},
+        )
         raise HTTPException(status_code=409, detail="Team member already assigned to this hostel")
 
     team_member = {
@@ -134,26 +199,55 @@ def assign_hostel_team(hostel_id: str, request: HostelAssignTeamRequest, current
         "attendance": request.attendance
     }
     hostel_collection.update_one({"hostel_id": hostel_id}, {"$push": {"hostel_team": team_member}})
-    log_audit(current_user, "ASSIGN_HOSTEL_TEAM", hostel_id, {"team_user_id": request.user_id, "role": request.role})
+    log_audit(current_user, "ASSIGN_HOSTEL_TEAM", hostel_id, {
+        "team_user_id": request.user_id, "role": request.role,
+        # Whether this member can actually scan on arrival. A guard assigned with
+        # `attendance=False` is on the roster and refused at the door, which looks
+        # identical to a broken scanner from where they are standing.
+        "scanning_enabled": request.attendance,
+    })
+    if not request.attendance:
+        log_config.warning(
+            _log,
+            "hostel team member assigned with scanning disabled",
+            {
+                "hostel_id": hostel_id,
+                "team_user_id": request.user_id,
+                "role": request.role,
+                "reason": "assigned_without_scanning",
+            },
+        )
     return {"message": "Team member assigned"}
 
 @router.put("/{hostel_id}/team/{team_user_id}/toggle_scan")
 def toggle_hostel_scan(hostel_id: str, team_user_id: str, attendance: bool, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "toggle_scan")
 
-    hostel_collection.update_one(
+    result = hostel_collection.update_one(
         {"hostel_id": hostel_id, "hostel_team.user_id": team_user_id},
         {"$set": {"hostel_team.$.attendance": attendance}}
     )
+
+    if result.matched_count == 0:
+        log_integrity(
+            "scan toggle matched no hostel team member",
+            reason="team_member_not_found_on_toggle",
+            details={"hostel_id": hostel_id, "team_user_id": team_user_id, "requested_state": attendance},
+        )
+
+    # Previously unaudited, like its mess counterpart. Revoking a guard's scanning
+    # at a hostel door is the difference between residents getting in and not, so
+    # it belongs in the durable trail.
+    log_audit(current_user, "TOGGLE_HOSTEL_SCAN", hostel_id, {
+        "team_user_id": team_user_id,
+        "scanning_enabled": attendance,
+        "applied": result.matched_count > 0,
+    })
     return {"message": "Scanning toggled"}
 
 @router.post("/allocate")
 def allocate_hostels(current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "allocate")
 
     hostels = list(hostel_collection.find({"gender": {"$in": sorted(GENDERS)}}))
     gender_groups = {}
@@ -166,9 +260,46 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
     }))
     allocated = 0
 
+    # This filter matches `hostel_id: None` exactly, so a participant whose
+    # `accommodation.hostel_id` key is *absent* is invisible to this route and will
+    # never be placed by any number of re-runs. `mess.py` hit the same problem and
+    # fixed it with `$or … $exists`; this route did not. Counted and reported
+    # rather than silently corrected here, because widening the filter changes who
+    # gets placed and that is a behavioural decision, not instrumentation.
+    invisible = participants_collection.count_documents({
+        "accommodation.registered": True,
+        "accommodation.hostel_id": {"$exists": False},
+    })
+    if invisible:
+        log_config.warning(
+            _log,
+            f"{invisible} registered participant(s) are invisible to hostel allocation: "
+            "accommodation.hostel_id is absent rather than null",
+            {"reason": "candidates_excluded_by_null_filter", "excluded": invisible},
+        )
+
+    skipped_by_reason: Dict[str, int] = {}
+    log_config.info(
+        _log,
+        f"hostel allocation starting for {len(participants)} candidate(s)",
+        {
+            "candidates": len(participants),
+            "blocks": len(hostels),
+            "genders_available": sorted(gender_groups.keys()),
+            "beds_free": sum(
+                max(h.get("sharing", 1) * len(h.get("rooms") or []) - h.get("current_occupancy", 0), 0)
+                for h in hostels
+            ),
+        },
+    )
+
     for p in participants:
         gender = (p.get("profile", {}).get("gender") or "").lower()
         available_hostels = gender_groups.get(gender, [])
+        # Tracked per participant. The existing `placed` is scoped inside the hostel
+        # loop below, so after the loops there was no per-participant signal at all
+        # and an unplaced student left no trace.
+        seated_somewhere = False
         for h in available_hostels:
             placed = False
             for room_index, room in enumerate(h.get("rooms", [])):
@@ -202,11 +333,77 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
                     )
                     allocated += 1
                     placed = True
+                    seated_somewhere = True
+                    log_config.debug(
+                        _log,
+                        "hostel bed assigned",
+                        {
+                            "participant_id": participant_id,
+                            "hostel_id": h["hostel_id"],
+                            "room": room["room_number"],
+                            "gender": gender,
+                        },
+                    )
                     break
             if placed:
                 break
 
-    log_audit(current_user, "ALLOCATE_HOSTELS", None, {"allocated_count": allocated})
+        if not seated_somewhere:
+            # Three distinct causes, and they need different fixes. An unrecognised
+            # or missing `profile.gender` means the participant can never be placed
+            # until their profile is corrected — and a blank one silently matched no
+            # group at all, which was the most invisible of the three. No block for
+            # a recognised gender is an organisational gap. Exhausted capacity is a
+            # capacity decision.
+            if not gender:
+                reason = "missing_gender"
+            elif not available_hostels:
+                reason = "no_block_for_gender"
+            else:
+                reason = "capacity_exhausted"
+            skipped_by_reason[reason] = skipped_by_reason.get(reason, 0) + 1
+            log_denied(
+                current_user,
+                "HOSTEL_ALLOCATION_SKIPPED",
+                p.get("participant_id"),
+                reason=reason,
+                details={
+                    "gender": gender or None,
+                    "blocks_for_gender": [h.get("hostel_id") for h in available_hostels],
+                    "genders_available": sorted(gender_groups.keys()),
+                },
+            )
+
+    unplaceable = sum(skipped_by_reason.values())
+    log_batch(
+        current_user,
+        "ALLOCATE_HOSTELS",
+        None,
+        {
+            "allocated_count": allocated,
+            "candidates": len(participants),
+            "skipped_count": unplaceable,
+            "skipped_by_reason": skipped_by_reason,
+            "excluded_by_null_filter": invisible,
+            "beds_remaining": {
+                h.get("hostel_id"): max(
+                    h.get("sharing", 1) * len(h.get("rooms") or []) - h.get("current_occupancy", 0), 0
+                )
+                for h in hostels
+            },
+        },
+    )
+    if unplaceable:
+        log_config.warning(
+            _log,
+            f"hostel allocation left {unplaceable} of {len(participants)} candidate(s) unplaced",
+            {
+                "allocated": allocated,
+                "skipped": unplaceable,
+                "skipped_by_reason": skipped_by_reason,
+                "reason": "incomplete_allocation",
+            },
+        )
     return {"message": f"Allocated {allocated} participants to hostels"}
 
 @router.post("/pay")
@@ -222,15 +419,40 @@ def pay_hostel_fee(request: MockPaymentRequest, current_user: dict = Depends(get
     place them in a block, so it can be called in any order relative to those.
     """
     if "participant_id" not in current_user:
+        log_denied(
+            current_user, "HOSTEL_PAYMENT_DENIED", None,
+            reason="not_a_participant", details={"status": 400}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="Only participants can pay the hostel fee")
 
-    payment = simulate_payment("hostel", HOSTEL_FEE, request.method)
+    existing = (current_user.get("accommodation") or {}).get("payment")
+    payment = simulate_payment("hostel", HOSTEL_FEE, request.method, purpose_actor=current_user)
+
+    if existing:
+        # Same non-idempotency as the mess fee: the prior transaction id is about to
+        # be overwritten and this line is the only place it survives.
+        log_config.warning(
+            _log,
+            "hostel payment overwrote an existing payment record",
+            {
+                "participant_id": current_user.get("participant_id"),
+                "reason": "payment_overwritten",
+                "previous_transaction_id": existing.get("transaction_id"),
+                "previous_amount": existing.get("amount"),
+                "previous_paid_at": existing.get("paid_at"),
+                "new_transaction_id": payment["transaction_id"],
+            },
+        )
+
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"accommodation.payment": payment}}
     )
-    log_audit(current_user, "HOSTEL_PAYMENT", None, {
-        "transaction_id": payment["transaction_id"], "amount": payment["amount"]
+    log_audit(current_user, "HOSTEL_PAYMENT", current_user.get("participant_id"), {
+        "transaction_id": payment["transaction_id"], "amount": payment["amount"],
+        "method": payment.get("method"),
+        "replaced_transaction_id": (existing or {}).get("transaction_id"),
+        "registered_for_accommodation": bool((current_user.get("accommodation") or {}).get("registered")),
     })
     return payment
 
@@ -252,13 +474,27 @@ def register_for_accommodation(current_user: dict = Depends(get_current_particip
         raise HTTPException(status_code=400, detail="Only participants can request accommodation")
 
     if current_user.get("accommodation", {}).get("hostel_id"):
+        log_denied(
+            current_user, "ACCOMMODATION_REGISTER_DENIED",
+            current_user.get("participant_id"),
+            reason="already_allotted",
+            details={"hostel_id": current_user.get("accommodation", {}).get("hostel_id")},
+        )
         raise HTTPException(status_code=400, detail="Accommodation already allotted")
 
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"accommodation.registered": True}}
     )
-    log_audit(current_user, "ACCOMMODATION_REGISTER", None)
+    # `target_id` was None. The participant id goes in it, so a person's
+    # accommodation history — requested, cancelled, allotted, scanned in — reads as
+    # one filterable sequence. Whether their profile carries a usable gender is
+    # recorded here because that is what decides, minutes or days later, whether
+    # allocation can place them at all.
+    log_audit(current_user, "ACCOMMODATION_REGISTER", current_user.get("participant_id"), {
+        "gender": ((current_user.get("profile") or {}).get("gender") or "").lower() or None,
+        "already_paid": bool((current_user.get("accommodation") or {}).get("payment")),
+    })
     return {"message": "Accommodation requested"}
 
 
@@ -274,13 +510,21 @@ def cancel_accommodation_request(current_user: dict = Depends(get_current_partic
         raise HTTPException(status_code=400, detail="Only participants can cancel accommodation")
 
     if current_user.get("accommodation", {}).get("hostel_id"):
+        log_denied(
+            current_user, "ACCOMMODATION_CANCEL_DENIED",
+            current_user.get("participant_id"),
+            reason="already_allotted",
+            details={"hostel_id": current_user.get("accommodation", {}).get("hostel_id")},
+        )
         raise HTTPException(status_code=400, detail="Accommodation already allotted")
 
     participants_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"accommodation.registered": False}}
     )
-    log_audit(current_user, "ACCOMMODATION_CANCEL", None)
+    log_audit(current_user, "ACCOMMODATION_CANCEL", current_user.get("participant_id"), {
+        "was_registered": bool((current_user.get("accommodation") or {}).get("registered")),
+    })
     return {"message": "Accommodation request withdrawn"}
 
 
@@ -344,26 +588,71 @@ def my_hostel(current_user: dict = Depends(get_current_participant)):
 
 @router.post("/{hostel_id}/scan")
 def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_user: dict = Depends(get_current_staff)):
+    """
+    Record one participant crossing a hostel door.
+
+    The most safety-relevant endpoint in the system: `accommodation.inside` is what
+    answers "who is in this building" if the building ever has to be evacuated, and
+    `arrival` / `departure` are what answer "was this student ever here at all".
+
+    Every refusal is now recorded with the state that caused it. Before this, a
+    refused scan produced a 400 at the door and nothing else — so a resident
+    insisting they had been let out, against a record saying they were still
+    inside, was an argument with no evidence on either side. The state triple
+    (`inside`, `arrival`, `departure`) goes into every line precisely so that
+    argument becomes answerable.
+    """
     # action: "entry" | "exit" | "permanent_exit"
     if action not in ("entry", "exit", "permanent_exit"):
+        log_denied(
+            current_user, "HOSTEL_SCAN_DENIED", hostel_id,
+            reason="invalid_action", details={"action": action}, audit=False,
+        )
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'entry', 'exit', or 'permanent_exit'")
 
     user_id = current_user.get("paradox_id")
     hostel = hostel_collection.find_one({"hostel_id": hostel_id})
-    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
+    if not hostel:
+        log_denied(
+            current_user, "HOSTEL_SCAN_DENIED", hostel_id,
+            reason="hostel_not_found", details={"action": action},
+        )
+        raise HTTPException(status_code=404, detail="Hostel not found")
 
     team_member = next((m for m in hostel.get("hostel_team", []) if m.get("user_id") == user_id), None)
 
     if not team_member:
+        log_denied(
+            current_user, "HOSTEL_SCAN_DENIED", hostel_id,
+            reason="not_on_hostel_team",
+            details={"action": action, "team_size": len(hostel.get("hostel_team") or [])},
+        )
         raise HTTPException(status_code=403, detail="Not authorized to scan for this hostel")
 
     if not team_member.get("attendance"):
+        # The door-side symptom of `TOGGLE_HOSTEL_SCAN`, now joinable to it.
+        log_denied(
+            current_user, "HOSTEL_SCAN_DENIED", hostel_id,
+            reason="scanning_disabled_for_member",
+            details={"action": action, "member_role": team_member.get("role")},
+        )
         raise HTTPException(status_code=403, detail="Scanning disabled for you")
 
-    target_user, _ = verify_qr(request)
+    target_user, _ = verify_qr(request, actor=current_user, domain="hostel", target_id=hostel_id)
 
     user_acc = target_user.get("accommodation", {}) or {}
     if user_acc.get("hostel_id") != hostel_id:
+        log_scan(
+            current_user, "hostel", "HOSTEL_SCAN_DENIED", OUTCOME_DENIED,
+            participant_id=target_user.get("participant_id"),
+            target_id=hostel_id,
+            reason="not_allotted_to_this_hostel",
+            details={
+                "action": action,
+                "allotted_hostel_id": user_acc.get("hostel_id"),
+                "registered_for_accommodation": bool(user_acc.get("registered")),
+            },
+        )
         raise HTTPException(status_code=400, detail="Participant not allotted to this hostel")
 
     is_inside = user_acc.get("inside", False)
@@ -371,11 +660,38 @@ def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_use
     now = datetime.utcnow()
     update_fields = {}
 
+    # The state every line below reports, gathered once. This is what makes a
+    # refusal reconstructable: not just "already inside", but since when, and
+    # whether they had ever arrived or departed.
+    state = {
+        "action": action,
+        "inside": is_inside,
+        "arrival": user_acc.get("arrival"),
+        "departure": user_acc.get("departure"),
+        "room": user_acc.get("room"),
+    }
+
+    def refuse(reason: str, detail: str):
+        log_scan(
+            current_user, "hostel", "HOSTEL_SCAN_DENIED", OUTCOME_DENIED,
+            participant_id=target_user.get("participant_id"),
+            target_id=hostel_id,
+            reason=reason,
+            details=state,
+        )
+        raise HTTPException(status_code=400, detail=detail)
+
     if action == "entry":
         if has_departed:
-            raise HTTPException(status_code=400, detail="Participant has permanently departed and cannot re-enter")
+            # A participant who has formally left the fest being scanned back in.
+            # Either they returned and somebody needs to reverse the departure, or
+            # the permanent exit was scanned by mistake earlier. Both need the
+            # departure timestamp, which is in `state`.
+            refuse("already_permanently_departed", "Participant has permanently departed and cannot re-enter")
         if is_inside:
-            raise HTTPException(status_code=400, detail="Participant is already inside")
+            # Usually a double scan at the door; occasionally a missed exit, which
+            # means the building's occupancy figure is already wrong.
+            refuse("already_inside", "Participant is already inside")
         update_fields["accommodation.inside"] = True
         # Stamped only the first time, ever — a returning-next-year re-entry
         # scan (were it ever allowed) should not overwrite the original arrival.
@@ -383,21 +699,52 @@ def scan_hostel(hostel_id: str, request: ScanQRRequest, action: str, current_use
             update_fields["accommodation.arrival"] = now
     elif action == "exit":
         if not is_inside:
-            raise HTTPException(status_code=400, detail="Participant is already outside")
+            refuse("already_outside", "Participant is already outside")
         update_fields["accommodation.inside"] = False
     else:  # permanent_exit
         if has_departed:
-            raise HTTPException(status_code=400, detail="Participant has already permanently departed")
+            refuse("already_permanently_departed", "Participant has already permanently departed")
         if not is_inside:
-            raise HTTPException(status_code=400, detail="Participant must be inside the hostel to mark a permanent exit")
+            refuse("not_inside_for_permanent_exit", "Participant must be inside the hostel to mark a permanent exit")
         update_fields["accommodation.inside"] = False
         update_fields["accommodation.departure"] = now
 
-    participants_collection.update_one(
+    result = participants_collection.update_one(
         {"_id": target_user["_id"]},
         {"$set": update_fields}
     )
-    log_audit(current_user, f"HOSTEL_{action.upper()}", hostel_id, {"participant_id": target_user.get("participant_id")})
+    if result.modified_count == 0:
+        # The door reported success while the record did not move. For this
+        # endpoint that is worse than an error: the occupancy list is now wrong in
+        # a way nobody has been told about.
+        log_integrity(
+            "hostel scan did not change the participant's state",
+            reason="scan_write_not_applied",
+            details={
+                "participant_id": target_user.get("participant_id"),
+                "hostel_id": hostel_id,
+                "action": action,
+                "matched": result.matched_count,
+                "fields": sorted(update_fields.keys()),
+            },
+        )
+
+    log_scan(
+        current_user, "hostel", f"HOSTEL_{action.upper()}", OUTCOME_ALLOWED,
+        participant_id=target_user.get("participant_id"),
+        target_id=hostel_id,
+        # `participant_id` keeps its original place in `details` via `log_scan`, so
+        # existing per-entity views and exports are unaffected. The transition is
+        # additive: `inside_before` / `inside_after` is what lets a day's door
+        # traffic be replayed as a sequence rather than a set of point-in-time rows.
+        details={
+            "inside_before": is_inside,
+            "inside_after": update_fields.get("accommodation.inside"),
+            "arrival_stamped": "accommodation.arrival" in update_fields,
+            "departure_stamped": "accommodation.departure" in update_fields,
+            "room": user_acc.get("room"),
+        },
+    )
     return {"message": f"Scan successful, {action} allowed"}
 
 @router.delete("/{hostel_id}")
@@ -411,13 +758,34 @@ def delete_hostel(hostel_id: str, current_user: dict = Depends(get_current_staff
     `registered` is left untouched, since they still want a bed — just not this
     one — and should be eligible for a future `/allocate` run.
     """
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "delete")
 
     hostel = hostel_collection.find_one({"hostel_id": hostel_id})
     if not hostel:
+        log_denied(
+            current_user, "DELETE_HOSTEL_DENIED", hostel_id,
+            reason="hostel_not_found", details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Hostel not found")
+
+    # Captured before the cascade, because afterwards nothing links these people to
+    # this block. This is the most destructive operation in the file: it discards
+    # `arrival` and `departure` for everybody who lived here, which is the record of
+    # whether they were ever physically present at the fest. Those facts survive
+    # only in the `HOSTEL_ENTRY` / `HOSTEL_EXIT` audit rows and in this one.
+    affected = [
+        {
+            "participant_id": p.get("participant_id"),
+            "room": (p.get("accommodation") or {}).get("room"),
+            "was_inside": bool((p.get("accommodation") or {}).get("inside")),
+            "had_arrived": bool((p.get("accommodation") or {}).get("arrival")),
+        }
+        for p in participants_collection.find(
+            {"accommodation.hostel_id": hostel_id},
+            {"participant_id": 1, "accommodation.room": 1, "accommodation.inside": 1, "accommodation.arrival": 1},
+        )
+    ]
+    still_inside = [row["participant_id"] for row in affected if row["was_inside"]]
 
     result = participants_collection.update_many(
         {"accommodation.hostel_id": hostel_id},
@@ -430,17 +798,43 @@ def delete_hostel(hostel_id: str, current_user: dict = Depends(get_current_staff
         }}
     )
     hostel_collection.delete_one({"hostel_id": hostel_id})
-    log_audit(current_user, "DELETE_HOSTEL", hostel_id, {"participants_reset": result.modified_count})
+    log_audit(current_user, "DELETE_HOSTEL", hostel_id, {
+        "participants_reset": result.modified_count,
+        "name": hostel.get("name"),
+        "gender": hostel.get("gender"),
+        "capacity": hostel.get("capacity"),
+        "lifetime_occupancy": hostel.get("current_occupancy"),
+        "team_size": len(hostel.get("hostel_team") or []),
+        "residents": affected,
+        "were_inside_at_deletion": still_inside,
+    })
+    if still_inside:
+        # Deleting a block while people are recorded as being inside it means the
+        # occupancy record for those people is being erased while they are, as far
+        # as the system knew, physically in the building.
+        log_config.warning(
+            _log,
+            f"hostel {hostel_id} deleted while {len(still_inside)} resident(s) were recorded as inside",
+            {
+                "hostel_id": hostel_id,
+                "reason": "deleted_with_residents_inside",
+                "participants_inside": still_inside,
+                "destructive": True,
+            },
+        )
     return {"message": "Hostel deleted", "participants_reset": result.modified_count}
 
 @router.get("/{hostel_id}/statistics")
 def hostel_statistics(hostel_id: str, current_user: dict = Depends(get_current_staff)):
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "statistics")
 
     hostel = hostel_collection.find_one({"hostel_id": hostel_id})
-    if not hostel: raise HTTPException(status_code=404, detail="Hostel not found")
+    if not hostel:
+        log_denied(
+            current_user, "READ_HOSTEL_ROSTER_DENIED", hostel_id,
+            reason="hostel_not_found", details={"status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Hostel not found")
 
     participants = list(participants_collection.find({"accommodation.hostel_id": hostel_id}))
 
@@ -455,6 +849,16 @@ def hostel_statistics(hostel_id: str, current_user: dict = Depends(get_current_s
             "email": p.get("email"),
             "room": p.get("accommodation", {}).get("room")
         })
+
+    # A roster read, recorded like the mess equivalent. `currently_inside` also
+    # goes in, because this endpoint is the occupancy snapshot somebody would be
+    # asked to produce after an incident, and knowing what it said at the time it
+    # was read is part of that.
+    log_audit(current_user, "READ_HOSTEL_ROSTER", hostel_id, {
+        "returned": len(participants),
+        "currently_inside": inside_count,
+        "capacity": hostel.get("capacity"),
+    })
 
     return {
         "total_allocated": len(participants),

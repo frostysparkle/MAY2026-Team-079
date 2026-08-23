@@ -8,10 +8,13 @@ from database import (
     participants_collection,
     system_logs_collection,
 )
+import log_config
 from dependencies import get_current_staff
 from logger import email_local_part
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit"])
+
+_log = log_config.get_logger("paradox.audit.read")
 
 # Keys inside `details` that hold a person's id rather than a value. Resolved to
 # names alongside the actor, because a row like "assigned BT1755… as volunteer"
@@ -88,6 +91,23 @@ def _require_super_admin(current_user: dict) -> None:
     if not backend_teams_collection.find_one(
         {"paradox_id": user_id, "role": "super_admin"}
     ):
+        # Deliberately a file-only line rather than an audit row. An attempt to read
+        # the audit trail must not be able to write to the audit trail: otherwise
+        # anyone holding a staff token could inflate this collection at will, and the
+        # rows they generated would be indistinguishable from real activity. The file
+        # log records it instead, which is outside the reach of this endpoint.
+        log_config.warning(
+            _log,
+            "audit log access refused",
+            {
+                "reason": "not_super_admin",
+                "actor_id": user_id,
+                "actor_role": current_user.get("role"),
+                "resource": "audit_logs",
+                "status": 403,
+                "refusal": True,
+            },
+        )
         raise HTTPException(
             status_code=403, detail="Only Super Admins can view audit logs"
         )
@@ -352,6 +372,25 @@ def view_audit_logs(
                 referenced.add(value)
 
     names = _display_names(referenced)
+
+    # Who read the trail, and with which filters — to the file log only, for the same
+    # reason as the refusal above: recording audit reads *into* the audit collection
+    # would let a Super Admin refreshing a dashboard bury the actions the trail
+    # exists to show, and every read would generate a row that the next read
+    # reports.
+    log_config.info(
+        _log,
+        f"audit trail read: {len(logs)} row(s)",
+        {
+            "actor_id": current_user.get("paradox_id"),
+            "returned": len(logs),
+            "limit": limit,
+            "filter_target_id": target_id,
+            "filter_action": action,
+            "filter_since": since,
+            "filter_until": until,
+        },
+    )
 
     for log in logs:
         log["timestamp"] = _iso_utc(log.get("timestamp"))

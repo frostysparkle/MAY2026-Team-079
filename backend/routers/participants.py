@@ -6,10 +6,25 @@ import re
 
 from database import participants_collection, backend_teams_collection
 from dependencies import get_current_staff
-from logger import log_audit
+from logger import log_audit, log_denied
 from models import ParticipantAdminUpdateRequest
 
 router = APIRouter(prefix="/participants", tags=["Participants"])
+
+
+def _require_super_admin(current_user: dict, operation: str) -> str:
+    """The shared Super Admin gate for this router, with the refusal recorded."""
+    user_id = current_user.get("paradox_id")
+    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
+        log_denied(
+            current_user,
+            "AUTHZ_DENIED",
+            None,
+            reason="not_super_admin",
+            details={"operation": operation, "resource": "participants", "status": 403},
+        )
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return user_id
 
 
 @router.get("/statistics")
@@ -29,9 +44,7 @@ def participant_statistics(current_user: dict = Depends(get_current_staff)):
     which is what ``POST /auth/register`` creates — a real registration total
     rather than a count of people who happen to have turned up somewhere.
     """
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    user_id = _require_super_admin(current_user, "statistics")
 
     # Only the fields the counts below need. Password hashes, QR keypairs, and
     # every profile field that identifies somebody stay out of memory entirely.
@@ -150,9 +163,7 @@ def list_participants(
     ``q`` matches a name, email, or participant id, case-insensitively, so one
     search box finds a person however the admin knows them.
     """
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    user_id = _require_super_admin(current_user, "list")
 
     mongo_filter: dict = {}
     if house:
@@ -195,6 +206,24 @@ def list_participants(
         row["workshop_count"] = len(row.pop("workshops", None) or [])
         participants.append(row)
 
+    # Reading a roster is itself an auditable act. This response carries names,
+    # email addresses, phone numbers, and addresses for up to `limit` people, and
+    # the trail recorded who *changed* a participant while saying nothing about who
+    # *read* every participant. The search term is recorded because "who looked up
+    # this particular student, and when" is the question that follows a complaint
+    # about staff misusing the roster; the returned rows themselves are not.
+    log_audit(
+        current_user,
+        "READ_PARTICIPANT_ROSTER",
+        None,
+        {
+            "search": q,
+            "house": house,
+            "limit": limit,
+            "returned": len(participants),
+        },
+    )
+
     return {"count": len(participants), "participants": participants}
 
 
@@ -226,16 +255,29 @@ def update_participant(
     Every field is optional and only the ones present are written, so a form that
     fixes a phone number cannot blank an address.
     """
-    user_id = current_user.get("paradox_id")
-    if not backend_teams_collection.find_one({"paradox_id": user_id, "role": "super_admin"}):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _require_super_admin(current_user, "update")
 
     participant = participants_collection.find_one({"participant_id": participant_id})
     if not participant:
+        log_denied(
+            current_user,
+            "UPDATE_PARTICIPANT_DENIED",
+            participant_id,
+            reason="participant_not_found",
+            details={"status": 404},
+        )
         raise HTTPException(status_code=404, detail="Participant not found")
 
     supplied = request.model_dump(exclude_unset=True, exclude_none=True)
     if not supplied:
+        log_denied(
+            current_user,
+            "UPDATE_PARTICIPANT_DENIED",
+            participant_id,
+            reason="nothing_to_update",
+            details={"status": 400},
+            audit=False,
+        )
         raise HTTPException(status_code=400, detail="Nothing to update")
 
     update = {}

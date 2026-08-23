@@ -6,10 +6,14 @@ from functools import lru_cache
 from fastapi import APIRouter, HTTPException, Depends
 from openai import OpenAI, APIConnectionError, APIStatusError
 
+import log_config
 from models import EmbeddingRequest
 from dependencies import get_current_user
+from logger import log_denied
 
 router = APIRouter(prefix="/embeddings", tags=["Embeddings"])
+
+_log = log_config.get_logger("paradox.embeddings.api")
 
 # In-memory, per-process rate limit: at most one call per RATE_LIMIT_SECONDS
 # per authenticated user, keyed on the same id (paradox_id for staff,
@@ -37,6 +41,20 @@ def rate_limited_user(current_user: dict = Depends(get_current_user)) -> dict:
         last = _last_request_at.get(key)
         if last is not None and now - last < RATE_LIMIT_SECONDS:
             retry_after = int(RATE_LIMIT_SECONDS - (now - last)) + 1
+            # Audited rather than file-only: this endpoint is the one place a
+            # participant's token can drive an outbound call to a paid provider, so
+            # somebody hitting the limit repeatedly is worth being able to query.
+            log_denied(
+                current_user,
+                "EMBEDDINGS_RATE_LIMITED",
+                None,
+                reason="rate_limit_exceeded",
+                details={
+                    "retry_after_seconds": retry_after,
+                    "limit_seconds": RATE_LIMIT_SECONDS,
+                    "seconds_since_last": round(now - last, 2),
+                },
+            )
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded: at most 1 request per {RATE_LIMIT_SECONDS}s.",
@@ -103,11 +121,57 @@ def create_embedding(request: EmbeddingRequest, current_user: dict = Depends(rat
     if request.user is not None:
         kwargs["user"] = request.user
 
+    started = time.perf_counter()
     try:
         response = get_client().embeddings.create(**kwargs)
-    except APIConnectionError:
+    except APIConnectionError as exc:
+        # The provider host is recorded because this is the failure that looks like
+        # an application bug and never is: a wrong `EMBEDDINGS_BASE_URL`, a provider
+        # that is down, or a timeout (`APITimeoutError` is a subclass of this) all
+        # arrive here and produce the same 502.
+        log_config.error(
+            _log,
+            "embeddings provider unreachable",
+            {
+                "reason": "provider_unreachable",
+                "base_url": EMBEDDINGS_BASE_URL or "default",
+                "model": kwargs.get("model"),
+                "timeout_seconds": EMBEDDINGS_TIMEOUT,
+                "max_retries": EMBEDDINGS_MAX_RETRIES,
+                "error": type(exc).__name__,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "status": 502,
+            },
+            exc_info=True,
+        )
         raise HTTPException(status_code=502, detail="Could not reach the embeddings provider")
     except APIStatusError as e:
+        # The provider's own status code is passed through to the caller, so it is
+        # worth being explicit in the log about whose failure this is: a 401 here
+        # means *our* API key is wrong, not the caller's token.
+        log_config.error(
+            _log,
+            f"embeddings provider returned {e.status_code}",
+            {
+                "reason": "provider_error_status",
+                "provider_status": e.status_code,
+                "base_url": EMBEDDINGS_BASE_URL or "default",
+                "model": kwargs.get("model"),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+        )
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
+    log_config.info(
+        _log,
+        "embeddings request proxied",
+        {
+            "model": kwargs.get("model"),
+            "dimensions": kwargs.get("dimensions"),
+            # A count and a length, never the text: `input` is arbitrary
+            # caller-supplied content.
+            "inputs": len(request.input) if isinstance(request.input, list) else 1,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
     return response.model_dump()
