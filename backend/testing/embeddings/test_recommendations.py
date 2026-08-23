@@ -120,13 +120,23 @@ def test_events_query_persists_to_profile_and_is_reused_when_absent(monkeypatch,
 def test_workshops_are_all_returned_sorted_and_use_separate_embedding_slot(monkeypatch, sa_token, participant):
     # The backend's SequentialIDGenerator assigns the real workshop_id and
     # ignores whatever the client sent, so the slot_id (unique per test run) is
-    # what identifies this workshop afterwards.
-    slot_id = f"SLOT_REC_{random.randint(1000, 9999)}"
-    monkeypatch.setattr(workshops_router, "generate_embedding", lambda text: unit(2))
+    # what identifies this workshop afterwards. A workshop's slot_id must name
+    # an existing workshop_slots document (`D<day>S<shift>`) and its
+    # registration_start/registration_end are required — see WorkshopCreateRequest.
+    day = random.randint(1, 900)
+    slot_id = f"D{day}S1"
     headers = {"Authorization": f"Bearer {sa_token}"}
+    client.post("/workshop-slots", json={
+        "slot_id": slot_id,
+        "start_time": "2026-06-01T10:00:00Z",
+        "end_time": "2026-06-01T12:00:00Z",
+    }, headers=headers)
+    monkeypatch.setattr(workshops_router, "generate_embedding", lambda text: unit(2))
     client.post("/workshops", json={
-        "workshop_id": "ignored", "slot_id": slot_id, "name": "Rec Workshop",
+        "slot_id": slot_id, "name": "Rec Workshop",
         "description": "topic", "venue": "Hall", "capacity": 10, "instructions": "none",
+        "registration_start": "2026-01-01T00:00:00Z",
+        "registration_end": "2026-12-31T00:00:00Z",
     }, headers=headers)
     ws_id = workshops_collection.find_one({"slot_id": slot_id})["workshop_id"]
 
@@ -147,10 +157,18 @@ def test_workshops_are_all_returned_sorted_and_use_separate_embedding_slot(monke
 
 def test_no_query_and_no_saved_preference_still_returns_everything(sa_token, participant):
     headers = {"Authorization": f"Bearer {sa_token}"}
-    slot_id = f"SLOT_REC2_{random.randint(1000, 9999)}"
+    day = random.randint(1, 900)
+    slot_id = f"D{day}S2"
+    client.post("/workshop-slots", json={
+        "slot_id": slot_id,
+        "start_time": "2026-06-01T10:00:00Z",
+        "end_time": "2026-06-01T12:00:00Z",
+    }, headers=headers)
     client.post("/workshops", json={
-        "workshop_id": "ignored", "slot_id": slot_id, "name": "Rec Workshop 2",
+        "slot_id": slot_id, "name": "Rec Workshop 2",
         "description": "topic", "venue": "Hall", "capacity": 10, "instructions": "none",
+        "registration_start": "2026-01-01T00:00:00Z",
+        "registration_end": "2026-12-31T00:00:00Z",
     }, headers=headers)
     ws_id = workshops_collection.find_one({"slot_id": slot_id})["workshop_id"]
 
