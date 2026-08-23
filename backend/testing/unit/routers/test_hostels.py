@@ -495,51 +495,136 @@ def test_the_batch_summary_reports_the_candidate_and_placement_counts(
     assert details["skipped_count"] == 0
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: `beds_remaining` is computed from the in-memory hostel "
-           "documents read *before* the sweep, so `current_occupancy` is stale and "
-           "the figure counts beds this very run has just filled. A block with two "
-           "beds that just took one resident is reported as having two free.",
-)
 def test_beds_remaining_accounts_for_the_beds_just_filled(
     client, admin_headers, make_participant, audit
 ):
-    make_hostel(sharing=1, num_rooms=2)
+    """
+    It used to be computed from the occupancy read before the sweep, so it counted
+    beds the same run had just filled.
+    """
+    make_hostel(capacity=2, sharing=1, num_rooms=2)
     make_participant(profile={"gender": "male"},
                      accommodation={"registered": True, "hostel_id": None})
     client.post("/hostels/allocate", headers=admin_headers)
+
     assert audit.one("ALLOCATE_HOSTELS")["details"]["beds_remaining"] == {"HSTL111": 1}
+    assert stored()["current_occupancy"] == 1
 
 
-def test_beds_remaining_is_currently_computed_before_the_sweep(
-    client, admin_headers, make_participant, audit
+def test_beds_remaining_uses_the_same_ceiling_the_sweep_enforced(
+    client, admin_headers, audit
 ):
-    """Characterises today's behaviour, paired with the xfail above."""
-    make_hostel(sharing=1, num_rooms=2)
-    make_participant(profile={"gender": "male"},
-                     accommodation={"registered": True, "hostel_id": None})
+    """Capacity 2 across three double rooms is two places, not six."""
+    make_hostel(capacity=2, sharing=2, num_rooms=3)
     client.post("/hostels/allocate", headers=admin_headers)
     assert audit.one("ALLOCATE_HOSTELS")["details"]["beds_remaining"] == {"HSTL111": 2}
-    assert stored()["current_occupancy"] == 1, "the stored counter is correct"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: allocation never consults `hostel.capacity` — the real "
-           "ceiling is sharing × len(rooms). A block created with capacity 2, "
-           "sharing 2 and 3 rooms accepts 6 residents, and hostel_statistics then "
-           "reports current_occupancy above capacity.",
-)
+def test_beds_remaining_reaches_zero_on_a_full_block(
+    client, admin_headers, make_participant, audit
+):
+    make_hostel(capacity=1, sharing=1, num_rooms=1)
+    make_participant(profile={"gender": "male"},
+                     accommodation={"registered": True, "hostel_id": None})
+    client.post("/hostels/allocate", headers=admin_headers)
+    assert audit.one("ALLOCATE_HOSTELS")["details"]["beds_remaining"] == {"HSTL111": 0}
+
+
 def test_capacity_is_respected_during_allocation(client, admin_headers, make_participant):
+    """
+    Allocation used to consult only the room maths, so a block with more beds than its
+    stated capacity took everyone the rooms could hold — and `hostel_statistics` then
+    reported an occupancy above capacity, which cannot be true.
+    """
     make_hostel(capacity=2, sharing=2, num_rooms=3)
     for index in range(1, 5):
         make_participant(participant_id=f"DS23F00000{index}",
                          email=f"p{index}@ds.study.iitm.ac.in",
                          profile={"gender": "male"},
                          accommodation={"registered": True, "hostel_id": None})
+
+    response = client.post("/hostels/allocate", headers=admin_headers)
+
+    assert response.json() == {"message": "Allocated 2 participants to hostels"}
+    assert stored()["current_occupancy"] == 2
+
+
+def test_the_tighter_of_the_two_bounds_wins(client, admin_headers, make_participant):
+    """When the rooms are the tighter bound, they still are — capacity is not a floor."""
+    make_hostel(capacity=10, sharing=1, num_rooms=2)
+    for index in range(1, 5):
+        make_participant(participant_id=f"DS23F00000{index}",
+                         email=f"p{index}@ds.study.iitm.ac.in",
+                         profile={"gender": "male"},
+                         accommodation={"registered": True, "hostel_id": None})
     client.post("/hostels/allocate", headers=admin_headers)
-    assert stored()["current_occupancy"] <= 2
+    assert stored()["current_occupancy"] == 2
+
+
+def test_participants_turned_away_by_capacity_are_reported(
+    client, admin_headers, make_participant, audit
+):
+    make_hostel(capacity=1, sharing=2, num_rooms=2)
+    for index in (1, 2):
+        make_participant(participant_id=f"DS23F00000{index}",
+                         email=f"p{index}@ds.study.iitm.ac.in",
+                         profile={"gender": "male"},
+                         accommodation={"registered": True, "hostel_id": None})
+
+    client.post("/hostels/allocate", headers=admin_headers)
+
+    assert audit.one("HOSTEL_ALLOCATION_SKIPPED")["details"]["reason"] == "capacity_exhausted"
+    assert audit.one("ALLOCATE_HOSTELS")["details"]["skipped_by_reason"] == \
+        {"capacity_exhausted": 1}
+
+
+def test_a_full_block_is_skipped_in_favour_of_the_next_one(
+    client, admin_headers, make_participant
+):
+    """The ceiling moves the sweep on to another block rather than stopping it."""
+    make_hostel("HSTL111", capacity=1, sharing=2, num_rooms=2)
+    make_hostel("HSTL112", capacity=5, sharing=2, num_rooms=2)
+    people = [make_participant(participant_id=f"DS23F00000{i}",
+                               email=f"p{i}@ds.study.iitm.ac.in",
+                               profile={"gender": "male"},
+                               accommodation={"registered": True, "hostel_id": None})
+              for i in (1, 2)]
+
+    client.post("/hostels/allocate", headers=admin_headers)
+
+    placements = {accommodation(person)["hostel_id"] for person in people}
+    assert placements == {"HSTL111", "HSTL112"}
+
+
+def test_capacity_already_reached_before_the_sweep_is_honoured(
+    client, admin_headers, make_participant
+):
+    """A block at capacity from a previous run takes nobody new."""
+    make_hostel(capacity=1, sharing=2, num_rooms=2)
+    database.hostel_collection.update_one(
+        {"hostel_id": "HSTL111"}, {"$set": {"current_occupancy": 1}}
+    )
+    person = make_participant(profile={"gender": "male"},
+                              accommodation={"registered": True, "hostel_id": None})
+    client.post("/hostels/allocate", headers=admin_headers)
+    assert accommodation(person)["hostel_id"] is None
+
+
+def test_statistics_can_no_longer_report_occupancy_above_capacity(
+    client, admin_headers, make_participant
+):
+    """The invariant the ceiling exists to protect."""
+    make_hostel(capacity=2, sharing=2, num_rooms=3)
+    for index in range(1, 6):
+        make_participant(participant_id=f"DS23F00000{index}",
+                         email=f"p{index}@ds.study.iitm.ac.in",
+                         profile={"gender": "male"},
+                         accommodation={"registered": True, "hostel_id": None})
+    client.post("/hostels/allocate", headers=admin_headers)
+
+    body = client.get("/hostels/HSTL111/statistics", headers=admin_headers).json()
+    assert body["current_occupancy"] <= body["capacity"]
+    assert body["total_allocated"] <= body["capacity"]
 
 
 def test_only_super_admins_can_allocate(client, staff_headers):

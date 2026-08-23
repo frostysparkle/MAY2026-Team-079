@@ -345,28 +345,62 @@ def test_only_super_admins_can_assign_volunteers(client, staff_headers, workshop
     assert response.json()["detail"] == "Only Super Admins can assign volunteers"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: no existence check on the workshop, so assigning to a "
-           "typo'd id returns 200 while writing nothing at all.",
-)
 def test_assigning_to_an_unknown_workshop_is_refused(client, admin_headers):
-    assert client.post("/workshops/WKSP999/volunteers", json={"user_id": "OTWO1111"},
-                       headers=admin_headers).status_code == 404
+    """It used to answer 200 while writing nothing — the volunteer found out at the
+    desk, refused with "Not authorized to scan for this workshop"."""
+    response = client.post("/workshops/WKSP999/volunteers", json={"user_id": "OTWO1111"},
+                           headers=admin_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workshop not found"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: no dedupe, so the same volunteer can be pushed onto one "
-           "workshop's team repeatedly, producing duplicate entries that every "
-           "`next(...)` lookup then resolves arbitrarily.",
-)
 def test_assigning_the_same_volunteer_twice_is_refused(client, admin_headers, workshop):
+    """
+    Duplicates were not merely untidy: every membership lookup is a `next(...)` over
+    `workshop_team`, so a volunteer stood down by one entry could still scan through
+    another.
+    """
     client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
                 headers=admin_headers)
     second = client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
                          headers=admin_headers)
     assert second.status_code == 409
+    assert second.json()["detail"] == "Volunteer already assigned to this workshop"
+    assert len(stored()["workshop_team"]) == 1
+
+
+def test_a_refused_assignment_is_recorded(client, admin_headers, workshop, audit):
+    client.post("/workshops/WKSP999/volunteers", json={"user_id": "OTWO1111"},
+                headers=admin_headers)
+    client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
+                headers=admin_headers)
+    client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
+                headers=admin_headers)
+
+    reasons = [row["details"]["reason"]
+               for row in audit.rows("ASSIGN_WORKSHOP_VOLUNTEER_DENIED")]
+    assert reasons == ["workshop_not_found", "already_on_team"]
+
+
+def test_the_same_person_may_staff_two_different_workshops(client, admin_headers, slot):
+    """The uniqueness is per workshop, not global — one volunteer covers several
+    desks across a fest."""
+    database.workshops_collection.insert_many([
+        factories.workshop_doc("WKSP111", slot_id="D1S1"),
+        factories.workshop_doc("WKSP112", slot_id="D1S1"),
+    ])
+    for workshop_id in ("WKSP111", "WKSP112"):
+        assert client.post(f"/workshops/{workshop_id}/volunteers",
+                           json={"user_id": "OTWO1111"},
+                           headers=admin_headers).status_code == 200
+
+
+def test_a_removed_volunteer_can_be_assigned_again(client, admin_headers, workshop):
+    client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
+                headers=admin_headers)
+    client.delete("/workshops/WKSP111/volunteers/OTWO1111", headers=admin_headers)
+    assert client.post("/workshops/WKSP111/volunteers", json={"user_id": "OTWO1111"},
+                       headers=admin_headers).status_code == 200
 
 
 def test_assigning_a_volunteer_is_audited(client, admin_headers, workshop, audit):
@@ -378,26 +412,13 @@ def test_assigning_a_volunteer_is_audited(client, admin_headers, workshop, audit
     assert row["target_id"] == "WKSP111"
     assert row["details"]["volunteer_user_id"] == "OTWO1111"
     assert row["details"]["scanning_enabled"] is True
-    assert row["details"]["workshop_exists"] is True
 
 
-def test_assigning_to_an_unknown_workshop_is_recorded_as_an_integrity_event(
-    client, admin_headers, audit, caplog
-):
-    """
-    The missing existence check still answers 200 (see the xfail above), but the
-    no-op is no longer silent: the audit row says the workshop did not exist and
-    an ERROR line names the mismatch.
-    """
-    import logging
-
-    with caplog.at_level(logging.ERROR, logger="paradox.audit"):
-        client.post("/workshops/WKSP999/volunteers", json={"user_id": "OTWO1111"},
-                    headers=admin_headers)
-
-    assert audit.one("ASSIGN_WORKSHOP_VOLUNTEER")["details"]["workshop_exists"] is False
-    assert any(getattr(r, "reason", None) == "workshop_not_found_on_assign"
-               for r in caplog.records)
+def test_a_refused_assignment_writes_no_success_row(client, admin_headers, audit):
+    """The trail must not record a privilege grant that did not happen."""
+    client.post("/workshops/WKSP999/volunteers", json={"user_id": "OTWO1111"},
+                headers=admin_headers)
+    audit.none("ASSIGN_WORKSHOP_VOLUNTEER")
 
 
 def test_the_toggle_route_takes_its_arguments_as_query_parameters(

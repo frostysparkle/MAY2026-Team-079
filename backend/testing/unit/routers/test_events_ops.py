@@ -236,14 +236,9 @@ def test_moving_an_unregistered_participant_is_a_404(client, event, head, partic
     assert response.json()["detail"] == "Participant not registered for this event"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: an empty body writes null over both `team_id` and "
-           "`team_role`, silently removing the participant from their team, and "
-           "neither `team.max` nor the role vocabulary is checked — so a head can "
-           "overfill a team or invent a role.",
-)
 def test_an_empty_move_is_refused(client, team_event, head, make_participant):
+    """A request naming neither field asked for nothing; it used to null both and
+    drop the participant out of their team."""
     person = make_participant()
     register(team_event, person, team_id="TM1", team_role="leader")
 
@@ -252,14 +247,100 @@ def test_an_empty_move_is_refused(client, team_event, head, make_participant):
         json={}, headers=auth_headers(head),
     )
     assert response.status_code == 400
+    assert response.json()["detail"] == "Provide team_id or team_role to update"
+    entry = entry_for(person, team_event)
+    assert entry["team_id"] == "TM1"
+    assert entry["team_role"] == "leader"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: team.max is not enforced here, so an event head can place "
-           "more participants in a team than the event's own rules permit.",
-)
+def test_an_empty_move_writes_no_success_row(client, team_event, head, make_participant, audit):
+    person = make_participant()
+    register(team_event, person, team_id="TM1", team_role="leader")
+    client.put(f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+               json={}, headers=auth_headers(head))
+
+    audit.none("UPDATE_EVENT_TEAM")
+    assert audit.one("UPDATE_EVENT_TEAM_DENIED")["details"]["reason"] == \
+        "no_fields_supplied"
+
+
+def test_a_role_change_alone_leaves_the_team_alone(client, team_event, head, make_participant):
+    person = make_participant()
+    register(team_event, person, team_id="TM1", team_role="member")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_role": "leader"}, headers=auth_headers(head),
+    )
+    assert response.status_code == 200
+    entry = entry_for(person, team_event)
+    assert entry["team_id"] == "TM1"
+    assert entry["team_role"] == "leader"
+
+
+def test_a_move_alone_leaves_the_role_alone(client, team_event, head, make_participant):
+    person = make_participant()
+    register(team_event, person, team_id="TM1", team_role="leader")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_id": "TM2"}, headers=auth_headers(head),
+    )
+    assert response.status_code == 200
+    entry = entry_for(person, team_event)
+    assert entry["team_id"] == "TM2"
+    assert entry["team_role"] == "leader"
+
+
+def test_clearing_a_team_demotes_its_leader(client, team_event, head, make_participant, audit):
+    """An explicit null takes them off the team — and nobody holds a leadership
+    role over a team they are not on."""
+    person = make_participant()
+    register(team_event, person, team_id="TM1", team_role="leader")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_id": None}, headers=auth_headers(head),
+    )
+    assert response.status_code == 200
+    entry = entry_for(person, team_event)
+    assert entry["team_id"] is None
+    assert entry["team_role"] == "member"
+
+    row = audit.one("UPDATE_EVENT_TEAM")
+    assert row["details"]["team_cleared"] is True
+    assert row["details"]["previous_team_id"] == "TM1"
+
+
+def test_naming_a_leader_of_no_team_is_refused(client, team_event, head, make_participant):
+    person = make_participant()
+    register(team_event, person, team_id="TM1", team_role="leader")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_id": None, "team_role": "leader"}, headers=auth_headers(head),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == \
+        "A participant with no team cannot hold the team leader role"
+
+
+@pytest.mark.parametrize("role", ["captain", "Leader", "event_head", ""])
+def test_an_invented_role_is_refused(client, team_event, head, make_participant, role):
+    """`leader` and `member` are the whole vocabulary — registration writes no
+    others, so a hand-move may not introduce one."""
+    person = make_participant()
+    register(team_event, person, team_id="TM1")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_id": "TM1", "team_role": role}, headers=auth_headers(head),
+    )
+    assert response.status_code == 422
+
+
 def test_overfilling_a_team_by_hand_is_refused(client, team_event, head, make_participant):
+    """`team.max` is 2 for this event, and two people already hold TM1."""
     people = [make_participant(participant_id=f"DS23F00000{i}",
                                email=f"p{i}@ds.study.iitm.ac.in") for i in range(1, 4)]
     for person in people:
@@ -270,6 +351,38 @@ def test_overfilling_a_team_by_hand_is_refused(client, team_event, head, make_pa
         json={"team_id": "TM1", "team_role": "member"}, headers=auth_headers(head),
     )
     assert response.status_code == 400
+    assert response.json()["detail"] == "This team is already full"
+
+
+def test_a_full_team_still_admits_the_person_already_on_it(
+    client, team_event, head, make_participant
+):
+    """The ceiling counts everyone *else*, so re-stating a member of a team that is
+    exactly full is not an overfill."""
+    people = [make_participant(participant_id=f"DS23F00000{i}",
+                               email=f"p{i}@ds.study.iitm.ac.in") for i in range(1, 3)]
+    for person in people:
+        register(team_event, person, team_id="TM1")
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{people[1]['participant_id']}",
+        json={"team_id": "TM1", "team_role": "leader"}, headers=auth_headers(head),
+    )
+    assert response.status_code == 200
+    assert entry_for(people[1], team_event)["team_role"] == "leader"
+
+
+def test_a_solo_event_admits_no_teams_by_hand(client, event, head, make_participant):
+    """`team.max` of 1 is refused at registration; the same rule holds here."""
+    person = make_participant()
+    register(event, person)
+
+    response = client.put(
+        f"/events/EVTEC1111/participant_teams/{person['participant_id']}",
+        json={"team_id": "TM1"}, headers=auth_headers(head),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "This event does not support team registration"
 
 
 # ===========================================================================

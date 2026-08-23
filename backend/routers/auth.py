@@ -60,6 +60,40 @@ def _log_failed_login(email: str, account_exists: bool, portal: str):
     )
 
 
+def normalise_email(email: str) -> str:
+    """
+    The canonical form of an address: stripped and lowercased.
+
+    An email address is identity here. `participant_id` is *derived* from it by
+    `generate_participant_id`, which lowercases before matching, and every roster,
+    audit row, and QR payload joins on that id. So two addresses differing only in
+    case are one person, and the system has to treat them as one.
+
+    It did not. The domain check lowercased, but the duplicate check compared the
+    raw string, so `A@ds.study.iitm.ac.in` registered happily alongside
+    `a@ds.study.iitm.ac.in` — and both derived the identical `participant_id`, with
+    no unique index anywhere to catch it. Every subsequent lookup by that id then
+    resolved to whichever document Mongo returned first.
+
+    Applied on the way in *and* on the way out: normalising only at registration
+    would lock out every account already stored with mixed case, because the login
+    lookups compare exactly.
+    """
+    return (email or "").strip().lower()
+
+
+def _email_filter(email: str) -> dict:
+    """
+    A Mongo filter matching this address whatever case it was stored in.
+
+    An anchored, escaped, case-insensitive regex rather than equality on the
+    normalised string: documents written before normalisation may hold any casing, and
+    those accounts must keep working. Anchored at both ends so `a@x.com` cannot match
+    `xa@x.com`, and escaped because an address legitimately contains `.` and `+`.
+    """
+    return {"email": {"$regex": f"^{re.escape(normalise_email(email))}$", "$options": "i"}}
+
+
 def generate_participant_id(email: str) -> str:
     """Extracts participant ID from IITM email. Ex: 23f3001726@ds.study.iitm.ac.in -> DS23F3001726"""
     match = re.match(r'^([^@]+)@([a-z]+)\.study\.iitm\.ac\.in$', email.lower())
@@ -72,20 +106,25 @@ def generate_participant_id(email: str) -> str:
 
 @router.post("/register")
 def register(request: RegisterRequest):
+    email = normalise_email(request.email)
+
     # Enforce IITM email domain
-    if not re.match(r'^[^@]+@[a-z]+\.study\.iitm\.ac\.in$', request.email.lower()):
+    if not re.match(r'^[^@]+@[a-z]+\.study\.iitm\.ac\.in$', email):
         log_denied(
             None,
             "REGISTER_DENIED",
             None,
             reason="non_iitm_email",
-            details={"email_local": safe_email(request.email)},
+            details={"email_local": safe_email(email)},
             audit=False,
         )
         raise HTTPException(status_code=400, detail="Must be an @*.study.iitm.ac.in email")
 
-    existing_participant = participants_collection.find_one({"email": request.email})
-    existing_staff = backend_teams_collection.find_one({"email": request.email})
+    # Matched case-insensitively, so an address already stored in mixed case is still
+    # recognised as taken. `$options: "i"` rather than a plain equality test because
+    # existing documents were written before normalisation and are not all lowercase.
+    existing_participant = participants_collection.find_one(_email_filter(email))
+    existing_staff = backend_teams_collection.find_one(_email_filter(email))
     if existing_participant or existing_staff:
         # Which collection already holds the address is the useful part: a
         # participant hitting this is somebody who forgot they had signed up,
@@ -97,14 +136,14 @@ def register(request: RegisterRequest):
             None,
             reason="email_already_registered",
             details={
-                "email_local": safe_email(request.email),
+                "email_local": safe_email(email),
                 "existing_as": "participant" if existing_participant else "staff",
             },
             audit=False,
         )
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    participant_id = generate_participant_id(request.email)
+    participant_id = generate_participant_id(email)
     hashed_password = get_password_hash(request.password)
     
     # Generate unique asymmetric keys for the user
@@ -112,7 +151,9 @@ def register(request: RegisterRequest):
 
     new_user = {
         "participant_id": participant_id,
-        "email": request.email,
+        # Stored normalised, so the collection converges on one canonical form and a
+        # unique index on this field is meaningful.
+        "email": email,
         "password_hash": hashed_password,
         "profile": {},
         "mess": {
@@ -177,8 +218,9 @@ def register(request: RegisterRequest):
 
 @router.post("/login")
 def login(request: LoginRequest):
-    # Participant-only login
-    user = participants_collection.find_one({"email": request.email})
+    # Participant-only login. Matched case-insensitively, so a student who capitalises
+    # their address on a phone keyboard reaches their own account rather than a 401.
+    user = participants_collection.find_one(_email_filter(request.email))
 
     if not user or not verify_password(request.password, user.get("password_hash")):
         _log_failed_login(request.email, account_exists=bool(user), portal="participant")
@@ -232,7 +274,7 @@ def login(request: LoginRequest):
 @router.post("/admin/login")
 def admin_login(request: LoginRequest):
     # Backend staff-only login (Super Admins, Domain Admins, UHC, Event Heads, Volunteers, Guards, Employees)
-    user = backend_teams_collection.find_one({"email": request.email})
+    user = backend_teams_collection.find_one(_email_filter(request.email))
 
     if not user or not verify_password(request.password, user.get("password_hash")):
         _log_failed_login(request.email, account_exists=bool(user), portal="staff")

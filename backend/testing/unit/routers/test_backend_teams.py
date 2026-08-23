@@ -138,6 +138,48 @@ def test_a_staff_email_may_equal_a_participant_email_by_design(
     assert client.post("/backend_teams", json=STAFF, headers=admin_headers).status_code == 200
 
 
+@pytest.mark.slow
+def test_a_duplicate_staff_email_in_a_different_case_is_refused(
+    client, admin_headers, make_staff
+):
+    make_staff(paradox_id="OTHO9999", email="new.staff@ds.study.iitm.ac.in", role="other")
+    response = client.post("/backend_teams",
+                           json={**STAFF, "email": "New.Staff@DS.study.iitm.ac.in"},
+                           headers=admin_headers)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Email already registered in backend teams"
+
+
+@pytest.mark.slow
+def test_a_staff_address_is_stored_normalised(client, admin_headers):
+    client.post("/backend_teams", json={**STAFF, "email": "  New.Staff@DS.study.iitm.ac.in  "},
+                headers=admin_headers)
+    assert database.backend_teams_collection.find_one(
+        {"paradox_id": "OTHO1111"}
+    )["email"] == "new.staff@ds.study.iitm.ac.in"
+
+
+@pytest.mark.slow
+def test_the_participant_link_is_found_whatever_case_either_side_used(
+    client, admin_headers, make_participant
+):
+    """
+    The link between a staff account and its participant *is* the address, so a
+    case difference used to break the very lookup that privileged roles require.
+    """
+    person = make_participant(participant_id="DS23F000050",
+                              email="new.staff@ds.study.iitm.ac.in",
+                              profile={"full_name": "Linked Person"})
+    response = client.post("/backend_teams",
+                           json={**STAFF, "role": "admin",
+                                 "email": "New.Staff@DS.study.iitm.ac.in"},
+                           headers=admin_headers)
+    assert response.status_code == 200
+    document = database.backend_teams_collection.find_one({"email": "new.staff@ds.study.iitm.ac.in"})
+    assert document["admin_id"] == person["_id"]
+    assert document["name"] == "Linked Person"
+
+
 @pytest.mark.parametrize("role", ["super_admin", "admin", "volunteer"])
 def test_a_privileged_role_requires_a_registered_participant(client, admin_headers, role):
     response = client.post("/backend_teams", json={**STAFF, "role": role},

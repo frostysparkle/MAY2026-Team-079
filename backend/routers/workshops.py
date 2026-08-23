@@ -393,20 +393,35 @@ def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteer
         current_user, "assign_volunteer", "Only Super Admins can assign volunteers", workshop_id
     )
 
-    result = workshops_collection.update_one(
+    # The workshop has to exist. This used to be a bare `$push` with no lookup, so a
+    # mistyped id matched nothing, wrote nothing, and still answered "Volunteer
+    # assigned" — the volunteer only discovered it hours later, refused at the desk
+    # with "Not authorized to scan for this workshop".
+    workshop = workshops_collection.find_one({"workshop_id": workshop_id})
+    if not workshop:
+        log_denied(
+            current_user, "ASSIGN_WORKSHOP_VOLUNTEER_DENIED", workshop_id,
+            reason="workshop_not_found",
+            details={"volunteer_user_id": request.user_id, "role": request.role, "status": 404},
+        )
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    # And they must not already be on this team. Duplicates were not merely untidy:
+    # every membership lookup in this module is a `next(...)` over `workshop_team`,
+    # which resolves to whichever entry comes first — so a volunteer stood down by one
+    # entry could still scan through another.
+    if _workshop_team_member(workshop, request.user_id):
+        log_denied(
+            current_user, "ASSIGN_WORKSHOP_VOLUNTEER_DENIED", workshop_id,
+            reason="already_on_team",
+            details={"volunteer_user_id": request.user_id, "role": request.role, "status": 409},
+        )
+        raise HTTPException(status_code=409, detail="Volunteer already assigned to this workshop")
+
+    workshops_collection.update_one(
         {"workshop_id": workshop_id},
         {"$push": {"workshop_team": {"role": request.role, "user_id": request.user_id, "attendance": request.attendance}}}
     )
-
-    if result.matched_count == 0:
-        # No existence check on the workshop, so a mistyped id pushes nothing and
-        # still answers "Volunteer assigned". The volunteer then finds themselves
-        # refused with "Not authorized to scan for this workshop".
-        log_integrity(
-            "volunteer assignment matched no workshop",
-            reason="workshop_not_found_on_assign",
-            details={"workshop_id": workshop_id, "volunteer_user_id": request.user_id, "role": request.role},
-        )
 
     # Previously unaudited. Who may scan a workshop's door is a privilege
     # decision, and it is now recorded alongside the removals
@@ -415,7 +430,6 @@ def assign_workshop_volunteer(workshop_id: str, request: WorkshopAssignVolunteer
         "volunteer_user_id": request.user_id,
         "role": request.role,
         "scanning_enabled": request.attendance,
-        "workshop_exists": result.matched_count > 0,
     })
     return {"message": "Volunteer assigned"}
 

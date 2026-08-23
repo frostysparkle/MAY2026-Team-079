@@ -350,31 +350,89 @@ def test_the_team_path_is_not_captured_as_a_query_id(client, admin_headers):
     assert response.status_code == 404
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: any status other than 'resolved' writes resolved_at=None, "
-           "so resolve -> reopen -> resolve loses the first resolution time. The "
-           "field is the only record of when the work was finished.",
-)
 def test_reopening_preserves_the_first_resolution_time(client, admin_headers, participant):
+    """
+    `resolved_at` is the only record of when the work was actually finished, so
+    reopening must not destroy it. `status` already says the query is open again; the
+    two fields together are the history.
+    """
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"status": "resolved"}, headers=admin_headers)
+    first = stored(query_id)["resolved_at"]
+    assert first is not None
+
+    client.patch(f"/queries/{query_id}", json={"status": "open"}, headers=admin_headers)
+    assert stored(query_id)["resolved_at"] == first
+    assert stored(query_id)["status"] == "open"
+
+
+def test_resolving_again_restamps_the_time(client, admin_headers, participant):
     query_id = raised(client, participant)
     client.patch(f"/queries/{query_id}", json={"status": "resolved"}, headers=admin_headers)
     first = stored(query_id)["resolved_at"]
     client.patch(f"/queries/{query_id}", json={"status": "open"}, headers=admin_headers)
-    assert stored(query_id)["resolved_at"] == first
+    client.patch(f"/queries/{query_id}", json={"status": "resolved"}, headers=admin_headers)
+    assert stored(query_id)["resolved_at"] >= first
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: `None` means 'not provided', so an assignment can never be "
-           "cleared through the API — a query assigned to somebody who has left the "
-           "fest stays assigned to them forever.",
-)
+def test_an_unresolved_query_has_no_resolution_time(client, admin_headers, participant):
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"status": "assigned"}, headers=admin_headers)
+    assert stored(query_id)["resolved_at"] is None
+
+
 def test_an_assignment_can_be_cleared(client, admin_headers, participant):
+    """
+    An explicit null releases the query. Previously indistinguishable from "field
+    omitted", so a query handed to somebody who left the fest stayed theirs forever.
+    """
     query_id = raised(client, participant)
     client.patch(f"/queries/{query_id}", json={"assigned_to": "OTUH1111"}, headers=admin_headers)
-    client.patch(f"/queries/{query_id}", json={"assigned_to": None}, headers=admin_headers)
+    assert stored(query_id)["assigned_to"] == "OTUH1111"
+
+    response = client.patch(f"/queries/{query_id}", json={"assigned_to": None},
+                            headers=admin_headers)
+    assert response.status_code == 200
     assert stored(query_id)["assigned_to"] is None
+
+
+def test_releasing_a_query_does_not_force_it_back_to_assigned(
+    client, admin_headers, participant
+):
+    """Clearing the owner implies nothing about the status — only handing it to
+    somebody does."""
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"assigned_to": "OTUH1111"}, headers=admin_headers)
+    client.patch(f"/queries/{query_id}", json={"assigned_to": None, "status": "open"},
+                 headers=admin_headers)
+    document = stored(query_id)
+    assert document["assigned_to"] is None
+    assert document["status"] == "open"
+
+
+def test_releasing_alone_leaves_the_status_untouched(client, admin_headers, participant):
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"assigned_to": "OTUH1111"}, headers=admin_headers)
+    assert stored(query_id)["status"] == "assigned"
+
+    client.patch(f"/queries/{query_id}", json={"assigned_to": None}, headers=admin_headers)
+    assert stored(query_id)["status"] == "assigned", "the caller did not ask to change it"
+
+
+def test_the_owning_team_label_can_also_be_cleared(client, admin_headers, participant):
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"assigned_team": "Ganga Block desk"},
+                 headers=admin_headers)
+    client.patch(f"/queries/{query_id}", json={"assigned_team": None}, headers=admin_headers)
+    assert stored(query_id)["assigned_team"] is None
+
+
+def test_omitting_a_field_still_leaves_it_alone(client, admin_headers, participant):
+    """The distinction the fix rests on: omitted is not the same as null."""
+    query_id = raised(client, participant)
+    client.patch(f"/queries/{query_id}", json={"assigned_to": "OTUH1111"}, headers=admin_headers)
+    client.patch(f"/queries/{query_id}", json={"status": "resolved"}, headers=admin_headers)
+    assert stored(query_id)["assigned_to"] == "OTUH1111"
 
 
 # ===========================================================================

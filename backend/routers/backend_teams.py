@@ -10,6 +10,10 @@ from models import BackendTeamCreateRequest, BackendTeamUpdateRequest
 from dependencies import get_current_staff
 from database import participants_collection, backend_teams_collection
 from log_redaction import safe_email
+# Email identity is defined in one place, by the module that derives `participant_id`
+# from an address, so the two collections cannot disagree about what counts as the
+# same person.
+from routers.auth import _email_filter, normalise_email
 from logger import log_audit, log_denied
 from security import get_password_hash
 from id_generator import BackendTeamIDGenerator
@@ -54,19 +58,26 @@ ADMIN_ID_REQUIRED_ROLES = {"super_admin", "admin", "volunteer"}
 def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = Depends(get_current_staff)):
     user_id = _require_super_admin(current_user, "create")
 
-    if backend_teams_collection.find_one({"email": request.email}):
+    # Staff accounts share one email namespace with participants, and the link between
+    # the two is the address itself — so the same case-insensitive identity rule has to
+    # apply here. Comparing raw strings meant a staff account could be created for
+    # `A@x` while `a@x` already existed, and the participant lookup below would then
+    # miss the very record the role requires it to find.
+    email = normalise_email(request.email)
+
+    if backend_teams_collection.find_one(_email_filter(email)):
         log_denied(
             current_user,
             "CREATE_STAFF_DENIED",
             None,
             reason="email_already_registered",
-            details={"email_local": safe_email(request.email), "role": request.role},
+            details={"email_local": safe_email(email), "role": request.role},
         )
         raise HTTPException(status_code=400, detail="Email already registered in backend teams")
         
     # Look up the participant document that corresponds to this email (the admin_id link per schema)
     participant_doc = participants_collection.find_one(
-        {"email": request.email}, {"_id": 1, "profile.full_name": 1}
+        _email_filter(email), {"_id": 1, "profile.full_name": 1}
     )
     admin_id_ref = participant_doc["_id"] if participant_doc else None
 
@@ -86,7 +97,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
             None,
             reason="role_requires_linked_participant",
             details={
-                "email_local": safe_email(request.email),
+                "email_local": safe_email(email),
                 "role": request.role,
                 "department": request.department,
             },
@@ -115,7 +126,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
                 already_linked.get("paradox_id"),
                 reason="participant_already_linked",
                 details={
-                    "email_local": safe_email(request.email),
+                    "email_local": safe_email(email),
                     "role": request.role,
                     "linked_to": already_linked.get("paradox_id"),
                     "linked_role": already_linked.get("role"),
@@ -138,7 +149,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
 
     new_team = {
         "paradox_id": paradox_id,
-        "email": request.email,
+        "email": email,
         "name": resolved_name,
         "password_hash": get_password_hash(request.password),
         "role": request.role,
@@ -161,7 +172,7 @@ def create_backend_team(request: BackendTeamCreateRequest, current_user: dict = 
             "role": request.role,
             "department": request.department,
             "designation": request.designation,
-            "email_local": safe_email(request.email),
+            "email_local": safe_email(email),
             "linked_participant": bool(admin_id_ref),
             "name_resolved_from": (
                 "request" if (request.name or "").strip() else ("participant" if linked_name else None)

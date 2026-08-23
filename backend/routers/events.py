@@ -62,7 +62,7 @@ from logger import (
     OUTCOME_ALLOWED, OUTCOME_DENIED, OUTCOME_DUPLICATE,
     log_audit, log_batch, log_denied, log_integrity, log_scan,
 )
-from typing import Optional, List
+from typing import Literal, Optional, List
 from datetime import datetime
 import random
 
@@ -1136,8 +1136,18 @@ def event_logs(event_id: str, current_user: dict = Depends(get_current_staff)):
 
 
 class TeamUpdateInput(BaseModel):
+    """
+    A partial update: a head may move a participant without restating their role,
+    or change the role without restating the team.
+
+    Both fields default to ``None``, so "absent" and "explicitly null" look the
+    same on the model — the route separates them with ``model_fields_set``
+    instead. Only ``team_id`` is nullable in the data: clearing it takes the
+    participant off their team, whereas a stored ``team_role`` is always one of
+    `models.PARTICIPANT_TEAM_ROLES` — "leader" or "member".
+    """
     team_id: Optional[str] = None
-    team_role: Optional[str] = None
+    team_role: Optional[Literal["leader", "member"]] = None
 
 
 @router.put("/{event_id}/participant_teams/{participant_id}")
@@ -1169,9 +1179,64 @@ def update_participant_team(event_id: str, participant_id: str, payload: TeamUpd
         {},
     )
 
+    def refuse(reason: str, detail: str) -> HTTPException:
+        log_denied(
+            current_user, "UPDATE_EVENT_TEAM_DENIED", event_id,
+            reason=reason,
+            details={"participant_id": participant_id, "status": 400},
+        )
+        return HTTPException(status_code=400, detail=detail)
+
+    # An empty body used to be an accepted request that wrote null over both
+    # fields, quietly dropping the participant out of their team — the caller
+    # asked for nothing and got a mutation. Absent fields are now left alone,
+    # and a request that names neither is refused rather than guessed at.
+    supplied = payload.model_fields_set
+    if not supplied:
+        raise refuse("no_fields_supplied", "Provide team_id or team_role to update")
+
+    clearing_team = "team_id" in supplied and payload.team_id is None
+
+    team_id = payload.team_id if "team_id" in supplied else previous.get("team_id")
+    if "team_role" in supplied:
+        team_role = payload.team_role
+    elif clearing_team:
+        # Off any team, they hold the role a solo registrant holds.
+        team_role = "member"
+    else:
+        team_role = previous.get("team_role")
+    # No stored registration has a null role, so neither may a moved one.
+    if team_role is None:
+        team_role = "member"
+    if team_id is None and team_role == "leader":
+        raise refuse(
+            "leader_without_team",
+            "A participant with no team cannot hold the team leader role",
+        )
+
+    # `team.max` is the event's own rule about how many may compete together;
+    # registration enforces it (`_resolve_registration_team`) and a hand-move
+    # has to as well, or a head can seat a team that the event's rules forbid.
+    # Counted excluding this participant, so re-stating someone's existing team
+    # is measured against the same ceiling as moving them in for the first time.
+    if team_id is not None:
+        team_rules = event.get("team") or {}
+        max_size = team_rules.get("max", 1)
+        if max_size <= 1:
+            raise refuse(
+                "event_has_no_teams",
+                "This event does not support team registration",
+            )
+        others = participants_collection.count_documents({
+            "participant_id": {"$ne": participant_id},
+            "events": {"$elemMatch": {"event_id": event["_id"], "team_id": team_id}},
+        })
+        if others + 1 > max_size:
+            raise refuse("team_full", "This team is already full")
+
     participants_collection.update_one(
         {"participant_id": participant_id, "events.event_id": event["_id"]},
-        {"$set": {"events.$.team_id": payload.team_id, "events.$.team_role": payload.team_role}}
+        {"$set": {"events.$.team_id": team_id, "events.$.team_role": team_role}}
     )
     # Previously unaudited: an Event Head could move anybody between teams, or clear
     # their team entirely, with no trace. In a house-versus-house event that is the
@@ -1179,11 +1244,11 @@ def update_participant_team(event_id: str, participant_id: str, payload: TeamUpd
     # both the old and the new team.
     log_audit(current_user, "UPDATE_EVENT_TEAM", event_id, {
         "participant_id": participant_id,
-        "team_id": payload.team_id,
-        "team_role": payload.team_role,
+        "team_id": team_id,
+        "team_role": team_role,
         "previous_team_id": previous.get("team_id"),
         "previous_team_role": previous.get("team_role"),
-        "team_cleared": payload.team_id is None,
+        "team_cleared": clearing_team,
     })
     return {"message": "Participant team updated"}
 

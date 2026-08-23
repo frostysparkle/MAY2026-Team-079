@@ -110,7 +110,16 @@ def clean_database():
     """
     def wipe():
         for name in database.db.list_collection_names():
-            database.db[name].delete_many({})
+            collection = database.db[name]
+            collection.delete_many({})
+            # Indexes are process state too, not just documents. `enforce_identity_indexes`
+            # creates unique indexes, and mongomock keeps them for the life of the client —
+            # so without this a test that ran the migration would make every later test
+            # that seeds a deliberate duplicate fail with a DuplicateKeyError it never
+            # asked for. `_id_` cannot be dropped and is not ours.
+            for index_name in list(collection.index_information()):
+                if index_name != "_id_":
+                    collection.drop_index(index_name)
 
     wipe()
     yield

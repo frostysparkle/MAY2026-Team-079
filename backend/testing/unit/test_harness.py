@@ -79,6 +79,23 @@ def test_isolation_second_sees_an_empty_collection():
     assert database.participants_collection.count_documents({}) == 0
 
 
+def test_isolation_covers_indexes_not_just_documents():
+    """
+    `enforce_identity_indexes` creates unique indexes, and mongomock keeps them for
+    the life of the client — so a test that ran the migration would otherwise make
+    every later test that seeds a deliberate duplicate fail.
+    """
+    database.participants_collection.create_index("email", unique=True, name="leaky")
+    assert "leaky" in database.participants_collection.index_information()
+
+
+def test_no_index_survives_from_the_previous_test():
+    # A freshly wiped collection reports either nothing at all or just `_id_`,
+    # depending on whether mongomock has materialised it yet. Neither may contain the
+    # index the previous test created.
+    assert set(database.participants_collection.index_information()) <= {"_id_"}
+
+
 def test_generators_are_reset_between_tests():
     from routers import backend_teams, events, hostels, workshops
 

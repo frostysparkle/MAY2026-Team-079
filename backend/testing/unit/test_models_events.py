@@ -12,6 +12,7 @@ from models import (
     ANNOUNCEMENT_PRIORITIES,
     EVENT_TEAM_ROLES,
     EVENT_TYPES,
+    PARTICIPANT_TEAM_ROLES,
     AnnouncementCreateRequest,
     EventCreateRequest,
     EventRegistrationInput,
@@ -45,6 +46,7 @@ VALID_EVENT = {
 def test_event_vocabularies():
     assert set(EVENT_TYPES) == {"technical", "culturals", "sports", "others"}
     assert set(EVENT_TEAM_ROLES) == {"event_head", "member", "volunteer"}
+    assert set(PARTICIPANT_TEAM_ROLES) == {"leader", "member"}
     assert set(ANNOUNCEMENT_PRIORITIES) == {"low", "mid", "high"}
 
 

@@ -249,6 +249,14 @@ def update_query(query_id: str, request: QueryUpdateRequest, current_user: dict 
     if not query:
         raise HTTPException(status_code=404, detail="Query not found")
 
+    # `model_fields_set` separates "left out of the request" from "sent as null" —
+    # the same distinction `PATCH /profile/complete` relies on. Guarding on
+    # `is not None` alone conflated the two, which made an assignment impossible to
+    # clear: a query handed to somebody who then left the fest stayed assigned to
+    # them forever, because the only way to express "nobody" was a null the route
+    # read as "unchanged".
+    sent = request.model_fields_set
+
     update: dict = {}
     if request.status is not None:
         if request.status not in STATUSES:
@@ -257,17 +265,27 @@ def update_query(query_id: str, request: QueryUpdateRequest, current_user: dict 
                 detail=f"Invalid status. Must be one of: {', '.join(sorted(STATUSES))}",
             )
         update["status"] = request.status
-        # Stamped here rather than left to the client, so "how long did that take"
-        # is answerable from the record alone. Cleared on reopen, because a
-        # resolved_at on an open query is worse than none.
-        update["resolved_at"] = datetime.utcnow() if request.status == "resolved" else None
-    if request.assigned_team is not None:
+        # Stamped when the work finishes, and left alone otherwise.
+        #
+        # It used to be overwritten with None on *any* non-resolved status, so
+        # resolve -> reopen -> resolve destroyed the first resolution time — and that
+        # field is the only record of when the work was actually done, which is what
+        # "how long did that take" is answered from. A resolved_at on a reopened query
+        # is not misleading: `status` already says it is open again, and the pair
+        # together are the history.
+        if request.status == "resolved":
+            update["resolved_at"] = datetime.utcnow()
+
+    if "assigned_team" in sent:
         update["assigned_team"] = request.assigned_team
-    if request.assigned_to is not None:
+    if "assigned_to" in sent:
         update["assigned_to"] = request.assigned_to
         # Handing a query to somebody is what "assigned" means. An explicit
         # status in the same request still wins, so resolve-and-assign works.
-        update.setdefault("status", "assigned")
+        # Releasing it (an explicit null) implies nothing — the status is whatever
+        # the caller says it is, or whatever it already was.
+        if request.assigned_to is not None:
+            update.setdefault("status", "assigned")
 
     if not update:
         raise HTTPException(status_code=400, detail="Nothing to update")

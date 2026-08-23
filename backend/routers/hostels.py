@@ -301,6 +301,22 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
         # and an unplaced student left no trace.
         seated_somewhere = False
         for h in available_hostels:
+            # `capacity` is a real ceiling, not decoration.
+            #
+            # This loop only ever consulted the room maths (`sharing` per room), so a
+            # block created with capacity 2, sharing 2 and three rooms accepted six
+            # residents — and `hostel_statistics` then reported `current_occupancy`
+            # above `capacity`, a figure that cannot be true. `_rooms_cover_capacity`
+            # on the create request only checks that the rooms can *hold* the stated
+            # capacity; it permits more beds than that, which is where the excess came
+            # from.
+            #
+            # Both bounds now apply, and the tighter one wins.
+            beds = h.get("sharing", 1) * len(h.get("rooms") or [])
+            ceiling = min(h.get("capacity", 0), beds)
+            if h.get("current_occupancy", 0) >= ceiling:
+                continue
+
             placed = False
             for room_index, room in enumerate(h.get("rooms", [])):
                 if len(room.get("occupants", [])) < h.get("sharing", 1):
@@ -320,8 +336,11 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
                     )
                     # Keep the in-memory copy in sync so the next participant in
                     # this same loop sees this room as filled without re-reading
-                    # the hostel document on every iteration.
+                    # the hostel document on every iteration. `current_occupancy`
+                    # is synced for the same reason: the capacity ceiling above
+                    # reads it, and a stale value would let the sweep overshoot.
                     room["occupants"].append(participant_id)
+                    h["current_occupancy"] = h.get("current_occupancy", 0) + 1
 
                     participants_collection.update_one(
                         {"_id": p["_id"]},
@@ -385,9 +404,19 @@ def allocate_hostels(current_user: dict = Depends(get_current_staff)):
             "skipped_count": unplaceable,
             "skipped_by_reason": skipped_by_reason,
             "excluded_by_null_filter": invisible,
+            # Places still fillable *after* this sweep, against the same ceiling the
+            # sweep itself enforced — `min(capacity, sharing × rooms)`.
+            #
+            # It used to be computed from the room maths alone and from the occupancy
+            # read *before* the loop ran, so it counted beds this very run had just
+            # filled: a two-bed block that had taken one resident reported two free.
+            # The in-memory `current_occupancy` is now kept in step as each bed is
+            # assigned, which is what makes this figure current.
             "beds_remaining": {
                 h.get("hostel_id"): max(
-                    h.get("sharing", 1) * len(h.get("rooms") or []) - h.get("current_occupancy", 0), 0
+                    min(h.get("capacity", 0), h.get("sharing", 1) * len(h.get("rooms") or []))
+                    - h.get("current_occupancy", 0),
+                    0,
                 )
                 for h in hostels
             },

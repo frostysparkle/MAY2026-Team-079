@@ -160,6 +160,13 @@ EVENT_TYPES = ("technical", "culturals", "sports", "others")
 # manage the team itself.
 EVENT_TEAM_ROLES = ("event_head", "member", "volunteer")
 
+# The roles a *participant* holds inside their own competing team. Distinct from
+# EVENT_TEAM_ROLES above, which is about the staff running the event.
+# `register_for_event` writes "leader" to whoever creates a team and "member" to
+# everyone else, solo registrants included — so those two values are the whole
+# vocabulary, and `PUT /events/{id}/participant_teams/{id}` is held to it.
+PARTICIPANT_TEAM_ROLES = ("leader", "member")
+
 # The only priorities an announcement may be published at.
 ANNOUNCEMENT_PRIORITIES = ("low", "mid", "high")
 

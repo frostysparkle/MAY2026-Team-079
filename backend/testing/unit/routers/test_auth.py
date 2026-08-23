@@ -178,20 +178,48 @@ def test_an_email_already_in_backend_teams_is_refused(client, make_staff):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=False,
-    reason="KNOWN DEFECT: the domain check lowercases but the duplicate check "
-           "compares `request.email` verbatim, so two accounts can be created for "
-           "the same address in different cases. Both derive the same "
-           "participant_id, and there is no unique index on either field, so every "
-           "subsequent lookup by participant_id is ambiguous.",
-)
 def test_the_same_address_in_a_different_case_is_a_duplicate(client):
+    """
+    Two casings are one person: `participant_id` is derived from the address with a
+    lowercasing match, so both would resolve to the same id and every later lookup by
+    that id would be ambiguous.
+    """
     assert client.post("/auth/register", json=REGISTRATION).status_code == 200
     second = client.post("/auth/register", json={
         **REGISTRATION, "email": REGISTRATION["email"].upper().replace("@DS", "@ds"),
     })
     assert second.status_code == 400
+    assert second.json()["detail"] == "Email already registered"
+    assert database.participants_collection.count_documents({}) == 1
+
+
+@pytest.mark.slow
+def test_an_address_is_stored_normalised(client):
+    """So the collection converges on one canonical form and a unique index on
+    `email` is meaningful."""
+    client.post("/auth/register", json={**REGISTRATION,
+                                        "email": "  23F100001@DS.Study.Iitm.Ac.In  "})
+    document = database.participants_collection.find_one({})
+    assert document["email"] == "23f100001@ds.study.iitm.ac.in"
+    assert document["participant_id"] == "DS23F100001"
+
+
+@pytest.mark.slow
+def test_registering_with_surrounding_whitespace_still_collides(client):
+    assert client.post("/auth/register", json=REGISTRATION).status_code == 200
+    assert client.post("/auth/register", json={
+        **REGISTRATION, "email": f"  {REGISTRATION['email']}  ",
+    }).status_code == 400
+
+
+def test_a_staff_address_in_a_different_case_is_also_a_duplicate(client, make_staff):
+    """The two collections share one email namespace."""
+    make_staff(email="23f100001@ds.study.iitm.ac.in", paradox_id="OTHO1111", role="other")
+    response = client.post("/auth/register", json={
+        **REGISTRATION, "email": "23F100001@ds.study.iitm.ac.in",
+    })
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Email already registered"
 
 
 # ---------------------------------------------------------------------------
@@ -262,11 +290,56 @@ def test_login_for_an_unknown_email_is_401_with_the_same_message(client):
     assert response.json()["detail"] == "Invalid credentials"
 
 
-def test_login_is_case_sensitive_on_the_email(client, participant, password):
+def test_login_is_case_insensitive_on_the_email(client, participant, password):
+    """
+    A student capitalising their address on a phone keyboard reaches their own
+    account. This has to hold on the read side too, not just at registration —
+    normalising only on write would lock out every account already stored in mixed
+    case.
+    """
     response = client.post("/auth/login", json={
         "email": participant["email"].upper(), "password": password,
     })
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert response.json()["id"] == participant["participant_id"]
+
+
+def test_login_tolerates_surrounding_whitespace(client, participant, password):
+    assert client.post("/auth/login", json={
+        "email": f"  {participant['email']}  ", "password": password,
+    }).status_code == 200
+
+
+def test_an_account_stored_in_mixed_case_can_still_sign_in(
+    client, make_participant, password
+):
+    """Documents written before normalisation must keep working."""
+    person = make_participant(email="23F100020@DS.study.iitm.ac.in",
+                              participant_id="DS23F100020")
+    assert client.post("/auth/login", json={
+        "email": "23f100020@ds.study.iitm.ac.in", "password": password,
+    }).status_code == 200
+    assert client.post("/auth/login", json={
+        "email": person["email"], "password": password,
+    }).status_code == 200
+
+
+def test_the_email_match_is_anchored_so_a_longer_address_does_not_collide(
+    client, make_participant, password
+):
+    """The lookup is a regex, so it must not match a superstring."""
+    make_participant(email="23f100021@ds.study.iitm.ac.in", participant_id="DS23F100021")
+    assert client.post("/auth/login", json={
+        "email": "x23f100021@ds.study.iitm.ac.in", "password": password,
+    }).status_code == 401
+
+
+def test_admin_login_is_case_insensitive(client, super_admin, password):
+    response = client.post("/auth/admin/login", json={
+        "email": super_admin["email"].upper(), "password": password,
+    })
+    assert response.status_code == 200
+    assert response.json()["id"] == super_admin["paradox_id"]
 
 
 def test_a_staff_address_cannot_log_in_as_a_participant(client, super_admin, password):
