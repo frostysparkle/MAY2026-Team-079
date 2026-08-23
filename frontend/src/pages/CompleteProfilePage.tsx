@@ -16,7 +16,7 @@ import { api, ApiClientError } from '@/api';
 import type { EmergencyContact, ProfileCompleteRequest } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { GENDER_OPTIONS, PROGRAMS, COURSE_STAGES } from '@/config/constants';
-import { HOUSES } from '@/config/houses';
+import { HOUSE_OPTIONS } from '@/config/houses';
 import { useAuthStore, currentParticipant } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
 import { AuthLayout } from '@/features/auth/AuthLayout';
@@ -36,7 +36,6 @@ import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
 import { cn } from '@/lib/cn';
 
-const HOUSE_OPTIONS = HOUSES.map((h) => ({ value: h, label: h }));
 const PROGRAM_OPTIONS = PROGRAMS.map((p) => ({ value: p, label: p }));
 const COURSE_STAGE_OPTIONS = COURSE_STAGES.map((s) => ({
   value: s,

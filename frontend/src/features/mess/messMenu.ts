@@ -26,6 +26,7 @@
 import type { MealSlot, Mess, MessMenu, MessMenuRequest } from '@/api/types';
 import { FEST_START_DATE } from '@/config/festCalendar';
 import { MESS_SLOT_WINDOWS } from '@/config/messSlots';
+import { messCuisineOf, messDietOf } from '@/config/constants';
 import { FEST_MENU, type CategoryMenu, type MenuCategory, type MenuDay } from './festMenuData';
 
 export type { MenuCategory, MenuDay, CategoryMenu };
@@ -63,34 +64,32 @@ export function currentMenuDay(now: Date = new Date()): number {
 /**
  * Which published menu a hall serves.
  *
- * Two axes decide it, and they are the two the hall document actually carries:
- * `preference` (veg | non_veg | jain) and `cuisines` (north_indian and/or
- * south_indian). A hall that declares both regions, or declares none, gets the
- * unified menu — that is exactly what "unified" is for on the published sheets.
+ * Decided from the hall's single stored `type` (e.g. `"north_indian__veg"`,
+ * `"jain"`) — the real backend field (`Mess.type`) — split into its cuisine and
+ * diet axes with `messDietOf`/`messCuisineOf`. A hall declaring no region (only
+ * `jain` has none) or, in principle, both gets the unified menu — that is
+ * exactly what "unified" is for on the published sheets.
  *
  * `jain` maps to the no-onion-no-garlic sheet. It is the closest published menu,
  * not a certified Jain one, which is why `menuCaveat` says so out loud rather
  * than letting the mapping imply a guarantee the kitchen has not given.
  */
-export function menuCategoryFor(
-  preference: string | undefined,
-  cuisines: readonly string[] = [],
-): MenuCategory {
-  const pref = (preference ?? '').toLowerCase();
-  if (pref === 'jain') return 'north_veg_no_onion_garlic';
+export function menuCategoryFor(type: string | undefined): MenuCategory {
+  const value = (type ?? '').toLowerCase();
+  if (value === 'jain') return 'north_veg_no_onion_garlic';
 
-  const nonVeg = pref === 'non_veg';
-  const south = cuisines.includes('south_indian');
-  const north = cuisines.includes('north_indian');
+  const diet = messDietOf(value);
+  const cuisine = messCuisineOf(value);
+  const nonVeg = diet === 'non_veg';
 
-  if (south && !north) return nonVeg ? 'south_non_veg' : 'south_veg';
-  if (north && !south) return nonVeg ? 'north_non_veg' : 'north_veg';
+  if (cuisine === 'south_indian') return nonVeg ? 'south_non_veg' : 'south_veg';
+  if (cuisine === 'north_indian') return nonVeg ? 'north_non_veg' : 'north_veg';
   return nonVeg ? 'unified_non_veg' : 'unified_veg';
 }
 
 /** The one thing the mapping cannot promise, said plainly, or null when there is nothing to warn about. */
-export function menuCaveat(preference: string | undefined): string | null {
-  return (preference ?? '').toLowerCase() === 'jain'
+export function menuCaveat(type: string | undefined): string | null {
+  return (type ?? '').toLowerCase() === 'jain'
     ? 'Jain halls are shown the no-onion-no-garlic menu, which is the closest sheet the campus kitchen publishes. Check with the hall for strict Jain requirements.'
     : null;
 }
@@ -282,10 +281,10 @@ export interface ResolvedMenu {
  * the first.
  */
 export function resolveMenu(
-  mess: Pick<Mess, 'preference' | 'cuisines'> | null,
+  mess: Pick<Mess, 'type'> | null,
   override: MenuOverride | null,
 ): ResolvedMenu {
-  const category = menuCategoryFor(mess?.preference, mess?.cuisines ?? []);
+  const category = menuCategoryFor(mess?.type);
   const base = FEST_MENU[category];
 
   const days: ResolvedDay[] = base.days.map((published, index) => {
@@ -334,7 +333,7 @@ export function resolveMenu(
     days,
     timings,
     note: override?.note?.trim() || null,
-    caveat: menuCaveat(mess?.preference),
+    caveat: menuCaveat(mess?.type),
     edited: changedTimings || changedDays || Boolean(override?.note?.trim()),
     updatedAt: override?.updated_at ?? null,
     updatedBy: override?.updated_by ?? null,

@@ -28,6 +28,7 @@ export function AiRecommendBar({
   loading,
   onSearch,
   onClear,
+  available = true,
 }: {
   /** "events" | "workshops" — drives the copy. */
   noun: string;
@@ -41,6 +42,15 @@ export function AiRecommendBar({
   onSearch: (query: string) => void;
   /** Drop the ranking and return to the normal list. */
   onClear: () => void;
+  /**
+   * Whether `POST /{events,workshops}/recommendations` actually exists on the
+   * backend right now. Neither route is currently implemented server-side —
+   * a call returns `405 Method Not Allowed` — so this defaults to `true` but
+   * is explicitly passed `false` by both callers rather than left to silently
+   * fail on first use. No client-side fallback is substituted for the missing
+   * endpoint; the bar simply says the feature isn't available yet.
+   */
+  available?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -58,13 +68,28 @@ export function AiRecommendBar({
     if (active) onClear();
   }
 
+  if (!available) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface-2/60 p-4 text-sm text-muted">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted"
+        >
+          <Sparkles size={17} strokeWidth={2.25} />
+        </span>
+        <p>
+          AI recommendations for {noun} aren&apos;t available yet — this feature isn&apos;t live on
+          the backend at the moment.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         'flex flex-col gap-3 rounded-2xl border p-4 transition-colors sm:flex-row sm:items-center sm:gap-4',
-        active
-          ? 'border-brand/30 bg-brand-50'
-          : 'border-line bg-surface shadow-card',
+        active ? 'border-brand/30 bg-brand-50' : 'border-line bg-surface shadow-card',
       )}
     >
       <div className="flex flex-1 items-center gap-3">

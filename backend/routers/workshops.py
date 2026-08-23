@@ -15,11 +15,12 @@ from models import WorkshopCreateRequest, WorkshopUpdateRequest, WorkshopAssignV
 # Imported on its own line so the line above stays byte-for-byte as it was; used
 # only by the workshop-desk routes at the foot of this file.
 from typing import List, Optional
-from models import WorkshopParticipantUpdateRequest
+from models import WorkshopParticipantUpdateRequest, RecommendationRequest
 from database import workshops_collection, workshop_slots_collection, participants_collection, backend_teams_collection, workshop_logs_collection
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
 from id_generator import SequentialIDGenerator
+from similarity import cosine_similarity
 
 generator = SequentialIDGenerator("WKSP")
 
@@ -227,6 +228,51 @@ def list_public_workshops():
         synced = _sync_registration_state(workshop)
         result.append({field: synced.get(field) for field in PUBLIC_WORKSHOP_FIELDS if field != "_id"})
     return result
+
+
+@router.post("/recommendations")
+def recommend_workshops(
+    request: RecommendationRequest = RecommendationRequest(),
+    current_user: dict = Depends(get_current_participant),
+):
+    """
+    The full workshop catalogue, re-ranked by cosine similarity to a query or
+    to this participant's saved preference embedding. Mirrors
+    `POST /events/recommendations` exactly, except it reads/writes
+    `embedding.workshop` instead of `embedding.event` — a separate slot on the
+    same participant document, so ranking workshops never disturbs whatever
+    was saved for events, and vice versa.
+
+    Nothing is filtered out: every workshop that exists is returned, only
+    reordered, most similar first. `query` omitted/blank reuses the saved
+    vector without calling `generate_embedding`; a participant with no saved
+    preference and no query gets back the zero vector's similarity (0.0
+    against everything, per `cosine_similarity`), which still returns the
+    full catalogue rather than erroring.
+
+    Declared before any `/{workshop_id}` route so "recommendations" is never
+    captured as a workshop id.
+    """
+    query = (request.query or "").strip()
+    if query:
+        vector = generate_embedding(query)
+        participants_collection.update_one(
+            {"_id": current_user["_id"]},
+            {"$set": {"embedding.workshop": vector}},
+        )
+    else:
+        vector = ((current_user.get("embedding") or {}).get("workshop")) or []
+
+    raw = list(workshops_collection.find({}, {"created_by": 0}))
+    ranked = []
+    for workshop in raw:
+        synced = _sync_registration_state(workshop)
+        synced.pop("_id", None)
+        synced.pop("registration_closed_by_system", None)
+        synced["similarity"] = cosine_similarity(vector, workshop.get("embedding") or [])
+        ranked.append(synced)
+    ranked.sort(key=lambda w: w["similarity"], reverse=True)
+    return ranked
 
 
 @router.get("/my_registrations")

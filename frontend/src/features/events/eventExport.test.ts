@@ -57,10 +57,14 @@ const EVENT: Event = {
   event_type: 'cultural',
   name: 'Battle of Bands',
   description: 'Live sets, four rounds.',
-  team: { min: 3, max: 6, house: true, allow_single_registration: false },
-  open: true,
+  team: { min: 3, max: 6, house_vs_house_event: true, allow_single_registration: false },
   prize_money: [{ position: 'Winner', amount: 10000 }],
-  registration: { start_time: '2026-05-17T10:00', end_time: '2026-06-01T23:59', capacity: '200' },
+  registration: {
+    start_time: '2026-05-17T10:00',
+    end_time: '2026-06-01T23:59',
+    capacity: '200',
+    is_open: true,
+  },
   schedule: [
     {
       name: 'Prelims',

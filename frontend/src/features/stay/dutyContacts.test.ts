@@ -32,7 +32,7 @@ function mess(overrides: Partial<Mess> = {}): Mess {
     mess_id: 'M3',
     name: 'Hall C',
     capacity: 500,
-    preference: 'veg',
+    type: 'north_indian__veg',
     ...overrides,
   };
 }
@@ -135,7 +135,8 @@ describe('coordinatorContact', () => {
   });
 
   it('is absent when the block has no coordinator, or nothing usable in one', () => {
-    // `HostelCreateRequest.coordinator` is a bare dict and nothing validates it.
+    // `hostel.coordinator` is a bare, untyped dict on the stored document —
+    // `POST /hostels` has no field to accept one at all.
     expect(coordinatorContact(undefined)).toBeNull();
     expect(coordinatorContact({})).toBeNull();
     expect(coordinatorContact({ name: '', phone: 'N/A' })).toBeNull();
@@ -156,7 +157,13 @@ describe('the directory', () => {
       hostel({
         coordinator: { name: 'Dr. Rao', phone: '9876543210' },
         hostel_team: [
-          { user_id: 'BT1', role: 'other', name: 'Meera R', phone: '9000000001', logging: true },
+          {
+            user_id: 'BT1',
+            role: 'hostel_volunteer',
+            name: 'Meera R',
+            phone: '9000000001',
+            attendance: true,
+          },
         ],
       }),
     ]);
@@ -172,7 +179,13 @@ describe('the directory', () => {
       hostel({
         coordinator: { name: 'Dr. Rao', phone: '+91 98765 43210' },
         hostel_team: [
-          { user_id: 'BT1', role: 'other', name: 'Dr. Rao', phone: '+919876543210', logging: true },
+          {
+            user_id: 'BT1',
+            role: 'hostel_volunteer',
+            name: 'Dr. Rao',
+            phone: '+919876543210',
+            attendance: true,
+          },
         ],
       }),
     ]);
@@ -184,7 +197,7 @@ describe('the directory', () => {
     expect(hostelDirectory([hostel()])).toEqual([]);
     expect(
       hostelDirectory([
-        hostel({ hostel_team: [{ user_id: null, role: 'volunteer', logging: false }] }),
+        hostel({ hostel_team: [{ user_id: null, role: 'hostel_volunteer', attendance: false }] }),
       ]),
     ).toEqual([]);
   });
@@ -192,8 +205,7 @@ describe('the directory', () => {
   it('lists mess halls with their dietary detail and no coordinator concept', () => {
     const [group] = messDirectory([
       mess({
-        preference: 'non_veg',
-        cuisines: ['south_indian'],
+        type: 'south_indian__non_veg',
         mess_team: [
           { user_id: 'BT2', role: 'other', name: 'Ravi K', phone: '9000000002', logging: true },
         ],
@@ -201,7 +213,7 @@ describe('the directory', () => {
     ]);
     expect(group.kind).toBe('mess');
     expect(group.coordinator).toBeNull();
-    expect(group.detail).toBe('non veg · south indian');
+    expect(group.detail).toBe('south indian · non veg');
   });
 
   it('sorts by name so the list is stable however the API ordered it', () => {
@@ -225,8 +237,20 @@ describe('searchDirectory', () => {
       name: 'Ganga Block',
       coordinator: { name: 'Dr. Rao', phone: '9000000001' },
       hostel_team: [
-        { user_id: 'BT1', role: 'other', name: 'Meera R', phone: '9000000002', logging: true },
-        { user_id: 'BT2', role: 'other', name: 'Arjun P', phone: '9000000003', logging: true },
+        {
+          user_id: 'BT1',
+          role: 'hostel_volunteer',
+          name: 'Meera R',
+          phone: '9000000002',
+          attendance: true,
+        },
+        {
+          user_id: 'BT2',
+          role: 'hostel_volunteer',
+          name: 'Arjun P',
+          phone: '9000000003',
+          attendance: true,
+        },
       ],
     }),
     hostel({

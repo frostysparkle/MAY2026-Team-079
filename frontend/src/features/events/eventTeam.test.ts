@@ -12,7 +12,7 @@ import {
 const TEAM = [
   { user_id: 'BT1', role: EVENT_HEAD_ROLE },
   { user_id: 'BT2', role: EVENT_VOLUNTEER_ROLE },
-  { user_id: 'BT3', role: 'event_member' },
+  { user_id: 'BT3', role: 'member' },
 ];
 
 describe('isEventHead', () => {
@@ -59,7 +59,7 @@ describe('eventHeads / eventTeamRoleOf', () => {
 describe('eventTeamRoleLabel', () => {
   it('labels the known vocabulary and passes anything else through readably', () => {
     expect(eventTeamRoleLabel('event_head')).toBe('Event Head');
-    expect(eventTeamRoleLabel('event_member')).toBe('Event Member');
+    expect(eventTeamRoleLabel('member')).toBe('Event Member');
     expect(eventTeamRoleLabel('volunteer')).toBe('Volunteer');
     // The backend stores `role` unvalidated, so an unknown value must still read.
     expect(eventTeamRoleLabel('stage_manager')).toBe('stage manager');

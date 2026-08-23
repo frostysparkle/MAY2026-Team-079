@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Wrench } from 'lucide-react';
+import { CalendarClock, Plus, Wrench } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Workshop } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
@@ -197,9 +197,18 @@ export default function AdminWorkshopsPage() {
           : `${total} workshop${total === 1 ? '' : 's'} · ${totalSeats} seats`
       }
       actions={
-        <Button onClick={() => navigate(ROUTES.adminWorkshopNew)} className="gap-1.5">
-          <Plus size={15} strokeWidth={2.5} /> New workshop
-        </Button>
+        <>
+          <Button
+            variant="secondary"
+            onClick={() => navigate(ROUTES.adminWorkshopSlots)}
+            className="gap-1.5"
+          >
+            <CalendarClock size={15} strokeWidth={2.25} /> Manage slots
+          </Button>
+          <Button onClick={() => navigate(ROUTES.adminWorkshopNew)} className="gap-1.5">
+            <Plus size={15} strokeWidth={2.5} /> New workshop
+          </Button>
+        </>
       }
     >
       {actions.error && (

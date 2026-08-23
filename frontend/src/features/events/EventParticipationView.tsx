@@ -133,9 +133,10 @@ export function EventParticipationView({
   const [teamFilter, setTeamFilter] = useState<'any' | 'teamed' | 'solo'>('any');
 
   const houseOptions = useMemo(
-    () => [...new Set(registrants.map((p) => p.house).filter((h): h is string => Boolean(h)))].sort(
-      (a, b) => a.localeCompare(b),
-    ),
+    () =>
+      [...new Set(registrants.map((p) => p.house).filter((h): h is string => Boolean(h)))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
     [registrants],
   );
 
@@ -187,8 +188,8 @@ export function EventParticipationView({
           {event && (
             <>
               <StatusBadge tone="neutral">{event.event_type}</StatusBadge>
-              <StatusBadge tone={event.open ? 'success' : 'neutral'}>
-                {event.open ? 'Registration open' : 'Registration closed'}
+              <StatusBadge tone={event.registration.is_open ? 'success' : 'neutral'}>
+                {event.registration.is_open ? 'Registration open' : 'Registration closed'}
               </StatusBadge>
             </>
           )}
@@ -365,7 +366,7 @@ export function EventParticipationView({
                   {
                     label: 'Team size',
                     value: event ? `${event.team.min}–${event.team.max}` : '—',
-                    note: event?.team.house ? 'house-only' : undefined,
+                    note: event?.team.house_vs_house_event ? 'house-only' : undefined,
                   },
                 ].map((figure) => (
                   <div key={figure.label} className="min-w-0">
@@ -430,7 +431,11 @@ export function EventParticipationView({
                   ]}
                 />
               </div>
-              <ViewToggle options={VIEW_OPTIONS} value={registrantView} onChange={setRegistrantView} />
+              <ViewToggle
+                options={VIEW_OPTIONS}
+                value={registrantView}
+                onChange={setRegistrantView}
+              />
             </div>
 
             {registrantFiltered && (

@@ -144,14 +144,16 @@ export interface Mess {
   mess_id: string;
   name: string;
   capacity: number;
-  /** Dietary designation: veg | non_veg | jain. Allocation groups on this. */
-  preference: string;
   /**
-   * Regional menus the hall serves, e.g. `['north_indian']` or both. Optional
-   * because halls created before the field existed have none stored, so the UI
-   * must treat "missing" as "not recorded" rather than as an empty menu.
+   * The hall's combined cuisine/diet designation — `"{cuisine}__{diet}"` (e.g.
+   * `"north_indian__veg"`) or the standalone `"jain"`. The single field the
+   * backend actually stores (`backend/routers/mess.py`'s `MessCreateRequest.type`,
+   * validated against `models.MESS_PREFERENCE_TYPES`) and the only one
+   * `POST /mess/allocate` groups on. There is no separate `preference`/`cuisines`
+   * pair on the backend document — see `config/constants.ts`'s `messDietOf` /
+   * `messCuisineOf` for splitting this back into its two axes for display.
    */
-  cuisines?: string[];
+  type: string;
   mess_team?: MessTeamMember[];
   /**
    * The hall's own menu, written by its team through `PUT /mess/{id}/menu`.
@@ -194,20 +196,33 @@ export interface MessMenuRequest {
 
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner';
 
+/**
+ * One (day, slot) entry off `GET /mess/my_mess`'s `slots` array —
+ * `backend/routers/mess.py`'s `my_mess`, one row per sitting actually on the
+ * hall's current menu, merged with this participant's own scan marker for it.
+ *
+ * This replaces a `MessDayEntry`/`MessSlotEntry` pair shaped as a per-day
+ * `{breakfast, lunch, dinner}` object with a `logged: boolean` — the backend
+ * has never returned that shape. The real response is this flat list, keyed by
+ * `day` (a `"day_<n>"` string, not a 1-based index) and `slot`, with `scanned`/
+ * `scanned_at` rather than `logged`.
+ */
 export interface MessSlotEntry {
-  logged: boolean;
-}
-
-export interface MessDayEntry {
-  breakfast: MessSlotEntry;
-  lunch: MessSlotEntry;
-  dinner: MessSlotEntry;
+  /** `"day_1"`, `"day_2"`, ... — matches the key the hall's own `menu` uses. */
+  day: string;
+  slot: MealSlot;
+  start_time: string | null;
+  end_time: string | null;
+  menu: string | null;
+  scanned: boolean;
+  scanned_at: string | null;
 }
 
 export interface MyMessResponse {
   allotted_mess: string | null;
   mess_details: Mess | null;
-  slots: MessDayEntry[];
+  /** Flat list, one entry per sitting on the hall's current menu. */
+  slots: MessSlotEntry[];
 }
 
 export interface MessScanResponse {
@@ -234,9 +249,15 @@ export interface MessCreateRequest {
   mess_id: string;
   name: string;
   capacity: number;
-  preference: string;
-  /** Omitted or empty records a hall with no regional menu declared. */
-  cuisines?: string[];
+  /** One of `config/constants.ts`'s `MESS_PREFERENCE_TYPES` — see `Mess.type`. */
+  type: string;
+}
+
+/** `PUT /mess/{id}` — every field optional, only what is sent is written. */
+export interface MessUpdateRequest {
+  name?: string;
+  capacity?: number;
+  type?: string;
 }
 
 export interface MessAssignTeamRequest {
@@ -250,10 +271,17 @@ export interface MessAssignTeamRequest {
 
 export interface HostelTeamMember {
   user_id: string | null;
-  role: 'volunteer' | 'other';
+  /** `hostel_volunteer | guard` — a different vocabulary from mess's `MessTeamMember.role`. */
+  role: 'hostel_volunteer' | 'guard';
   name?: string | null;
   phone?: string | null;
-  logging: boolean;
+  /**
+   * Whether this member may scan entries/exits — stored as `attendance` on a
+   * hostel's `hostel_team[]` (`backend/routers/hostels.py`), a different field
+   * name from mess's `mess_team[].logging`. Both mean the same thing; the
+   * backend simply named the two differently.
+   */
+  attendance: boolean;
 }
 
 export interface Hostel {
@@ -273,7 +301,13 @@ export interface Hostel {
 export interface MyHostelResponse {
   assigned_hostel: string | null;
   room: string | null;
-  logged_in: boolean;
+  /**
+   * Whether this participant is currently inside the block — flipped by
+   * `POST /hostels/{id}/scan?action=entry|exit`. The backend's real field name
+   * on `GET /hostels/my_hostel` (`backend/routers/hostels.py`); there is no
+   * `logged_in` field anywhere in the response.
+   */
+  inside: boolean;
   /**
    * Whether this participant has asked for accommodation. Distinct from
    * `assigned_hostel`: "never requested" and "requested, awaiting allocation"
@@ -299,19 +333,30 @@ export interface HostelStatisticsResponse {
   }[];
 }
 
+/**
+ * `POST /hostels` (`backend/routers/hostels.py`'s `HostelCreateRequest`).
+ *
+ * The backend generates `hostel_id` itself (`SequentialIDGenerator("HSTL")`) and
+ * has no `coordinator` field at all — a block's coordinator is not something
+ * this route can record. `sharing` (max occupants per room) and `num_rooms`
+ * (rooms to pre-generate) are both required: `num_rooms * sharing` must cover
+ * `capacity`, or the backend rejects the request with a 422.
+ */
 export interface HostelCreateRequest {
-  hostel_id: string;
   name: string;
   capacity: number;
   gender: string;
-  coordinator: Record<string, unknown>;
+  sharing: number;
+  num_rooms: number;
 }
 
 export interface HostelAssignTeamRequest {
-  user_id?: string;
-  role: 'volunteer' | 'other';
-  name?: string;
-  phone?: string;
+  /** Must reference an existing `backend_teams` member created with role `other`. */
+  user_id: string;
+  /** `hostel_volunteer | guard` — see `HostelTeamMember.role`. */
+  role: 'hostel_volunteer' | 'guard';
+  /** Whether this member may scan entries/exits from assignment. Defaults `true` server-side. */
+  attendance?: boolean;
 }
 
 /* ----------------------------------------------------------------- events --- */
@@ -319,7 +364,7 @@ export interface HostelAssignTeamRequest {
 export interface TeamRule {
   min: number;
   max: number;
-  house: boolean;
+  house_vs_house_event: boolean;
   allow_single_registration: boolean;
 }
 
@@ -347,9 +392,26 @@ export interface RegistrationField {
 
 export interface EventTeamMember {
   user_id: string;
-  role: 'event_head' | 'event_member' | 'volunteer' | string;
+  role: 'event_head' | 'member' | 'volunteer' | string;
   name?: string;
   phone?: string;
+}
+
+/**
+ * `start_time`/`end_time` are the backend's own columns; `allowed` is the
+ * Super Admin kill-switch (`RegistrationWindow.allowed`), independent of the
+ * time window. `is_open` is never sent — it is derived server-side on every
+ * read (`events._with_computed_registration`) as
+ * `allowed AND now within [start_time, end_time]`, so it is the only
+ * authoritative source for whether registration is actually open right now.
+ * There is no top-level `Event.open`; the backend never returns one.
+ */
+export interface EventRegistrationWindow {
+  start_time?: string;
+  end_time?: string;
+  allowed?: boolean;
+  /** Read-only. Attached by the backend on every response, never accepted on write. */
+  is_open?: boolean;
 }
 
 export interface Event {
@@ -359,9 +421,8 @@ export interface Event {
   description: string;
   poster?: string;
   team: TeamRule;
-  open: boolean;
   prize_money: PrizeMoney[];
-  registration: { start_time?: string; end_time?: string };
+  registration: EventRegistrationWindow;
   schedule: ScheduleRound[];
   registration_fields: RegistrationField[];
   event_team: EventTeamMember[];
@@ -374,8 +435,16 @@ export interface Event {
  */
 export type PublicEventRecord = Omit<Event, 'event_team' | 'registration_fields'>;
 
+/**
+ * `POST /events/{id}/register`. Exactly one of `team_name`/`team_id` — never
+ * both (`backend/models.py`'s `_create_xor_join` rejects that combination):
+ * leave both unset to register solo, set `team_name` to create a new team and
+ * become its leader, or set `team_id` to join a team that already exists.
+ */
 export interface EventRegistrationInput {
   team_name?: string;
+  /** Join an existing team by the id its leader was given when they created it. */
+  team_id?: string;
   registration_data?: Record<string, unknown>;
 }
 
@@ -484,14 +553,18 @@ export interface EventCreateRequest {
   poster?: string;
   team: TeamRule;
   prize_money?: PrizeMoney[];
-  registration: { start_time?: string; end_time?: string };
+  registration: EventRegistrationWindow;
   schedule?: ScheduleRound[];
   registration_fields?: RegistrationField[];
 }
 
-export type EventUpdateRequest = Partial<Omit<EventCreateRequest, 'event_id'>> & {
-  open?: boolean;
-};
+/**
+ * `PUT /events/{id}` has no `open` field — registration availability is
+ * changed by writing `registration.allowed` (the Super Admin kill-switch),
+ * merged onto the event's existing window server-side
+ * (`RegistrationWindowUpdate`). There is no separate top-level flag.
+ */
+export type EventUpdateRequest = Partial<Omit<EventCreateRequest, 'event_id'>>;
 
 /**
  * The body `POST /events/recommendations` and `POST /workshops/recommendations`
@@ -512,7 +585,43 @@ export type RecommendedEvent = Event & { similarity: number };
 
 export interface EventTeamAssignRequest {
   user_id: string;
-  role: 'event_head' | 'event_member' | 'volunteer';
+  role: 'event_head' | 'member' | 'volunteer';
+}
+
+/** `PATCH /events/{id}/team/{user_id}` — change an existing member's role. */
+export interface EventTeamRoleUpdateRequest {
+  role: 'event_head' | 'member' | 'volunteer';
+}
+
+/* ----------------------------------------------------- announcements --- */
+
+/** Mirrors `ANNOUNCEMENT_PRIORITIES` in `backend/models.py`. */
+export type AnnouncementPriority = 'low' | 'mid' | 'high';
+
+/** The body `POST /events/{id}/announcements` takes — Story 8.2. */
+export interface AnnouncementCreateRequest {
+  message: string;
+  priority?: AnnouncementPriority;
+}
+
+/**
+ * One published update, as stored on `event.announcements[]` and returned by
+ * both `POST` and `GET /events/{id}/announcements`.
+ *
+ * `created_at` is a naive UTC timestamp (`datetime.utcnow()`, no offset) —
+ * see `features/events/announcements.ts` for why that matters to parsing it.
+ */
+export interface Announcement {
+  announcement_id: string;
+  message: string;
+  priority: AnnouncementPriority;
+  created_by: string;
+  created_at: string;
+}
+
+export interface AnnouncementCreateResponse {
+  message: string;
+  announcement: Announcement;
 }
 
 export interface ParticipantTeamUpdateRequest {
@@ -532,11 +641,25 @@ export interface Workshop {
   workshop_id: string;
   slot_id: string;
   name: string;
+  /** Missing on a workshop whose seed data predates this field. */
+  description?: string | null;
   venue: string;
   capacity: number;
   instructions: string;
   registration_count: number;
   participant_count: number;
+  /** Denormalized from the slot named by `slot_id` — see `WorkshopSlot`. */
+  start_time?: string | null;
+  registration_start?: string | null;
+  registration_end?: string | null;
+  /**
+   * A stored, mutable flag — not computed fresh like an event's
+   * `registration.is_open`. The backend auto-closes it once, the first time it
+   * is checked after `registration_end` has passed, and an admin can push it
+   * back to `true` afterwards and have that override stick
+   * (`backend/routers/workshops.py`'s `_sync_registration_state`).
+   */
+  registration_open?: boolean | null;
   workshop_team?: WorkshopVolunteer[];
 }
 
@@ -559,14 +682,69 @@ export interface WorkshopCreateRequest {
    * `lib/serverGeneratedId.ts`.
    */
   workshop_id: string;
+  /** Must reference an existing `workshop_slots` document — see `WorkshopSlot`. */
   slot_id: string;
   name: string;
+  description: string;
   venue: string;
   capacity: number;
   instructions: string;
+  /** ISO 8601, e.g. `2026-06-13T10:00:00Z`. `registration_end` must be after `registration_start`. */
+  registration_start: string;
+  registration_end: string;
+  /** Defaults `true` server-side when omitted. */
+  registration_open?: boolean;
 }
 
-export type WorkshopUpdateRequest = Partial<Omit<WorkshopCreateRequest, 'workshop_id'>>;
+/**
+ * `PUT /workshops/{id}` — every field optional, only what is sent is written.
+ * `slot_id` is deliberately absent: a workshop's slot is fixed at creation
+ * because participants' bookings reference it (`backend/models.py`'s
+ * `WorkshopUpdateRequest`).
+ */
+export type WorkshopUpdateRequest = Partial<Omit<WorkshopCreateRequest, 'workshop_id' | 'slot_id'>>;
+
+/* ------------------------------------------------------- workshop slots --- */
+
+/**
+ * A workshop time block — `D<day>S<shift>` (e.g. `D1S1`) — created
+ * independently of any workshop and referenced by a workshop's `slot_id`
+ * (`backend/routers/workshop_slots.py`). `GET /workshop-slots` needs no token.
+ */
+export interface WorkshopSlot {
+  slot_id: string;
+  start_time: string;
+  end_time: string;
+}
+
+/** `POST /workshop-slots` — `slot_id` must match `^D\d+S\d+$`. */
+export interface WorkshopSlotCreateRequest {
+  slot_id: string;
+  start_time: string;
+  end_time: string;
+}
+
+/**
+ * `PUT /workshop-slots/{slot_id}` — every field optional. Editing `start_time`
+ * cascades onto every workshop currently referencing this slot, which is what
+ * shifts their scan windows too.
+ */
+export interface WorkshopSlotUpdateRequest {
+  start_time?: string;
+  end_time?: string;
+}
+
+export interface WorkshopSlotUpdateResponse {
+  message: string;
+  /** How many workshops' `start_time` were cascaded to match. */
+  workshops_updated: number;
+}
+
+export interface WorkshopSlotDeleteResponse {
+  message: string;
+  /** Every workshop scheduled against this slot is deleted along with it. */
+  workshops_deleted: number;
+}
 
 /**
  * A workshop as the recommendations endpoint returns it: every workshop that
@@ -695,6 +873,8 @@ export interface BackendTeamMember {
   role: string;
   department: string;
   designation: string;
+  /** Falls back to the linked participant's `full_name` at creation if omitted. */
+  name?: string | null;
   admin_id?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -706,11 +886,22 @@ export interface BackendTeamCreateRequest {
   role: string;
   department: string;
   designation: string;
+  /** Optional — falls back to the linked participant's name when omitted. */
+  name?: string;
 }
 
-export type BackendTeamUpdateRequest = Partial<
-  Pick<BackendTeamCreateRequest, 'role' | 'department' | 'designation'>
->;
+/**
+ * `PUT /backend_teams/{paradox_id}`. `role` and `department` are deliberately
+ * absent: both drive the `paradox_id` prefix assigned at creation and are
+ * immutable — the backend's real `BackendTeamUpdateRequest`
+ * (`backend/models.py`) has no fields for either, so sending them here would
+ * be silently dropped rather than applied. Changing either means deleting the
+ * account and creating a new one, not patching this one.
+ */
+export interface BackendTeamUpdateRequest {
+  designation?: string;
+  name?: string;
+}
 
 export interface BackendTeamCreateResponse {
   message: string;
@@ -874,7 +1065,8 @@ export interface ParticipantRecord {
     registered?: boolean;
     hostel_id?: string | null;
     room?: string | null;
-    logged_in?: boolean;
+    /** The stored document's real field name — see `MyHostelResponse.inside`. */
+    inside?: boolean;
   };
   event_count: number;
   workshop_count: number;

@@ -93,7 +93,7 @@ describe('formFrom', () => {
 describe('editableValue', () => {
   it('offers the known vocabulary for a select field', () => {
     const gender = EDITABLE_FIELDS.find((field) => field.key === 'gender')!;
-    expect(editableValue(gender, 'female')).toEqual(['male', 'female', 'other']);
+    expect(editableValue(gender, 'female')).toEqual(['male', 'female']);
   });
 
   it('keeps a stored value the vocabulary does not list', () => {
@@ -165,7 +165,7 @@ describe('standingOf', () => {
 
   it('reports placement and campus presence', () => {
     const placed = participant({
-      accommodation: { hostel_id: 'GANGA', room: '214', logged_in: true },
+      accommodation: { hostel_id: 'GANGA', room: '214', inside: true },
       mess: { mess_id: 'NILGIRI' },
     });
     expect(standingOf(placed)).toEqual({

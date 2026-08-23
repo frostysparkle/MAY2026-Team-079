@@ -13,14 +13,21 @@ mock layer or this database — the arrangement ``seed.py`` already uses for the
 hostel catalogue.
 
 Note that ``cuisines`` and ``preference`` are independent. ``preference`` is the
-dietary axis (``veg`` / ``non_veg`` / ``jain``) and is the only field
-``POST /mess/allocate`` groups on; ``cuisines`` records which regional menus the
-hall cooks and is presentation only.
+dietary axis (``veg`` / ``non_veg`` / ``jain``); ``cuisines`` records which
+regional menus the hall cooks. Neither is what the backend actually stores or
+allocates on though: ``POST /mess/allocate`` (`routers/mess.py`) groups halls
+on a hall's ``type`` field alone, a single value out of the closed
+``models.MESS_PREFERENCE_TYPES`` vocabulary (``"{cuisine}__{diet}"``, or bare
+``"jain"``). This script derives that ``type`` from each catalogue entry's
+``preference`` + ``cuisines`` and seeds it alongside them, so the two
+presentation fields keep displaying as before while allocation — which never
+reads ``preference``/``cuisines`` — has the field it actually looks at.
 
 Re-running is safe. Each hall is matched on its ``mess_id``, so a second run
-corrects catalogue fields in place instead of inserting a second copy, and
-``mess_team`` / ``created_at`` are written on first insert only — a re-run can
-never drop an assigned team or rewrite a hall's original creation time.
+corrects catalogue fields (name, capacity, preference, cuisines, type) in
+place instead of inserting a second copy, and ``mess_team`` / ``created_at``
+are written on first insert only — a re-run can never drop an assigned team or
+rewrite a hall's original creation time.
 
 Usage::
 
@@ -37,12 +44,15 @@ from datetime import datetime
 from pathlib import Path
 
 from database import mess_collection
+from models import MESS_PREFERENCE_TYPES as KNOWN_TYPES
 
 DEFAULT_DATASET = (
     Path(__file__).resolve().parent.parent / "frontend" / "src" / "data" / "paradoxMess.json"
 )
 
-# The catalogue facts kept in step with the dataset on every run.
+# The catalogue facts kept in step with the dataset on every run. `type` is
+# derived (see `_type_of` below), not read straight off the dataset record —
+# the dataset only carries `preference` + `cuisines`.
 CATALOGUE_FIELDS = ("mess_id", "name", "capacity", "preference", "cuisines")
 
 # Mirrors `MESS_CUISINES` in `frontend/src/config/constants.ts`. Validated here
@@ -52,6 +62,33 @@ KNOWN_CUISINES = ("north_indian", "south_indian")
 # never be allocated to, since `POST /mess/allocate` matches it exactly against
 # a participant's `profile.mess_preference`.
 KNOWN_PREFERENCES = ("veg", "non_veg", "jain")
+
+
+def _type_of(hall: dict) -> str:
+    """
+    The single `type` value `POST /mess/allocate` actually groups halls on
+    (`models.MESS_PREFERENCE_TYPES`), derived from this catalogue's
+    independent `preference` + `cuisines` pair.
+
+    `jain` carries no regional axis — a hall serving it is `type="jain"`
+    regardless of which cuisines it also cooks. Every other preference needs
+    exactly one cuisine to combine with, since `type` has no way to name two
+    regional menus for one diet; a hall wanting both would need two separate
+    `type`s (i.e. two hall records), which is a catalogue decision, not one
+    this script can make up on its own.
+    """
+    preference = hall["preference"]
+    if preference == "jain":
+        return "jain"
+
+    cuisines = hall["cuisines"]
+    if len(cuisines) != 1:
+        raise SystemExit(
+            f"{hall['mess_id']}: preference {preference!r} needs exactly one cuisine to "
+            f"combine into a `type`, got {cuisines!r} — split this into separate hall "
+            "records, one per cuisine"
+        )
+    return f"{cuisines[0]}__{preference}"
 
 
 def load_catalogue(dataset: Path = DEFAULT_DATASET) -> list[dict]:
@@ -79,6 +116,18 @@ def load_catalogue(dataset: Path = DEFAULT_DATASET) -> list[dict]:
                 f"expected any of {', '.join(KNOWN_CUISINES)}"
             )
 
+        # `type` is what `POST /mess/allocate` actually reads. Computed and
+        # validated here rather than left implicit, so a catalogue entry that
+        # cannot be expressed as a single closed-vocabulary `type` fails the
+        # seed run instead of silently producing a hall allocation can never
+        # match.
+        hall["type"] = _type_of(hall)
+        if hall["type"] not in KNOWN_TYPES:
+            raise SystemExit(
+                f"{hall['mess_id']}: derived type {hall['type']!r} is not one of "
+                f"{', '.join(sorted(KNOWN_TYPES))} — allocation would never match it"
+            )
+
     return catalogue
 
 
@@ -93,10 +142,10 @@ def seed_mess(
     Upsert the catalogue into ``collection`` and return a tally of what changed.
 
     Each document is handled in two halves: the catalogue fields (name, capacity,
-    preference, cuisines) are corrected if they have drifted, while the team and
-    creation time are seeded once and then left alone. A hall that already matches
-    is left completely untouched, so ``updated_at`` only moves when something
-    genuinely changed.
+    preference, cuisines, type) are corrected if they have drifted, while the team
+    and creation time are seeded once and then left alone. A hall that already
+    matches is left completely untouched, so ``updated_at`` only moves when
+    something genuinely changed.
     """
     if catalogue is None:
         catalogue = load_catalogue()

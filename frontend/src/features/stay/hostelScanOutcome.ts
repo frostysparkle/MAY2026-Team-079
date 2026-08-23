@@ -24,10 +24,20 @@
  * reporting rather than a wrong state.
  */
 
-export type HostelScanState = 'inside' | 'outside' | 'unknown';
+/** The three actions `POST /hostels/{id}/scan?action=` accepts. */
+export type HostelScanAction = 'entry' | 'exit' | 'permanent_exit';
+
+export type HostelScanState = 'inside' | 'outside' | 'departed' | 'unknown';
 
 export type HostelScanKind =
-  'logged' | 'already-inside' | 'already-outside' | 'not-allotted' | 'invalid-action' | 'unknown';
+  | 'logged'
+  | 'already-inside'
+  | 'already-outside'
+  | 'already-departed'
+  | 'must-be-inside-to-depart'
+  | 'not-allotted'
+  | 'invalid-action'
+  | 'unknown';
 
 export interface HostelScanOutcome {
   kind: HostelScanKind;
@@ -48,21 +58,25 @@ export interface HostelScanOutcome {
 
 /** A scan the backend accepted. */
 export function readHostelScanSuccess(
-  action: 'entry' | 'exit',
+  action: HostelScanAction,
   message: string,
 ): HostelScanOutcome {
+  const title =
+    action === 'entry' ? 'Now Inside' : action === 'exit' ? 'Now Outside' : 'Permanent Exit Logged';
+  const state: HostelScanState =
+    action === 'entry' ? 'inside' : action === 'exit' ? 'outside' : 'departed';
   return {
     kind: 'logged',
     tone: 'success',
-    title: action === 'entry' ? 'Now Inside' : 'Now Outside',
+    title,
     description: message.trim() || undefined,
-    state: action === 'entry' ? 'inside' : 'outside',
+    state,
   };
 }
 
 /** A scan the backend refused. */
 export function readHostelScanFailure(
-  action: 'entry' | 'exit',
+  action: HostelScanAction,
   message: string,
 ): HostelScanOutcome {
   const text = message.trim();
@@ -86,6 +100,34 @@ export function readHostelScanFailure(
       title: 'Already Outside',
       description:
         'They are already logged out of this block, so there was nothing to record. Switch to Entry if they are coming in.',
+      state: 'outside',
+    };
+  }
+
+  // Checked before the more general "already" match above would apply, and
+  // covers both refusals the backend raises against a departed participant:
+  // re-entering ("has permanently departed and cannot re-enter") and marking a
+  // second permanent exit ("has already permanently departed").
+  if (lower.includes('permanently departed')) {
+    return {
+      kind: 'already-departed',
+      tone: 'error',
+      title: 'Permanently Departed',
+      description:
+        action === 'entry'
+          ? 'This participant has already left the fest for good and cannot be scanned back in. If this is wrong, a Super Admin needs to correct their record.'
+          : 'This participant has already been logged as permanently departed — there is nothing more to record.',
+      state: 'departed',
+    };
+  }
+
+  if (lower.includes('must be inside the hostel')) {
+    return {
+      kind: 'must-be-inside-to-depart',
+      tone: 'warning',
+      title: 'Not Currently Inside',
+      description:
+        'A permanent exit can only be logged for somebody currently inside the block. Switch to Entry if they need to be let in first.',
       state: 'outside',
     };
   }

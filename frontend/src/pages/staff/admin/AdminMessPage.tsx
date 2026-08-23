@@ -193,18 +193,18 @@ export default function AdminMessPage() {
     const staffing = filters.values[TEAM_SPEC.key] ?? ANY;
 
     return inventory.rows.filter((row) => {
-      if (!filters.matches(TYPE_SPEC.key, row.type)) return false;
+      if (!filters.matches(TYPE_SPEC.key, row.diet)) return false;
       if (!filters.matches(STATUS_SPEC.key, row.status)) return false;
 
-      if (region === 'none' && row.cuisines.length > 0) return false;
-      if (region !== ANY && region !== 'none' && !row.cuisines.includes(region)) return false;
+      if (region === 'none' && row.cuisine !== null) return false;
+      if (region !== ANY && region !== 'none' && row.cuisine !== region) return false;
 
       if (staffing === 'staffed' && !row.staffed) return false;
       if (staffing === 'unstaffed' && row.staffed) return false;
       if (staffing === 'scanning' && !row.scanning) return false;
 
       if (!filters.needle) return true;
-      return `${row.name} ${row.id} ${row.typeLabel} ${row.cuisineLabels.join(' ')}`
+      return `${row.name} ${row.id} ${row.typeLabel} ${row.cuisineLabel ?? ''}`
         .toLowerCase()
         .includes(filters.needle);
     });

@@ -21,10 +21,10 @@ import {
 import { OCCUPANCY_STATUS, occupancyTone } from '@/features/occupancy';
 import { exportMessRoster } from '@/features/staff/analyticsExport';
 import {
-  FACILITY_TEAM_ROLES,
-  FACILITY_VOLUNTEER_ROLE,
-  facilityRoleLabel,
-  type FacilityTeamRole,
+  MESS_TEAM_ROLES,
+  MESS_VOLUNTEER_ROLE,
+  messRoleLabel,
+  type MessTeamRole,
 } from '@/features/stay/facilityTeam';
 import { type MessRow } from './messOccupancy';
 
@@ -52,11 +52,11 @@ export function MessDetailDialog({
   /** An action is in flight; disables the controls that would race it. */
   busy: boolean;
   onClose: () => void;
-  onAssignTeam: (userId: string, role: FacilityTeamRole) => void;
+  onAssignTeam: (userId: string, role: MessTeamRole) => void;
   onToggleScan: (userId: string, logging: boolean) => void;
 }) {
   const [teamUserId, setTeamUserId] = useState('');
-  const [teamRole, setTeamRole] = useState<FacilityTeamRole>(FACILITY_VOLUNTEER_ROLE);
+  const [teamRole, setTeamRole] = useState<MessTeamRole>(MESS_VOLUNTEER_ROLE);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -101,7 +101,7 @@ export function MessDetailDialog({
               <h2 id="mess-detail-title" className="text-lg font-black text-ink">
                 {row.name}
               </h2>
-              <StatusBadge tone={row.typeTone}>{row.typeLabel}</StatusBadge>
+              <StatusBadge tone={row.dietTone}>{row.dietLabel}</StatusBadge>
               {status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
             </div>
             <p className="mt-1 text-sm text-muted">
@@ -110,9 +110,7 @@ export function MessDetailDialog({
             {/* Spelled out rather than badged: this is the one place there is room
                 to say what the hall actually cooks. */}
             <p className="mt-1 text-sm text-muted">
-              {row.cuisineLabels.length > 0
-                ? `Serves ${row.cuisineLabels.join(' and ')}`
-                : 'No regional menu declared'}
+              {row.cuisineLabel ? `Serves ${row.cuisineLabel}` : 'No regional menu declared'}
             </p>
           </div>
           {row.percent !== null && (
@@ -165,7 +163,7 @@ export function MessDetailDialog({
                         {member.name ?? member.user_id}
                       </p>
                       <p className="truncate text-xs text-muted">
-                        {facilityRoleLabel(member.role)}
+                        {messRoleLabel(member.role)}
                         {member.phone ? ` · ${member.phone}` : ''}
                       </p>
                     </div>
@@ -196,9 +194,9 @@ export function MessDetailDialog({
               <Select
                 label="Role on this hall"
                 value={teamRole}
-                onChange={(e) => setTeamRole(e.target.value as FacilityTeamRole)}
-                options={FACILITY_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
-                hint={FACILITY_TEAM_ROLES.find((r) => r.value === teamRole)?.blurb}
+                onChange={(e) => setTeamRole(e.target.value as MessTeamRole)}
+                options={MESS_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                hint={MESS_TEAM_ROLES.find((r) => r.value === teamRole)?.blurb}
               />
               <Button
                 size="sm"

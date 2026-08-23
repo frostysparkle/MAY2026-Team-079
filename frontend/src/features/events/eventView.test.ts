@@ -16,8 +16,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     name: 'Hackathon 2026',
     description: 'Build something in 24 hours.',
     poster: '',
-    open: true,
-    team: { min: 2, max: 4, house: false, allow_single_registration: true },
+    team: { min: 2, max: 4, house_vs_house_event: false, allow_single_registration: true },
     prize_money: [{ position: 'Winner', amount: 40000 }],
     registration: writeEventRegistration({
       startTime: '2026-06-01T09:00',
@@ -48,7 +47,6 @@ function makePublicRecord(overrides: Partial<Event> = {}): PublicEventRecord {
     description,
     poster,
     team,
-    open,
     prize_money,
     registration,
     schedule,
@@ -60,7 +58,6 @@ function makePublicRecord(overrides: Partial<Event> = {}): PublicEventRecord {
     description,
     poster,
     team,
-    open,
     prize_money,
     registration,
     schedule,
@@ -107,7 +104,9 @@ describe('backendEventView', () => {
 
   it('collapses an equal team min and max to a single number', () => {
     const view = backendEventView(
-      makeEvent({ team: { min: 1, max: 1, house: false, allow_single_registration: true } }),
+      makeEvent({
+        team: { min: 1, max: 1, house_vs_house_event: false, allow_single_registration: true },
+      }),
     );
     expect(view!.meta).toContainEqual({ label: 'Team Size', value: '1' });
   });
@@ -209,9 +208,13 @@ describe('publicEventsForCategory', () => {
     const records = [
       makePublicRecord({ event_id: 'a', event_type: 'technical' }),
       makePublicRecord({ event_id: 'b', event_type: 'sports' }),
-      // `open` is the registration state, not a publication flag: a closed event
-      // still belongs on the public programme.
-      makePublicRecord({ event_id: 'c', event_type: 'technical', open: false }),
+      // `registration.is_open` is the registration state, not a publication
+      // flag: a closed event still belongs on the public programme.
+      makePublicRecord({
+        event_id: 'c',
+        event_type: 'technical',
+        registration: { ...writeEventRegistration({}), is_open: false },
+      }),
       makePublicRecord({ event_id: 'd', event_type: 'others' }),
     ];
     expect(publicEventsForCategory(records, 'technicals').map((v) => v.id)).toEqual(['a', 'c']);

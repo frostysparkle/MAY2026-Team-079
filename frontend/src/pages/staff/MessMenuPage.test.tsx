@@ -38,8 +38,7 @@ function makeMess(overrides: Partial<Mess> = {}): Mess {
     mess_id: MESS_ID,
     name: 'Nilgiri Mess',
     capacity: 400,
-    preference: 'veg',
-    cuisines: ['south_indian'],
+    type: 'south_indian__veg',
     mess_team: [{ user_id: VOLUNTEER, role: 'volunteer', logging: true }],
     ...overrides,
   };

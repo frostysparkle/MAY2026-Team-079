@@ -152,7 +152,7 @@ export default function EventsListPage() {
     );
   }
 
-  const openCount = events?.filter((e) => e.open).length ?? 0;
+  const openCount = events?.filter((e) => e.registration.is_open).length ?? 0;
 
   return (
     <FestivalScreen
@@ -182,6 +182,10 @@ export default function EventsListPage() {
           loading={recommendLoading}
           onSearch={handleRecommend}
           onClear={clearRecommendations}
+          // `POST /events/recommendations` is not implemented on the backend
+          // (405 Method Not Allowed) — see `AiRecommendBar`'s `available` prop.
+          // Disabled rather than left to fail silently on first tap.
+          available={false}
         />
       )}
 
@@ -234,7 +238,7 @@ export default function EventsListPage() {
                         Registered
                       </StatusBadge>
                     )}
-                    {!event.open && (
+                    {!event.registration.is_open && (
                       <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
                         Registration Closed
                       </StatusBadge>
@@ -274,7 +278,7 @@ export default function EventsListPage() {
                           Registered
                         </StatusBadge>
                       )}
-                      {!event.open && (
+                      {!event.registration.is_open && (
                         <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
                           Registration Closed
                         </StatusBadge>

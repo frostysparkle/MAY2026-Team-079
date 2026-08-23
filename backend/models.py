@@ -139,6 +139,20 @@ class MockPaymentRequest(BaseModel):
             raise ValueError(f"method must be one of {sorted(PAYMENT_METHODS)}")
         return v
 
+class RecommendationRequest(BaseModel):
+    """
+    `POST /events/recommendations` and `POST /workshops/recommendations`.
+
+    `query` is free text to embed and rank the catalogue against. Omitted or
+    null falls back to the participant's already-saved preference embedding
+    for that domain (`embedding.event` / `embedding.workshop` on their own
+    document) — set the first time either endpoint is called with a query, or
+    by `PATCH /profile/complete`'s `event_preferences`. Shared by both routers
+    rather than declared twice, since the shape is identical.
+    """
+    query: Optional[str] = None
+
+
 # QR Scanning
 class ScanQRRequest(BaseModel):
     participant_id: str

@@ -176,8 +176,8 @@ export default function AdminEventsPage() {
     return rows.filter((row) => {
       if (!filters.matches(CATEGORY_KEY, row.categoryKey)) return false;
 
-      if (status === 'open' && !row.event.open) return false;
-      if (status === 'closed' && row.event.open) return false;
+      if (status === 'open' && !row.event.registration.is_open) return false;
+      if (status === 'closed' && row.event.registration.is_open) return false;
 
       if (!filters.needle) return true;
       return row.haystack.includes(filters.needle);
@@ -202,7 +202,7 @@ export default function AdminEventsPage() {
   }
 
   const total = events?.length ?? 0;
-  const openCount = events?.filter((e) => e.open).length ?? 0;
+  const openCount = events?.filter((e) => e.registration.is_open).length ?? 0;
 
   return (
     <FestivalScreen
@@ -279,7 +279,7 @@ export default function AdminEventsPage() {
                       fallbackImage={section.image}
                       meta={`${event.schedule.length} round${event.schedule.length === 1 ? '' : 's'} · ${event.prize_money.length} prize${event.prize_money.length === 1 ? '' : 's'}`}
                       badge={
-                        !event.open && (
+                        !event.registration.is_open && (
                           <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
                             Closed
                           </StatusBadge>

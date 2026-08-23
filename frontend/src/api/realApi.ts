@@ -23,6 +23,8 @@ import type {
   EventCreateRequest,
   EventUpdateRequest,
   EventTeamAssignRequest,
+  EventTeamRoleUpdateRequest,
+  AnnouncementCreateRequest,
   ParticipantTeamUpdateRequest,
   RecommendationRequest,
   IssueCreateRequest,
@@ -33,6 +35,8 @@ import type {
   QueryReplyRequest,
   WorkshopCreateRequest,
   WorkshopUpdateRequest,
+  WorkshopSlotCreateRequest,
+  WorkshopSlotUpdateRequest,
   WorkshopAssignVolunteerRequest,
   WorkshopParticipantUpdateRequest,
   BackendTeamCreateRequest,
@@ -151,8 +155,8 @@ export const realApi: ApiClient = {
     request('/hostels', { method: 'POST', body: JSON.stringify(req) }),
   assignHostelTeam: (hostelId, req: HostelAssignTeamRequest) =>
     request(`/hostels/${hostelId}/team`, { method: 'POST', body: JSON.stringify(req) }),
-  toggleHostelScan: (hostelId, userId, logging) =>
-    request(`/hostels/${hostelId}/team/${userId}/toggle_scan${qs({ logging })}`, {
+  toggleHostelScan: (hostelId, userId, attendance) =>
+    request(`/hostels/${hostelId}/team/${userId}/toggle_scan${qs({ attendance })}`, {
       method: 'PUT',
     }),
   allocateHostels: () => request('/hostels/allocate', { method: 'POST' }),
@@ -176,6 +180,10 @@ export const realApi: ApiClient = {
   deleteEvent: (eventId) => request(`/events/${eventId}`, { method: 'DELETE' }),
   assignEventTeam: (eventId, req: EventTeamAssignRequest) =>
     request(`/events/${eventId}/team`, { method: 'POST', body: JSON.stringify(req) }),
+  updateEventTeamRole: (eventId, userId, req: EventTeamRoleUpdateRequest) =>
+    request(`/events/${eventId}/team/${userId}`, { method: 'PATCH', body: JSON.stringify(req) }),
+  removeEventTeamMember: (eventId, userId) =>
+    request(`/events/${eventId}/team/${userId}`, { method: 'DELETE' }),
   registerForEvent: (eventId, req?: EventRegistrationInput) =>
     request(`/events/${eventId}/register`, { method: 'POST', body: JSON.stringify(req ?? {}) }),
   editEventRegistration: (eventId, req) =>
@@ -193,10 +201,21 @@ export const realApi: ApiClient = {
   scanEvent: (eventId, body: ScanQRRequest) =>
     request(`/events/${eventId}/scan`, { method: 'POST', body: JSON.stringify(body) }),
   myDailyEventScans: (eventId) => request(`/events/${eventId}/my_daily_scans`),
+  createAnnouncement: (eventId, req: AnnouncementCreateRequest) =>
+    request(`/events/${eventId}/announcements`, { method: 'POST', body: JSON.stringify(req) }),
+  listAnnouncements: (eventId) => request(`/events/${eventId}/announcements`),
   eventCapacityCounts: (eventId) => request(`/events/${eventId}/capacity`),
   eventLogs: (eventId) => request(`/events/${eventId}/logs`),
   recommendEvents: (req: RecommendationRequest) =>
     request('/events/recommendations', { method: 'POST', body: JSON.stringify(req) }),
+
+  // ---- workshop slots ----
+  listWorkshopSlots: () => request('/workshop-slots'),
+  createWorkshopSlot: (req: WorkshopSlotCreateRequest) =>
+    request('/workshop-slots', { method: 'POST', body: JSON.stringify(req) }),
+  updateWorkshopSlot: (slotId, req: WorkshopSlotUpdateRequest) =>
+    request(`/workshop-slots/${slotId}`, { method: 'PUT', body: JSON.stringify(req) }),
+  deleteWorkshopSlot: (slotId) => request(`/workshop-slots/${slotId}`, { method: 'DELETE' }),
 
   // ---- workshops ----
   listPublicWorkshops: () => request('/workshops/public'),

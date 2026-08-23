@@ -79,8 +79,8 @@ export default function MyRegistrationsPage() {
     });
   }, [registrations, events]);
 
-  const open = entries.filter((entry) => entry.event.open);
-  const closed = entries.filter((entry) => !entry.event.open);
+  const open = entries.filter((entry) => entry.event.registration.is_open);
+  const closed = entries.filter((entry) => !entry.event.registration.is_open);
 
   // Chronological, so the workshop grid reads as an itinerary: by day, then
   // morning before afternoon. Undated bookings sort last rather than first.
@@ -177,7 +177,7 @@ function Group({ title, entries }: { title: string; entries: Entry[] }) {
                   <StatusBadge tone="success" className="shadow-card ring-1 ring-line">
                     Registered
                   </StatusBadge>
-                  {!event.open && (
+                  {!event.registration.is_open && (
                     <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
                       Registration Closed
                     </StatusBadge>

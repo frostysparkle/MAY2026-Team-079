@@ -6,7 +6,7 @@ import type { MyHostelResponse, MyMessResponse } from '@/api/types';
 const NO_HOSTEL: MyHostelResponse = {
   assigned_hostel: null,
   room: null,
-  logged_in: false,
+  inside: false,
   registered: false,
   volunteers: [],
 };
@@ -16,7 +16,7 @@ const REQUESTED_HOSTEL: MyHostelResponse = { ...NO_HOSTEL, registered: true };
 const ALLOTTED_HOSTEL: MyHostelResponse = {
   assigned_hostel: 'H-NIL',
   room: '104',
-  logged_in: true,
+  inside: true,
   registered: true,
   volunteers: [{ name: 'Rahul', phone: '9876543210' }],
 };

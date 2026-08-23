@@ -66,6 +66,10 @@ export interface EventRow {
   id: string;
   name: string;
   type: string;
+  /**
+   * `event.registration.is_open` — derived server-side on every read
+   * (`events._with_computed_registration`), never a stored or top-level field.
+   */
   open: boolean;
   phase: EventPhase;
   /** Registrations, or `null` when this event's participation call failed. */
@@ -176,7 +180,7 @@ export function buildEventRows(
       id: event.event_id,
       name: event.name,
       type: event.event_type,
-      open: event.open,
+      open: Boolean(event.registration.is_open),
       phase: eventPhase(event, now),
       registrations: stat ? stat.count : null,
       // Absent for UHC callers, so narrow rather than assert — the board is
@@ -514,7 +518,9 @@ export function buildStaffWorkload(
         entityId: block.hostel_id,
         entityName: block.name,
         role: member.role,
-        scanning: Boolean(member.logging),
+        // Hostels name this field `attendance`, not `logging` — see
+        // `HostelTeamMember` for why the two facility teams disagree on it.
+        scanning: Boolean(member.attendance),
       });
     }
   }

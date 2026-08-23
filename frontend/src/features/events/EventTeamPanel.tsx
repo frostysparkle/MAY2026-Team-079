@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Crown, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { Crown, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { BackendTeamMember, EventTeamMember } from '@/api/types';
 import {
   Button,
   Card,
+  ConfirmDialog,
   ResultBanner,
   SectionHeading,
   Select,
@@ -43,9 +44,11 @@ import {
  *     the same person twice creates a duplicate member. The picker therefore
  *     excludes anybody already on the team, and `assign()` refuses a duplicate id
  *     before it reaches the network.
- *   - There is no route that removes an event team member, and events have no
- *     per-member scanning switch. So unlike the workshop panel this one offers
- *     neither, and says so rather than showing a control that cannot work.
+ *   - Events have no per-member scanning switch — every team member can scan
+ *     attendance from the moment they are assigned, and that cannot be revoked
+ *     independently of the role itself. `PATCH .../team/{user_id}` changes a
+ *     member's role and `DELETE .../team/{user_id}` removes them outright, both
+ *     of which this panel now offers alongside assignment.
  *
  * One dropdown, not two fields. Staffing somebody used to ask for a role on the
  * event *and* a free-text "Designation on record" for their staff account, the
@@ -83,6 +86,10 @@ export function EventTeamPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Whose role is being re-picked inline, or `null` when nobody's is. */
+  const [reroling, setReroling] = useState<string | null>(null);
+  const [reroleValue, setReroleValue] = useState<EventTeamRole>(EVENT_VOLUNTEER_ROLE);
+  const [pendingRemove, setPendingRemove] = useState<EventTeamMember | null>(null);
 
   // The staff directory turns "type a BT id" into "pick a person". Super
   // Admin-only, like this panel's write side, and never blocking: a failed fetch
@@ -139,6 +146,25 @@ export function EventTeamPanel({
     // The field is cleared only once the assignment landed, so a failed attempt
     // can be retried without retyping the id.
     if (ok) setUserId('');
+  }
+
+  async function saveRerole(member: EventTeamMember) {
+    const ok = await run(
+      () => api.updateEventTeamRole(eventId, member.user_id, { role: reroleValue }),
+      'Could not update this member’s role.',
+      `${member.name || member.user_id} is now ${eventTeamRoleLabel(reroleValue)}`,
+    );
+    if (ok) setReroling(null);
+  }
+
+  async function confirmRemove() {
+    if (!pendingRemove) return;
+    const ok = await run(
+      () => api.removeEventTeamMember(eventId, pendingRemove.user_id),
+      'Could not remove this member.',
+      `${pendingRemove.name || pendingRemove.user_id} removed from this event's team`,
+    );
+    if (ok) setPendingRemove(null);
   }
 
   /**
@@ -277,14 +303,78 @@ export function EventTeamPanel({
                       .join(' · ') || 'No contact details on this record'}
                   </p>
                 </div>
-                <StatusBadge tone={isEventHeadRole(member.role) ? 'info' : 'neutral'}>
-                  {eventTeamRoleLabel(member.role)}
-                </StatusBadge>
+
+                {canManage && reroling === member.user_id ? (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      label="Role"
+                      className="sr-only"
+                      value={reroleValue}
+                      onChange={(e) => setReroleValue(e.target.value as EventTeamRole)}
+                      options={EVENT_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={busy}
+                      onClick={() => void saveRerole(member)}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => setReroling(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <StatusBadge tone={isEventHeadRole(member.role) ? 'info' : 'neutral'}>
+                      {eventTeamRoleLabel(member.role)}
+                    </StatusBadge>
+                    {canManage && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setReroling(member.user_id);
+                            setReroleValue(member.role as EventTeamRole);
+                          }}
+                        >
+                          Change role
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-danger hover:bg-danger-bg"
+                          aria-label={`Remove ${member.name || member.user_id} from this event's team`}
+                          onClick={() => setPendingRemove(member)}
+                        >
+                          <Trash2 size={14} strokeWidth={2.25} />
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
               </Card>
             </li>
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title={`Remove ${pendingRemove?.name || pendingRemove?.user_id} from this event's team?`}
+        description="They will lose the scanner and roster access this event's team grants, and can be assigned to a different event afterwards."
+        confirmLabel="Remove"
+        loading={busy}
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingRemove(null)}
+      />
 
       {canManage && (
         <Card className="flex flex-col gap-3">
@@ -410,8 +500,7 @@ export function EventTeamPanel({
             <ShieldCheck size={14} className="mt-px shrink-0" strokeWidth={2.25} />
             <span>
               Every member can scan attendance for this event from the moment they are assigned;
-              events have no per-member scanning switch. There is also no route that takes somebody
-              off an event team, so assign deliberately. A new account is recorded with the role
+              events have no per-member scanning switch. A new account is recorded with the role
               above as its designation, which you can change later under Staff.
             </span>
           </p>

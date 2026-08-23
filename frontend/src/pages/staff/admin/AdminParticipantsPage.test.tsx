@@ -63,7 +63,7 @@ const MEERA: ParticipantRecord = {
   // A block *code*, which is all a participant record carries: `GET /participants`
   // returns `accommodation` verbatim and never joins the hostel catalogue. The
   // name the roster shows comes from `HOSTELS` below.
-  accommodation: { hostel_id: 'HS01', room: '214', logged_in: true, registered: true },
+  accommodation: { hostel_id: 'HS01', room: '214', inside: true, registered: true },
   mess: { mess_id: 'NILGIRI', registered: true },
   event_count: 2,
   workshop_count: 1,

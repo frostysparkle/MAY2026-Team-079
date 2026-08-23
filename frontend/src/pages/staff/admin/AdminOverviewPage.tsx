@@ -328,7 +328,7 @@ export default function AdminOverviewPage() {
                 /*
                  * Measured against residents, not against everyone registered.
                  *
-                 * `currently_on_campus` counts `accommodation.logged_in`, which
+                 * `currently_on_campus` counts `accommodation.inside`, which
                  * only a participant holding a hostel bed can ever set — it is
                  * written by the hostel entry scanner. Dividing it by
                  * `total_registered` therefore compared two different

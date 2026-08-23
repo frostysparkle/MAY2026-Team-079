@@ -139,7 +139,7 @@ function kpi(label: string) {
 describe('AdminOverviewPage pulse row', () => {
   describe('On campus now', () => {
     /**
-     * `currently_on_campus` counts `accommodation.logged_in`, which only somebody
+     * `currently_on_campus` counts `accommodation.inside`, which only somebody
      * holding a hostel bed can set — it is written by the hostel entry scanner.
      * Measuring it against everyone registered put every day visitor in the
      * denominator with no way into the numerator, so the bar could never fill and

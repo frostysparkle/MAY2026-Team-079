@@ -55,6 +55,7 @@ import AdminEventDetailPage from '@/pages/staff/admin/AdminEventDetailPage';
 import AdminEventEditorPage from '@/pages/staff/admin/AdminEventEditorPage';
 import AdminWorkshopsPage from '@/pages/staff/admin/AdminWorkshopsPage';
 import AdminWorkshopEditorPage from '@/pages/staff/admin/AdminWorkshopEditorPage';
+import AdminWorkshopSlotsPage from '@/pages/staff/admin/AdminWorkshopSlotsPage';
 import AdminMessPage from '@/pages/staff/admin/AdminMessPage';
 import AdminHostelsPage from '@/pages/staff/admin/AdminHostelsPage';
 import AdminBackendTeamsPage from '@/pages/staff/admin/AdminBackendTeamsPage';
@@ -279,6 +280,8 @@ export const routes: RouteObject[] = [
       { path: ROUTES.adminEventEdit, element: <AdminEventEditorPage /> },
       { path: ROUTES.adminEventDetail, element: <AdminEventDetailPage /> },
       { path: ROUTES.adminWorkshops, element: <AdminWorkshopsPage /> },
+      // `slots` and `new` are static segments, so they outrank `:workshopId` below.
+      { path: ROUTES.adminWorkshopSlots, element: <AdminWorkshopSlotsPage /> },
       { path: ROUTES.adminWorkshopNew, element: <AdminWorkshopEditorPage /> },
       { path: ROUTES.adminWorkshopEdit, element: <AdminWorkshopEditorPage /> },
       { path: ROUTES.adminMess, element: <AdminMessPage /> },

@@ -75,6 +75,7 @@ from models import (
     EventTeamAssignRequest,
     EventTeamRoleUpdateRequest,
     AnnouncementCreateRequest,
+    RecommendationRequest,
     ScanQRRequest,
     parse_instant_utc,
 )
@@ -82,6 +83,7 @@ from database import event_collection, participants_collection, backend_teams_co
 from dependencies import get_current_user, get_current_staff, get_current_participant, verify_qr
 from embedding_service import generate_embedding
 from id_generator import EVENT_TYPE_CODES, EventIDGenerator
+from similarity import cosine_similarity
 
 generator = EventIDGenerator()
 
@@ -295,6 +297,56 @@ def list_public_events():
     """
     events = list(event_collection.find({}, PUBLIC_EVENT_FIELDS))
     return [_with_computed_registration(e) for e in events]
+
+
+@router.post("/recommendations")
+def recommend_events(
+    request: RecommendationRequest = RecommendationRequest(),
+    current_user: dict = Depends(get_current_participant),
+):
+    """
+    The full events catalogue, re-ranked by cosine similarity to a query or to
+    this participant's saved preference embedding — nothing is filtered out,
+    every event that exists is returned, only reordered, most similar first.
+
+    A `query` is embedded and persisted to `embedding.event` on this
+    participant's own document, replacing whatever was saved there before —
+    the same slot `PATCH /profile/complete` writes from `event_preferences`,
+    so asking here updates the one profile-wide event preference rather than
+    creating a second, competing copy of it. Omitting `query` (or sending it
+    null/blank) reuses that saved vector as-is and does *not* call
+    `generate_embedding` — there is no text to embed, and embedding an empty
+    string would silently overwrite a real saved preference with a zero
+    vector.
+
+    A participant who has never set a preference and sends no query has an
+    all-zero `embedding.event` (set at `POST /auth/register`); `cosine_similarity`
+    defines that as 0.0 against everything, so this still returns the full
+    catalogue rather than erroring — just in whatever order Mongo happens to
+    return it, since every similarity ties.
+
+    Declared here, directly after the two other literal `GET`/`POST /events`
+    paths and before `PUT /{event_id}` and its siblings, so "recommendations"
+    is never captured as an `event_id`.
+    """
+    query = (request.query or "").strip()
+    if query:
+        vector = generate_embedding(query)
+        participants_collection.update_one(
+            {"_id": current_user["_id"]},
+            {"$set": {"embedding.event": vector}},
+        )
+    else:
+        vector = ((current_user.get("embedding") or {}).get("event")) or []
+
+    events = list(event_collection.find({}, {"_id": 0, "created_by": 0}))
+    ranked = []
+    for event in events:
+        scored = _with_computed_registration(event)
+        scored["similarity"] = cosine_similarity(vector, event.get("embedding") or [])
+        ranked.append(scored)
+    ranked.sort(key=lambda e: e["similarity"], reverse=True)
+    return ranked
 
 
 # ── update / delete ──────────────────────────────────────────────────────────

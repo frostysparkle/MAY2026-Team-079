@@ -1,23 +1,25 @@
 import { useState } from 'react';
 import type { BackendTeamMember, BackendTeamUpdateRequest } from '@/api/types';
-import { Button, Card, ResultBanner, TextInput } from '@/components/ui';
+import { Button, Card, StatusBadge, TextInput } from '@/components/ui';
 
 /**
  * Amend one staff account — `PUT /backend_teams/{paradox_id}`.
  *
- * This route has been in the client since the beginning with nothing calling it,
- * so the only way to correct a role, department or designation was to delete the
- * account and make a new one — which changes the `paradox_id`, and therefore
- * silently drops the person off every mess, hostel, event and workshop team they
- * were named on. That is a large consequence for fixing a typo.
+ * Only `designation` and `name` are editable, which is exactly what the
+ * backend's real `BackendTeamUpdateRequest` allows (`backend/models.py`).
+ * `role` and `department` used to be offered here too, with a warning banner
+ * implying that changing away from `super_admin` had a real effect — but the
+ * backend's update model has no fields for either: both drive the `paradox_id`
+ * prefix assigned at creation and are immutable by design, so a `PUT` naming
+ * them changed nothing while still returning `200 "success"`. The route
+ * documents this explicitly: changing role or department means deleting the
+ * account and creating a new one, not patching this one — which is also a
+ * bigger, deliberate decision (it drops the person off every mess, hostel,
+ * event and workshop team they were named on) and not something this form
+ * should invite as a side effect of fixing a typo.
  *
- * Three editable fields, which is exactly what `BackendTeamUpdateRequest` allows.
- * Email and password are not among them: the backend's update schema has no place
- * for either, and pretending otherwise would show a change that is discarded.
- *
- * `department` is load-bearing, not cosmetic — a Domain Admin's oversight is
- * granted by `backend_teams.department` matching an `event.event_type`, and UHC by
- * `department == "uhc"` — so the hint says so rather than treating it as a label.
+ * Email and password are likewise absent: the backend's update schema has no
+ * place for either.
  */
 export function EditStaffForm({
   member,
@@ -30,19 +32,11 @@ export function EditStaffForm({
   onSave: (req: BackendTeamUpdateRequest) => void;
   onCancel: () => void;
 }) {
-  const [role, setRole] = useState(member.role ?? '');
-  const [department, setDepartment] = useState(member.department ?? '');
   const [designation, setDesignation] = useState(member.designation ?? '');
+  const [name, setName] = useState(member.name ?? '');
 
   const changed =
-    role.trim() !== (member.role ?? '') ||
-    department.trim() !== (member.department ?? '') ||
-    designation.trim() !== (member.designation ?? '');
-
-  // Losing `super_admin` is the one edit here that can lock the fest out of its
-  // own admin screens, so it is called out before it is made rather than
-  // discovered afterwards.
-  const droppingSuperAdmin = member.role === 'super_admin' && role.trim() !== 'super_admin';
+    designation.trim() !== (member.designation ?? '') || name.trim() !== (member.name ?? '');
 
   return (
     <Card className="flex flex-col gap-3">
@@ -58,28 +52,22 @@ export function EditStaffForm({
             ? ' · linked to a participant record'
             : ' · no participant record linked'}
         </p>
+        {/* Read-only: role and department are immutable after creation — see
+            this form's docstring for why they are not editable here. */}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <StatusBadge tone="neutral">{member.role}</StatusBadge>
+          <StatusBadge tone="neutral">{member.department}</StatusBadge>
+        </div>
       </div>
-
-      {droppingSuperAdmin && (
-        <ResultBanner variant="warning" title="This removes Super Admin access">
-          They will lose the admin screens, staff management, and every create, update and delete
-          route. Make sure another Super Admin account exists first.
-        </ResultBanner>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <TextInput
-          label="Role"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
+          label="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           autoFocus
-          hint="super_admin is the only value the backend privileges."
-        />
-        <TextInput
-          label="Department"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          hint="Matching an event's type grants oversight of it; uhc grants house-scoped visibility."
+          placeholder="e.g. Anitha Raman"
+          hint="Shown on team lists and in the audit trail's name lookups."
         />
         <TextInput
           label="Designation"
@@ -89,6 +77,11 @@ export function EditStaffForm({
           hint="Shown beside their name on team lists."
         />
       </div>
+      <p className="text-xs text-muted">
+        Role and department cannot be changed here — they are fixed at creation. To change either,
+        delete this account and create a new one; note that doing so removes them from every mess,
+        hostel, event and workshop team they are named on.
+      </p>
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -97,9 +90,8 @@ export function EditStaffForm({
           disabled={!changed || busy}
           onClick={() =>
             onSave({
-              role: role.trim(),
-              department: department.trim(),
               designation: designation.trim(),
+              name: name.trim(),
             })
           }
         >

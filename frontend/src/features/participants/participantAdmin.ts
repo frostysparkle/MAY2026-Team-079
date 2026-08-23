@@ -1,4 +1,5 @@
 import type { Hostel, ParticipantAdminUpdateRequest, ParticipantRecord } from '@/api/types';
+import { HOUSES } from '@/config/houses';
 
 /**
  * Editing somebody else's record — Story 7.3, the pure half.
@@ -29,20 +30,23 @@ export interface EditableField {
 }
 
 /**
- * The vocabularies below mirror `ProfileCompleteRequest`'s own comments in
- * `backend/models.py`. The backend does not validate them — they are plain
- * strings there — so these are offered as a dropdown rather than enforced as a
- * rule, and a record already holding something else keeps it rather than being
+ * `ParticipantAdminUpdateRequest` validates `house`, `gender`, `program` and
+ * `course_stage` against the exact same closed sets `ProfileCompleteRequest`
+ * does (`backend/models.py`'s `_valid_house` / `_valid_gender` / `_valid_program`
+ * / `_valid_course_stage` field validators, shared by both request models) — so
+ * these dropdowns have to offer the backend's real values, not a looser
+ * approximation, or a save 422s for a field that looked like free choice. A
+ * record already holding something outside the set keeps it rather than being
  * silently coerced (see `editableValue`).
  */
-export const GENDERS = ['male', 'female', 'other'] as const;
+export const GENDERS = ['male', 'female'] as const;
 export const PROGRAMS = ['DS', 'ES', 'AE', 'MS'] as const;
 export const COURSE_STAGES = ['foundational', 'diploma', 'degree'] as const;
 
 export const EDITABLE_FIELDS: readonly EditableField[] = [
   { key: 'full_name', label: 'Full name' },
   { key: 'phone', label: 'Phone' },
-  { key: 'house', label: 'House' },
+  { key: 'house', label: 'House', options: HOUSES },
   { key: 'gender', label: 'Gender', options: GENDERS },
   { key: 'program', label: 'Program', options: PROGRAMS },
   { key: 'course_stage', label: 'Course stage', options: COURSE_STAGES },
@@ -145,7 +149,7 @@ export function standingOf(participant: ParticipantRecord): ParticipantStanding 
     profileComplete: Boolean(profile.full_name),
     hostel: participant.accommodation?.hostel_id ?? null,
     mess: participant.mess?.mess_id ?? null,
-    onCampus: Boolean(participant.accommodation?.logged_in),
+    onCampus: Boolean(participant.accommodation?.inside),
   };
 }
 

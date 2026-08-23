@@ -1,6 +1,11 @@
 import type { Mess, MessStatisticsResponse } from '@/api/types';
 import type { BadgeTone } from '@/components/ui';
-import { messCuisineLabel } from '@/config/constants';
+import {
+  messCuisineLabel,
+  messCuisineOf,
+  messDietOf,
+  messPreferenceTypeLabel,
+} from '@/config/constants';
 import {
   deriveOccupancy,
   share,
@@ -17,21 +22,16 @@ import {
  * This module joins the two into one row shape so the table, the cards, and the
  * summary figures all read the same numbers from the same place.
  *
- * A hall is described on two independent axes, and the table keeps them in
- * separate columns for that reason:
- *
- *   - `preference` — veg / non_veg / jain. The dietary designation, and the only
- *     field `POST /mess/allocate` groups on.
- *   - `cuisines`   — north_indian / south_indian, possibly both. Presentation
- *     only; nothing allocates on it.
- *
- * Collapsing them into one badge would suggest a hall's menu decides who eats
- * there, which is not how allocation works.
+ * A hall's `type` (e.g. `"north_indian__veg"`, `"jain"`) is one stored field,
+ * split here into its two axes for display — dietary designation (`diet`, the
+ * only thing `POST /mess/allocate` groups on) and regional cuisine (`cuisine`,
+ * presentation only). Collapsing them into one badge would suggest a hall's menu
+ * decides who eats there, which is not how allocation works.
  */
 
-export type MessType = 'veg' | 'non_veg' | 'jain' | 'other';
+export type MessDiet = 'veg' | 'non_veg' | 'jain' | 'other';
 
-const TYPE_LABEL: Record<MessType, string> = {
+const DIET_LABEL: Record<MessDiet, string> = {
   veg: 'Veg',
   non_veg: 'Non-Veg',
   jain: 'Jain',
@@ -39,7 +39,7 @@ const TYPE_LABEL: Record<MessType, string> = {
 };
 
 /** The dietary badge's tone. Distinct hues, since this is the primary axis. */
-const TYPE_TONE: Record<MessType, BadgeTone> = {
+const DIET_TONE: Record<MessDiet, BadgeTone> = {
   veg: 'success',
   non_veg: 'danger',
   jain: 'info',
@@ -47,23 +47,23 @@ const TYPE_TONE: Record<MessType, BadgeTone> = {
 };
 
 /**
- * Normalise the stored `preference`. A hall whose value is outside the three
- * known ones is filed as `other`: it is real, and it must stay visible, but it
- * can never be allocated to, which the "Unspecified" label is meant to prompt a
- * question about.
+ * The dietary axis of a hall's stored `type`. A hall whose `type` is outside the
+ * backend's known set is filed as `other`: it is real, and it must stay visible,
+ * but it can never be allocated to, which the "Unspecified" label is meant to
+ * prompt a question about.
  */
-export function messType(mess: Mess): MessType {
-  const raw = (mess.preference ?? '').toLowerCase();
-  if (raw === 'veg' || raw === 'non_veg' || raw === 'jain') return raw;
+export function messDiet(mess: Mess): MessDiet {
+  const diet = messDietOf((mess.type ?? '').toLowerCase());
+  if (diet === 'veg' || diet === 'non_veg' || diet === 'jain') return diet;
   return 'other';
 }
 
-export function messTypeLabel(type: MessType): string {
-  return TYPE_LABEL[type];
+export function messDietLabel(diet: MessDiet): string {
+  return DIET_LABEL[diet];
 }
 
-export function messTypeTone(type: MessType): BadgeTone {
-  return TYPE_TONE[type];
+export function messDietTone(diet: MessDiet): BadgeTone {
+  return DIET_TONE[diet];
 }
 
 export interface MessRow extends Occupancy {
@@ -71,13 +71,17 @@ export interface MessRow extends Occupancy {
   mess: Mess;
   id: string;
   name: string;
-  type: MessType;
+  /** The full stored `type`, e.g. `"north_indian__veg"` — for the create/edit form. */
+  type: string;
+  /** Human label for the full `type`, e.g. "North Indian · Veg". */
   typeLabel: string;
-  typeTone: BadgeTone;
-  /** Stored cuisine keys, e.g. `['north_indian']`. Empty when none was declared. */
-  cuisines: string[];
-  /** Those keys as labels, for display and for matching a search. */
-  cuisineLabels: string[];
+  diet: MessDiet;
+  dietLabel: string;
+  dietTone: BadgeTone;
+  /** The regional cuisine axis of `type`, or `null` for `jain` (no region). */
+  cuisine: string | null;
+  /** `cuisine` as a label, for display and for matching a search. */
+  cuisineLabel: string | null;
   /** Has at least one team member assigned. */
   staffed: boolean;
   /** At least one assigned member may scan meals. */
@@ -91,8 +95,9 @@ export function buildMessRows(
   return halls.map((mess) => {
     const stat = stats[mess.mess_id];
     const team = mess.mess_team ?? [];
-    const type = messType(mess);
-    const cuisines = mess.cuisines ?? [];
+    const type = (mess.type ?? '').toLowerCase();
+    const diet = messDiet(mess);
+    const cuisine = messCuisineOf(type);
 
     return {
       // Prefer the capacity statistics reports, falling back to the record's own:
@@ -102,11 +107,13 @@ export function buildMessRows(
       mess,
       id: mess.mess_id,
       name: mess.name,
-      type,
-      typeLabel: messTypeLabel(type),
-      typeTone: messTypeTone(type),
-      cuisines,
-      cuisineLabels: cuisines.map(messCuisineLabel),
+      type: mess.type,
+      typeLabel: messPreferenceTypeLabel(mess.type ?? ''),
+      diet,
+      dietLabel: messDietLabel(diet),
+      dietTone: messDietTone(diet),
+      cuisine,
+      cuisineLabel: cuisine ? messCuisineLabel(cuisine) : null,
       staffed: team.length > 0,
       scanning: team.some((member) => member.logging),
     };
@@ -124,7 +131,7 @@ export interface MessSummary {
    * bar, so an entirely empty 450-seat veg hall read as "38%".
    */
   byType: {
-    type: MessType;
+    type: MessDiet;
     label: string;
     halls: number;
     seats: number;
@@ -154,15 +161,15 @@ export function summariseMess(rows: MessRow[]): MessSummary {
   // Only the designations actually present are reported. A "Jain seats: 0" card
   // for a campus with no jain hall is noise, and one appears the moment a hall
   // is created — the figures follow the data rather than a fixed layout.
-  const types: MessType[] = ['veg', 'non_veg', 'jain', 'other'];
-  const byType = types
-    .map((type) => {
-      const halls = rows.filter((row) => row.type === type);
+  const diets: MessDiet[] = ['veg', 'non_veg', 'jain', 'other'];
+  const byType = diets
+    .map((diet) => {
+      const halls = rows.filter((row) => row.diet === diet);
       const typeSeats = halls.reduce((sum, row) => sum + row.capacity, 0);
       const typeAllocated = totalAllocated(halls);
       return {
-        type,
-        label: messTypeLabel(type),
+        type: diet,
+        label: messDietLabel(diet),
         halls: halls.length,
         seats: typeSeats,
         allocated: typeAllocated,

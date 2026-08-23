@@ -70,8 +70,8 @@ export function HostelWidget() {
             <p className="truncate text-sm font-semibold text-ink">{data.assigned_hostel}</p>
             <p className="text-xs text-muted">Room {data.room ?? '—'}</p>
           </div>
-          <StatusBadge tone={data.logged_in ? 'success' : 'neutral'}>
-            {data.logged_in ? 'Inside' : 'Outside'}
+          <StatusBadge tone={data.inside ? 'success' : 'neutral'}>
+            {data.inside ? 'Inside' : 'Outside'}
           </StatusBadge>
         </div>
 

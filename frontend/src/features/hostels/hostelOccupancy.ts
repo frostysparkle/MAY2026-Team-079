@@ -79,7 +79,7 @@ export function buildHostelRows(
       categoryLabel: hostelCategoryLabel(category),
       inside: stat ? stat.currently_inside : null,
       staffed: team.length > 0,
-      scanning: team.some((member) => member.logging),
+      scanning: team.some((member) => member.attendance),
     };
   });
 }

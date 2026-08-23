@@ -138,7 +138,7 @@ export function toEventDetailCsvRows(
   add('Event', 'Event ID', event.event_id);
   add('Event', 'Name', event.name);
   add('Event', 'Type', event.event_type);
-  add('Event', 'Registration', event.open ? 'open' : 'closed');
+  add('Event', 'Registration', event.registration.is_open ? 'open' : 'closed');
   add('Event', 'Description', event.description);
 
   add('Registration', 'Opens', formatDateTime(window.startTime));
@@ -168,7 +168,7 @@ export function toEventDetailCsvRows(
 
   add('Team rules', 'Minimum size', event.team.min);
   add('Team rules', 'Maximum size', event.team.max);
-  add('Team rules', 'House-only teams', event.team.house);
+  add('Team rules', 'House-only teams', event.team.house_vs_house_event);
   add('Team rules', 'Single entries allowed', event.team.allow_single_registration);
 
   // `view.timeline` and `view.prizes` are the event page's own strings, display

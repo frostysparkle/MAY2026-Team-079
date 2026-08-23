@@ -1,4 +1,5 @@
 import type { ParticipantLoginResponse } from '@/api/types';
+import { messPreferenceTypeLabel } from '@/config/constants';
 
 /**
  * How a stored profile value is written out on the read-only Profile screen.
@@ -29,15 +30,16 @@ export function courseStageLabel(stage: string | null | undefined): string | nul
 }
 
 /**
- * `non_veg` → "Non-Veg", matching the badge the mess screens use for the same
- * three values (`features/mess/messOccupancy`). Anything else is shown as
- * stored — allocation groups on the exact string, so a profile carrying a value
- * outside the three has to stay visible rather than be tidied into one of them.
+ * `north_indian__veg` → "North Indian · Veg", `jain` → "Jain". Matches the
+ * closed set `PATCH /profile/complete` and `POST /mess` both validate
+ * `mess_preference`/`type` against (`config/constants.ts`'s
+ * `MESS_PREFERENCE_TYPES`). Anything outside that set is shown as stored — a
+ * profile carrying a value the current vocabulary does not recognise has to
+ * stay visible rather than be tidied away.
  */
 export function messPreferenceLabel(preference: string | null | undefined): string | null {
   if (!preference) return null;
-  const known: Record<string, string> = { veg: 'Veg', non_veg: 'Non-Veg', jain: 'Jain' };
-  return known[preference.toLowerCase()] ?? preference;
+  return messPreferenceTypeLabel(preference);
 }
 
 /**

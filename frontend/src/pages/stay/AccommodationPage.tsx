@@ -28,7 +28,7 @@ import type {
   ProfileCompleteRequest,
 } from '@/api/types';
 import { ROUTES, supportPath } from '@/config/routes';
-import { messCuisineLabel, MESS_PREFERENCES } from '@/config/constants';
+import { MESS_PREFERENCE_TYPE_OPTIONS } from '@/config/constants';
 import { messPreferenceLabel } from '@/features/profile/profileDisplay';
 import { FEST_DAYS } from '@/config/festCalendar';
 import { MessMenuBoard } from '@/features/mess/MessMenuBoard';
@@ -80,11 +80,14 @@ import {
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { cn } from '@/lib/cn';
 
-/** The three values `POST /mess/allocate` can group a student under. */
-const MESS_PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({
-  value: p,
-  label: p === 'non_veg' ? 'Non-veg' : p[0].toUpperCase() + p.slice(1),
-}));
+/**
+ * The real, closed vocabulary `POST /mess/allocate` matches a participant's
+ * `profile.mess_preference` against — see `config/constants.ts`. This used to
+ * offer just `veg` / `non_veg` / `jain`, none of which (other than `jain`) the
+ * backend's `MESS_PREFERENCE_TYPES` actually accepts, so choosing one 422'd on
+ * save.
+ */
+const MESS_PREF_OPTIONS = MESS_PREFERENCE_TYPE_OPTIONS;
 
 /**
  * Accommodation & Mess — the screen a student lands on the moment their profile
@@ -705,7 +708,7 @@ function AccommodationPanel({
             <Fact
               icon={DoorOpen}
               label="Right Now"
-              value={hostel.logged_in ? 'Inside the block' : 'Outside the block'}
+              value={hostel.inside ? 'Inside the block' : 'Outside the block'}
               hint="Updated by the gate scanner each time you pass through."
             />
             {block?.capacity !== undefined && (
@@ -786,10 +789,10 @@ function MessPanel({
   // Counted by the same helper the dashboard widget uses, so the "meals checked
   // in" figure on this screen and the one on the dashboard cannot disagree.
   const { logged, total } = loggedMeals(slots);
-  // `POST /mess/allocate` groups halls by `preference` and looks up the
-  // participant's own `profile.mess_preference`, so this is the real shortlist.
+  // `POST /mess/allocate` groups halls by `type` and looks up the participant's
+  // own `profile.mess_preference`, so this is the real shortlist.
   const eligible = preference
-    ? catalogue.filter((m) => m.preference?.toLowerCase() === preference.toLowerCase())
+    ? catalogue.filter((m) => m.type?.toLowerCase() === preference.toLowerCase())
     : [];
 
   return (
@@ -825,14 +828,7 @@ function MessPanel({
             <Fact
               icon={Info}
               label="Serves"
-              value={
-                [
-                  messPreferenceLabel(hall?.preference),
-                  ...(hall?.cuisines ?? []).map(messCuisineLabel),
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || undefined
-              }
+              value={messPreferenceLabel(hall?.type) ?? undefined}
               hint={menu.label}
               emptyText="Dietary preference not recorded"
             />

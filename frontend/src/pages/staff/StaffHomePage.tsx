@@ -20,6 +20,8 @@ import {
   EventParticipationView,
 } from '@/features/events/EventParticipationView';
 import { useEventParticipation } from '@/features/events/useEventParticipation';
+import { EventAnnouncementsPanel } from '@/features/events/EventAnnouncementsPanel';
+import { useEventAnnouncements } from '@/features/events/useEventAnnouncements';
 import { workshopRoleLabel } from '@/features/workshops/workshopTeam';
 import {
   attendanceState,
@@ -182,7 +184,9 @@ export default function StaffHomePage() {
                 icon={Home}
                 label={`Scan for ${h.name}`}
                 to={path(ROUTES.scanHostel, { hostelId: h.hostel_id })}
-                state={loggingState(h.hostel_team?.find((t) => t.user_id === staff?.id))}
+                // Hostel team entries carry `attendance`, not `logging` — see
+                // `HostelTeamMember`. Mess still uses `loggingState`.
+                state={attendanceState(h.hostel_team?.find((t) => t.user_id === staff?.id))}
               />
             ))}
             {/* Story 5.4. One card rather than one per facility: `GET /issues`
@@ -393,39 +397,53 @@ function EventDutySection({ event, staffId }: { event: Event; staffId: string | 
   const { data, error } = useEventParticipation(event.event_id);
   const role = eventTeamRoleOf(event.event_team, staffId);
   const head = isEventHeadRole(role);
+  // Story 8.2. `POST /events/{id}/announcements` refuses everybody but this
+  // event's own Event Head and a Super Admin — a plain member or volunteer
+  // still sees the list, with no compose control they could not use anyway.
+  // `isSuperAdmin()` is included on top of `head` because a Super Admin can
+  // show up in this section too if they are also named on the event's own
+  // team, just not necessarily as its head.
+  const announcements = useEventAnnouncements(event.event_id);
+  const canPublish = head || isSuperAdmin();
 
   return (
-    <SectionBlock
-      title="Participants"
-      meta={data ? `${data.count} registered` : undefined}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {data && <EventParticipationActions eventId={event.event_id} event={event} data={data} />}
-          {head && (
-            <Link to={path(ROUTES.eventTeams, { eventId: event.event_id })}>
-              <Button variant="ghost">Allocate / Edit Teams</Button>
-            </Link>
-          )}
-        </div>
-      }
-    >
-      {error ? (
-        <ErrorState title="Could not load participation" description={error} />
-      ) : !data ? (
-        <Card className="flex h-40 items-center justify-center">
-          <Spinner label={`Loading ${event.name}`} />
-        </Card>
-      ) : (
-        <EventParticipationView
-          eventId={event.event_id}
-          event={event}
-          data={data}
-          badges={
-            <StatusBadge tone={head ? 'info' : 'neutral'}>{eventTeamRoleLabel(role)}</StatusBadge>
-          }
-        />
-      )}
-    </SectionBlock>
+    <>
+      <SectionBlock
+        title="Participants"
+        meta={data ? `${data.count} registered` : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {data && (
+              <EventParticipationActions eventId={event.event_id} event={event} data={data} />
+            )}
+            {head && (
+              <Link to={path(ROUTES.eventTeams, { eventId: event.event_id })}>
+                <Button variant="ghost">Allocate / Edit Teams</Button>
+              </Link>
+            )}
+          </div>
+        }
+      >
+        {error ? (
+          <ErrorState title="Could not load participation" description={error} />
+        ) : !data ? (
+          <Card className="flex h-40 items-center justify-center">
+            <Spinner label={`Loading ${event.name}`} />
+          </Card>
+        ) : (
+          <EventParticipationView
+            eventId={event.event_id}
+            event={event}
+            data={data}
+            badges={
+              <StatusBadge tone={head ? 'info' : 'neutral'}>{eventTeamRoleLabel(role)}</StatusBadge>
+            }
+          />
+        )}
+      </SectionBlock>
+
+      <EventAnnouncementsPanel state={announcements} canPublish={canPublish} />
+    </>
   );
 }
 

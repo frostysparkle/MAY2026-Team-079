@@ -110,10 +110,7 @@ export default function WorkshopsListPage() {
   // Kept in the backend's similarity order — most-similar-first — rather than
   // run through `sortWorkshops`, which reorders chronologically. Re-ranking by
   // match is the entire point of this view.
-  const recommendedViews = useMemo(
-    () => recommended?.map(workshopView) ?? null,
-    [recommended],
-  );
+  const recommendedViews = useMemo(() => recommended?.map(workshopView) ?? null, [recommended]);
 
   const sections = useMemo<Section[]>(() => {
     if (!workshops) return [];
@@ -173,6 +170,10 @@ export default function WorkshopsListPage() {
           loading={recommendLoading}
           onSearch={handleRecommend}
           onClear={clearRecommendations}
+          // `POST /workshops/recommendations` is not implemented on the backend
+          // (405 Method Not Allowed) — see `AiRecommendBar`'s `available` prop.
+          // Disabled rather than left to fail silently on first tap.
+          available={false}
         />
       )}
 

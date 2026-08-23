@@ -203,9 +203,11 @@ export interface ContactGroup {
 }
 
 /**
- * `hostel.coordinator` is a bare `dict` on the backend — `HostelCreateRequest`
- * types it as one and nothing validates its keys — so it arrives here as
- * `Record<string, unknown>` and every field has to be proved rather than assumed.
+ * `hostel.coordinator` is a bare, untyped map on the stored document — seeded
+ * blocks carry one (`backend/seed.py`), but `POST /hostels` has no field to
+ * accept one at all, so a block created through the dashboard has none — so it
+ * arrives here as `Record<string, unknown>` and every field has to be proved
+ * rather than assumed.
  *
  * Seeded blocks carry a name and a phone; blocks created from the dashboard form
  * send whatever the admin typed, and blocks created before the field existed have
@@ -273,8 +275,9 @@ function hostelDetail(hostel: Hostel): string | undefined {
 export function messDirectory(messHalls: readonly Mess[] | null | undefined): ContactGroup[] {
   return (messHalls ?? [])
     .map((hall): ContactGroup => {
-      const parts = [hall.preference, ...(hall.cuisines ?? [])]
-        .map((part) => (part ?? '').replace(/_/g, ' ').trim())
+      const parts = (hall.type ?? '')
+        .split('__')
+        .map((part) => part.replace(/_/g, ' ').trim())
         .filter(Boolean);
       return {
         id: hall.mess_id,

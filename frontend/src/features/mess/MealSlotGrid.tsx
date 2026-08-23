@@ -1,5 +1,5 @@
-import type { MessDayEntry } from '@/api/types';
-import { MEAL_SLOTS, MEAL_SLOT_LABEL } from '@/features/mess/mealSlots';
+import type { MessSlotEntry } from '@/api/types';
+import { groupSlotsByDay, MEAL_SLOTS, MEAL_SLOT_LABEL } from '@/features/mess/mealSlots';
 import { cn } from '@/lib/cn';
 
 /**
@@ -12,6 +12,10 @@ import { cn } from '@/lib/cn';
  * grid that appears on two screens a student moves directly between is two chances
  * for the meal card to look like a different object in each.
  *
+ * Takes `GET /mess/my_mess`'s real flat `slots` list and groups it into days
+ * itself (`groupSlotsByDay`) — the backend has no per-day object shape for this
+ * to read directly.
+ *
  * Renders nothing when there are no days to show, so a caller can drop it in
  * without guarding — which is what both callers were doing by hand.
  */
@@ -19,29 +23,33 @@ export function MealSlotGrid({
   slots,
   className,
 }: {
-  slots: readonly MessDayEntry[];
+  slots: readonly MessSlotEntry[];
   className?: string;
 }) {
-  if (slots.length === 0) return null;
+  const days = groupSlotsByDay(slots);
+  if (days.length === 0) return null;
 
   return (
     <div className={cn('grid grid-cols-5 gap-1.5 text-center text-xs', className)}>
-      {slots.map((day, i) => (
+      {days.map((day, i) => (
         <div key={i} className="flex flex-col gap-1">
           <span className="font-medium uppercase tracking-wide text-muted">Day {i + 1}</span>
-          {MEAL_SLOTS.map((slot) => (
-            <span
-              key={slot}
-              className={cn(
-                'rounded-md py-0.5 font-semibold',
-                day[slot]?.logged
-                  ? 'bg-success-bg text-success'
-                  : 'bg-surface-2 font-medium text-muted',
-              )}
-            >
-              {MEAL_SLOT_LABEL[slot]}
-            </span>
-          ))}
+          {MEAL_SLOTS.map((slot) => {
+            const entry = day.find((e) => e.slot === slot);
+            return (
+              <span
+                key={slot}
+                className={cn(
+                  'rounded-md py-0.5 font-semibold',
+                  entry?.scanned
+                    ? 'bg-success-bg text-success'
+                    : 'bg-surface-2 font-medium text-muted',
+                )}
+              >
+                {MEAL_SLOT_LABEL[slot]}
+              </span>
+            );
+          })}
         </div>
       ))}
     </div>

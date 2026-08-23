@@ -21,10 +21,10 @@ import {
   TextInput,
 } from '@/components/ui';
 import {
-  FACILITY_TEAM_ROLES,
-  FACILITY_VOLUNTEER_ROLE,
-  facilityRoleLabel,
-  type FacilityTeamRole,
+  HOSTEL_TEAM_ROLES,
+  HOSTEL_VOLUNTEER_ROLE,
+  hostelRoleLabel,
+  type HostelTeamRole,
 } from '@/features/stay/facilityTeam';
 import { exportHostelRoster } from '@/features/staff/analyticsExport';
 import { OCCUPANCY_STATUS, occupancyTone } from '@/features/occupancy';
@@ -56,12 +56,12 @@ export function HostelDetailDialog({
   /** An action is in flight; disables the controls that would race it. */
   busy: boolean;
   onClose: () => void;
-  onAssignTeam: (userId: string, role: FacilityTeamRole) => void;
+  onAssignTeam: (userId: string, role: HostelTeamRole) => void;
   onToggleScan: (userId: string, logging: boolean) => void;
   onOpenScanner: () => void;
 }) {
   const [teamUserId, setTeamUserId] = useState('');
-  const [teamRole, setTeamRole] = useState<FacilityTeamRole>(FACILITY_VOLUNTEER_ROLE);
+  const [teamRole, setTeamRole] = useState<HostelTeamRole>(HOSTEL_VOLUNTEER_ROLE);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -166,7 +166,7 @@ export function HostelDetailDialog({
                         {member.name ?? member.user_id}
                       </p>
                       <p className="truncate text-xs text-muted">
-                        {facilityRoleLabel(member.role)}
+                        {hostelRoleLabel(member.role)}
                         {member.phone ? ` · ${member.phone}` : ''}
                       </p>
                     </div>
@@ -174,10 +174,10 @@ export function HostelDetailDialog({
                       size="sm"
                       variant="secondary"
                       disabled={busy || !member.user_id}
-                      onClick={() => onToggleScan(member.user_id!, !member.logging)}
+                      onClick={() => onToggleScan(member.user_id!, !member.attendance)}
                     >
-                      {member.logging ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                      {member.logging ? 'Scanning on' : 'Scanning off'}
+                      {member.attendance ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                      {member.attendance ? 'Scanning on' : 'Scanning off'}
                     </Button>
                   </li>
                 ))}
@@ -191,14 +191,17 @@ export function HostelDetailDialog({
                 onChange={(e) => setTeamUserId(e.target.value)}
                 placeholder="e.g. BT1000000004"
               />
-              {/* See `MessDetailDialog`: the role was hardcoded `other`, which
-                  filed every student volunteer on a block as permanent staff. */}
+              {/* The backend's hostel-team role vocabulary
+                  (`hostel_volunteer`/`guard`) is different from mess's
+                  (`volunteer`/`other`) — see `HOSTEL_TEAM_ROLES`'s docstring. This
+                  used to reuse the mess vocabulary here, so every assignment
+                  through this dialog 422'd against the real API. */}
               <Select
                 label="Role on this block"
                 value={teamRole}
-                onChange={(e) => setTeamRole(e.target.value as FacilityTeamRole)}
-                options={FACILITY_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
-                hint={FACILITY_TEAM_ROLES.find((r) => r.value === teamRole)?.blurb}
+                onChange={(e) => setTeamRole(e.target.value as HostelTeamRole)}
+                options={HOSTEL_TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+                hint={HOSTEL_TEAM_ROLES.find((r) => r.value === teamRole)?.blurb}
               />
               <div className="flex flex-wrap gap-2">
                 <Button

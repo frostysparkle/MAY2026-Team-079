@@ -57,8 +57,7 @@ const HALL: Mess = {
   mess_id: 'NILGIRI',
   name: 'Nilgiri Mess',
   capacity: 500,
-  preference: 'veg',
-  cuisines: ['south_indian'],
+  type: 'south_indian__veg',
   mess_team: [],
 };
 
@@ -67,8 +66,7 @@ const HACKATHON = {
   event_type: 'technical',
   name: 'Paradox Hackathon',
   description: '',
-  team: { min: 1, max: 4, house: false, allow_single_registration: true },
-  open: true,
+  team: { min: 1, max: 4, house_vs_house_event: false, allow_single_registration: true },
   prize_money: [],
   registration: {},
   schedule: [],

@@ -76,7 +76,7 @@ const GANGA: Hostel = {
 const ALLOTTED: MyHostelResponse = {
   assigned_hostel: 'H12',
   room: '101',
-  logged_in: false,
+  inside: false,
   registered: true,
   volunteers: [],
 };

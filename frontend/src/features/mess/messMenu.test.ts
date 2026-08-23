@@ -27,7 +27,8 @@ import {
   type MenuOverride,
 } from './messMenu';
 
-const hall = (preference: string, cuisines: string[] = []) => ({ preference, cuisines });
+/** A minimal `Mess` stand-in carrying only the field `resolveMenu` reads. */
+const hall = (type: string) => ({ type });
 
 beforeEach(() => localStorage.clear());
 
@@ -75,22 +76,20 @@ describe('the published menu', () => {
 });
 
 describe('menuCategoryFor', () => {
-  it('splits veg and non-veg by region when a hall declares exactly one', () => {
-    expect(menuCategoryFor('veg', ['south_indian'])).toBe('south_veg');
-    expect(menuCategoryFor('non_veg', ['south_indian'])).toBe('south_non_veg');
-    expect(menuCategoryFor('veg', ['north_indian'])).toBe('north_veg');
-    expect(menuCategoryFor('non_veg', ['north_indian'])).toBe('north_non_veg');
+  it('splits veg and non-veg by region for a hall whose type names one', () => {
+    expect(menuCategoryFor('south_indian__veg')).toBe('south_veg');
+    expect(menuCategoryFor('south_indian__non_veg')).toBe('south_non_veg');
+    expect(menuCategoryFor('north_indian__veg')).toBe('north_veg');
+    expect(menuCategoryFor('north_indian__non_veg')).toBe('north_non_veg');
   });
 
-  it('falls to the unified sheet for a hall serving both regions, or none', () => {
-    expect(menuCategoryFor('veg', ['north_indian', 'south_indian'])).toBe('unified_veg');
-    expect(menuCategoryFor('veg', [])).toBe('unified_veg');
-    expect(menuCategoryFor('non_veg', [])).toBe('unified_non_veg');
+  it('falls to the unified sheet for a hall with no recognised region', () => {
+    expect(menuCategoryFor(undefined)).toBe('unified_veg');
+    expect(menuCategoryFor('')).toBe('unified_veg');
   });
 
-  it('maps jain to the no-onion-no-garlic sheet whatever region it declares', () => {
-    expect(menuCategoryFor('jain', ['south_indian'])).toBe('north_veg_no_onion_garlic');
-    expect(menuCategoryFor('jain', [])).toBe('north_veg_no_onion_garlic');
+  it('maps jain to the no-onion-no-garlic sheet', () => {
+    expect(menuCategoryFor('jain')).toBe('north_veg_no_onion_garlic');
   });
 
   it('treats an unrecorded preference as veg rather than guessing non-veg', () => {
@@ -100,7 +99,7 @@ describe('menuCategoryFor', () => {
 
   it('says out loud that the jain mapping is an approximation', () => {
     expect(menuCaveat('jain')).toMatch(/closest sheet/);
-    expect(menuCaveat('veg')).toBeNull();
+    expect(menuCaveat('north_indian__veg')).toBeNull();
   });
 });
 
@@ -146,7 +145,7 @@ describe('service windows', () => {
 
 describe('resolveMenu', () => {
   it('returns the published sheet untouched when nothing is overridden', () => {
-    const menu = resolveMenu(hall('veg', ['south_indian']), null);
+    const menu = resolveMenu(hall('south_indian__veg'), null);
     expect(menu.category).toBe('south_veg');
     expect(menu.days[0].breakfast).toEqual(FEST_MENU.south_veg.days[0].breakfast);
     expect(menu.edited).toBe(false);
@@ -155,7 +154,7 @@ describe('resolveMenu', () => {
 
   it('lays an override over one sitting and leaves the rest published', () => {
     const override: MenuOverride = { days: { '3': { dinner: ['Biryani', 'Raita'] } } };
-    const menu = resolveMenu(hall('veg', ['north_indian']), override);
+    const menu = resolveMenu(hall('north_indian__veg'), override);
 
     expect(menu.days[2].dinner).toEqual(['Biryani', 'Raita']);
     expect(menu.days[2].edited.dinner).toBe(true);
@@ -344,8 +343,7 @@ describe('overrideFor', () => {
     mess_id: 'MESS01',
     name: 'Nilgiri',
     capacity: 400,
-    preference: 'veg',
-    cuisines: ['south_indian'],
+    type: 'south_indian__veg',
   };
 
   it('prefers the hall’s stored menu over a copy left on this device', () => {
@@ -367,7 +365,7 @@ describe('overrideFor', () => {
 
 describe('menuRequestFrom', () => {
   it('sends the whole menu, not a diff', () => {
-    const body = menuRequestFrom(resolveMenu(hall('veg', ['south_indian']), null));
+    const body = menuRequestFrom(resolveMenu(hall('south_indian__veg'), null));
     expect(body.days).toHaveLength(6);
     expect(body.days.map((d) => d.day)).toEqual([1, 2, 3, 4, 5, 6]);
     for (const day of body.days) {
@@ -395,12 +393,12 @@ describe('menuRequestFrom', () => {
   });
 
   it('round-trips: publishing then reading back leaves the same menu', () => {
-    const original = resolveMenu(hall('veg', ['north_indian']), {
+    const original = resolveMenu(hall('north_indian__veg'), {
       days: { '3': { lunch: ['Rajma', 'Chawal'] } },
       note: 'Late lunch',
     });
     const readBack = resolveMenu(
-      hall('veg', ['north_indian']),
+      hall('north_indian__veg'),
       overrideFromMenu({ ...menuRequestFrom(original), note: original.note }),
     );
 
@@ -415,20 +413,20 @@ describe('“edited” is derived, not stored', () => {
   it('does not call a stored menu edited when it matches the published sheet', () => {
     // This is why the flag is derived: the API holds a full copy of the menu, so a
     // stored-equals-published hall would otherwise report every sitting as changed.
-    const published = resolveMenu(hall('veg', ['south_indian']), null);
+    const published = resolveMenu(hall('south_indian__veg'), null);
     const stored = overrideFromMenu({ ...menuRequestFrom(published), note: null });
-    const resolved = resolveMenu(hall('veg', ['south_indian']), stored);
+    const resolved = resolveMenu(hall('south_indian__veg'), stored);
 
     expect(resolved.edited).toBe(false);
     expect(resolved.days.every((d) => MENU_SLOTS.every((s) => !d.edited[s]))).toBe(true);
   });
 
   it('flags exactly the sitting that differs from the published sheet', () => {
-    const published = resolveMenu(hall('veg', ['south_indian']), null);
+    const published = resolveMenu(hall('south_indian__veg'), null);
     const body = menuRequestFrom(published);
     body.days[0].slots[2].dishes = ['Something else'];
 
-    const resolved = resolveMenu(hall('veg', ['south_indian']), overrideFromMenu(body));
+    const resolved = resolveMenu(hall('south_indian__veg'), overrideFromMenu(body));
     expect(resolved.days[0].edited.dinner).toBe(true);
     expect(resolved.days[0].edited.breakfast).toBe(false);
     expect(resolved.days[1].edited.dinner).toBe(false);

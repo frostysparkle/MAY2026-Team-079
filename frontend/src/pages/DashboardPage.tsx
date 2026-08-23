@@ -162,7 +162,7 @@ export default function DashboardPage() {
     return rounds.sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [myEvents, now]);
 
-  const openCount = events?.filter((e) => e.open).length ?? 0;
+  const openCount = events?.filter((e) => e.registration.is_open).length ?? 0;
   const seatsLeft =
     workshops?.reduce((sum, w) => sum + Math.max(0, w.capacity - w.registration_count), 0) ?? null;
 
@@ -289,7 +289,9 @@ export default function DashboardPage() {
                           ? `Team ${registration.team_id} · ${registration.team_role}`
                           : 'Solo entry'
                       }
-                      trailing={!event.open && <StatusBadge tone="neutral">Closed</StatusBadge>}
+                      trailing={
+                        !event.registration.is_open && <StatusBadge tone="neutral">Closed</StatusBadge>
+                      }
                     />
                   </Link>
                 );

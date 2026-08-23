@@ -7,7 +7,7 @@ import {
   occupancyTone,
   OCCUPANCY_UNREADABLE,
 } from '@/features/occupancy';
-import type { MessSummary, MessType } from './messOccupancy';
+import type { MessDiet, MessSummary } from './messOccupancy';
 
 /**
  * The headline figures above the mess list.
@@ -32,7 +32,7 @@ import type { MessSummary, MessType } from './messOccupancy';
  * read as "nobody is allocated".
  */
 
-const TYPE_STYLE: Record<MessType, { icon: LucideIcon; tone: StatTone }> = {
+const TYPE_STYLE: Record<MessDiet, { icon: LucideIcon; tone: StatTone }> = {
   veg: { icon: Leaf, tone: 'success' },
   non_veg: { icon: Drumstick, tone: 'warning' },
   jain: { icon: Sprout, tone: 'brand' },

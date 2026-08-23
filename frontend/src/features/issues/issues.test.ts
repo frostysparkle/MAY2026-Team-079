@@ -140,7 +140,7 @@ describe('reportableFacilities', () => {
   const myHostel = (over: Partial<MyHostelResponse> = {}): MyHostelResponse => ({
     assigned_hostel: 'H12',
     room: '101',
-    logged_in: false,
+    inside: false,
     registered: true,
     volunteers: [],
     ...over,

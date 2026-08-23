@@ -53,12 +53,8 @@ export function MessCards({
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
-                <StatusBadge tone={row.typeTone}>{row.typeLabel}</StatusBadge>
-                {row.cuisineLabels.map((label) => (
-                  <StatusBadge key={label} tone="warning">
-                    {label}
-                  </StatusBadge>
-                ))}
+                <StatusBadge tone={row.dietTone}>{row.dietLabel}</StatusBadge>
+                {row.cuisineLabel && <StatusBadge tone="warning">{row.cuisineLabel}</StatusBadge>}
                 {status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
               </div>
 

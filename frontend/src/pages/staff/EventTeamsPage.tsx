@@ -244,8 +244,9 @@ export default function EventTeamsPage() {
       {isTeamEvent && rule && (
         <p className="text-sm text-muted">
           Teams of {rule.min === rule.max ? rule.max : `${rule.min}–${rule.max}`}
-          {rule.house ? ', grouped within a house' : ', mixed across houses'}. Allocation only
-          groups entries that have no team yet — it never breaks up a team that already exists.
+          {rule.house_vs_house_event ? ', grouped within a house' : ', mixed across houses'}.
+          Allocation only groups entries that have no team yet — it never breaks up a team that
+          already exists.
         </p>
       )}
 

@@ -48,19 +48,31 @@ const ALAKANANDA: Mess = {
   mess_id: 'M-ALK',
   name: 'Alakananda Hall',
   capacity: 500,
-  preference: 'veg',
-  cuisines: ['south_indian'],
+  type: 'south_indian__veg',
 };
 
 const UNALLOCATED: MyHostelResponse = {
   assigned_hostel: null,
   room: null,
-  logged_in: false,
+  inside: false,
   registered: false,
   volunteers: [],
 };
 
 const NO_MESS: MyMessResponse = { allotted_mess: null, mess_details: null, slots: [] };
+
+/** One `GET /mess/my_mess` slot entry — the backend's real flat shape. */
+function slotEntry(day: string, slot: 'breakfast' | 'lunch' | 'dinner', scanned: boolean) {
+  return {
+    day,
+    slot,
+    start_time: null,
+    end_time: null,
+    menu: null,
+    scanned,
+    scanned_at: null,
+  };
+}
 
 function renderPage() {
   return render(
@@ -98,7 +110,7 @@ describe('AccommodationPage', () => {
       course_stage: null,
       photo: null,
       public_key: null,
-      mess_preference: 'veg',
+      mess_preference: 'south_indian__veg',
     });
   });
 
@@ -166,7 +178,7 @@ describe('AccommodationPage', () => {
     myHostel.mockResolvedValue({
       assigned_hostel: 'H-NIL',
       room: '104',
-      logged_in: true,
+      inside: true,
       registered: true,
       volunteers: [{ name: 'Rahul', phone: '9876543210' }],
     });
@@ -174,8 +186,12 @@ describe('AccommodationPage', () => {
       allotted_mess: 'M-ALK',
       mess_details: ALAKANANDA,
       slots: [
-        { breakfast: { logged: true }, lunch: { logged: false }, dinner: { logged: false } },
-        { breakfast: { logged: false }, lunch: { logged: false }, dinner: { logged: false } },
+        slotEntry('day_1', 'breakfast', true),
+        slotEntry('day_1', 'lunch', false),
+        slotEntry('day_1', 'dinner', false),
+        slotEntry('day_2', 'breakfast', false),
+        slotEntry('day_2', 'lunch', false),
+        slotEntry('day_2', 'dinner', false),
       ],
     });
 
@@ -185,7 +201,11 @@ describe('AccommodationPage', () => {
     expect(screen.getByText('104')).toBeInTheDocument();
     expect(screen.getByText('Inside the block')).toBeInTheDocument();
     expect(screen.getByText('Alakananda Hall')).toBeInTheDocument();
-    expect(screen.getByText('Veg · South Indian')).toBeInTheDocument();
+    // Shown twice once allocated: the hall's own "Serves" fact and the now-locked
+    // "Meal preference" field both read the same combined type ("Veg · South
+    // Indian") — realistic, since allocation only ever matches a hall to a
+    // preference that equals it.
+    expect(screen.getAllByText('Veg · South Indian')).toHaveLength(2);
     expect(screen.getByText('1 of 6')).toBeInTheDocument();
     expect(screen.getAllByText('Allotted')).toHaveLength(2);
     // Nothing is outstanding, so the picker is gone and the pass is offered.
@@ -208,11 +228,11 @@ describe('AccommodationPage — mess menu and meal timings (story 4.1)', () => {
   const ALLOTTED: MyMessResponse = {
     allotted_mess: 'M-ALK',
     mess_details: ALAKANANDA,
-    slots: Array.from({ length: 5 }, () => ({
-      breakfast: { logged: false },
-      lunch: { logged: false },
-      dinner: { logged: false },
-    })),
+    slots: Array.from({ length: 5 }, (_, i) =>
+      (['breakfast', 'lunch', 'dinner'] as const).map((slot) =>
+        slotEntry(`day_${i + 1}`, slot, false),
+      ),
+    ).flat(),
   };
 
   beforeEach(() => {
@@ -245,7 +265,7 @@ describe('AccommodationPage — mess menu and meal timings (story 4.1)', () => {
       course_stage: null,
       photo: null,
       public_key: null,
-      mess_preference: 'veg',
+      mess_preference: 'south_indian__veg',
     });
   });
 
@@ -372,7 +392,7 @@ describe('AccommodationPage — mess menu and meal timings (story 4.1)', () => {
   });
 
   it('says the jain menu is an approximation rather than implying a guarantee', async () => {
-    const jain: Mess = { ...ALAKANANDA, preference: 'jain' };
+    const jain: Mess = { ...ALAKANANDA, type: 'jain' };
     listMess.mockResolvedValue([jain]);
     myMess.mockResolvedValue({ ...ALLOTTED, mess_details: jain });
 

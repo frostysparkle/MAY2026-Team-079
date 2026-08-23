@@ -20,6 +20,8 @@ import { fullEventView } from '@/features/events/eventView';
 import { EventRegistrationForm } from '@/features/events/EventRegistrationForm';
 import { EventCrowdCard } from '@/features/events/EventCrowdCard';
 import { useEventCrowd } from '@/features/events/useEventCrowd';
+import { EventAnnouncementsPanel } from '@/features/events/EventAnnouncementsPanel';
+import { useEventAnnouncements } from '@/features/events/useEventAnnouncements';
 
 /**
  * An event as the participant sees it — the very same `EventDetailView` the public
@@ -54,6 +56,10 @@ export default function EventDetailPage() {
   // parsing rule lives in one place — see `eventExtras.parseCapacity`.
   const capacity = event ? readEventExtras(event.registration).capacity : undefined;
   const { counts, reload: reloadCrowd } = useEventCrowd(eventId);
+  // Story 8.2. Reads `GET /events/{id}/announcements`, which 403s for anyone
+  // not registered for this event — the hook degrades that to an empty list
+  // rather than an error, so this is safe to call before `registration` loads.
+  const announcements = useEventAnnouncements(eventId);
 
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
@@ -128,7 +134,7 @@ export default function EventDetailPage() {
     <FestivalScreen
       title={view.category.label}
       eyebrow="Programme"
-      subtitle={event.open ? 'Registration is open' : 'Registration is closed'}
+      subtitle={event.registration.is_open ? 'Registration is open' : 'Registration is closed'}
       back={backToEvents}
       actions={
         <Button variant="secondary" onClick={() => navigate(ROUTES.schedule)}>
@@ -171,7 +177,7 @@ export default function EventDetailPage() {
               {/* Withdrawing is offered whether or not entries are still open,
                   because `DELETE /events/{id}/register` accepts it either way.
                   Only *amending* answers needs an open window, so only that is
-                  behind `event.open` — the two used to share this branch, which
+                  behind `event.registration.is_open` — the two used to share this branch, which
                   meant a closed window removed the way out of a registration
                   along with the way to correct it. */}
               {editing ? (
@@ -188,7 +194,7 @@ export default function EventDetailPage() {
               ) : (
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap gap-2">
-                    {event.open && hasAnswerableFields(event) && (
+                    {event.registration.is_open && hasAnswerableFields(event) && (
                       <Button
                         variant="secondary"
                         className="w-fit"
@@ -202,7 +208,7 @@ export default function EventDetailPage() {
                       Undo registration
                     </Button>
                   </div>
-                  {!event.open && (
+                  {!event.registration.is_open && (
                     <p className="text-sm text-muted">
                       Registration has closed, so your answers can no longer be changed — but you
                       can still withdraw.
@@ -218,6 +224,12 @@ export default function EventDetailPage() {
           )
         }
       />
+
+      {/* Story 8.2. Only a registrant can read this event's announcements
+          (`_may_read_announcements` in `backend/routers/events.py`), so there is
+          nothing to show anybody else — the panel is skipped entirely rather
+          than rendered empty for a participant who has not registered. */}
+      {registration && <EventAnnouncementsPanel state={announcements} canPublish={false} />}
     </FestivalScreen>
   );
 }

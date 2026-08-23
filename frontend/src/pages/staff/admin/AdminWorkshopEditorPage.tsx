@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiClientError } from '@/api';
-import type { Workshop } from '@/api/types';
+import type { Workshop, WorkshopSlot } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { WorkshopTeamPanel } from '@/features/workshops/WorkshopTeamPanel';
@@ -16,27 +16,35 @@ import {
   TextInput,
 } from '@/components/ui';
 import type { FieldError } from '@/api/errors';
-import {
-  formatSlotId,
-  parseSlotId,
-  shiftLabel,
-  WORKSHOP_SHIFTS,
-  type WorkshopShift,
-} from '@/features/workshops/workshopSlot';
 import { workshopPosterPaths, WORKSHOP_COVER } from '@/features/workshops/workshopView';
 import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
+
+/** `datetime-local`'s value has no seconds or offset; the backend parses ISO 8601. */
+function toIso(localValue: string): string {
+  if (!localValue) return '';
+  return `${localValue}:00Z`;
+}
+
+/** The reverse of `toIso`, for hydrating a `datetime-local` input from a stored value. */
+function fromIso(value: string | null | undefined): string {
+  if (!value) return '';
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(value.trim());
+  return match ? match[1] : '';
+}
 
 /**
  * Super Admin workshop authoring — create a new workshop or edit an existing
  * one. Mirrors `AdminEventEditorPage`.
  *
- * The day and shift are stored in `slot_id`, which is the backend's own
- * time-slot field: two workshops sharing a slot genuinely clash, and the
- * register endpoint already refuses a second booking in the same slot. The
- * flyer is not stored at all — it is derived from the workshop id by
- * convention, so a flyer named for the id picks it up automatically. Since the
- * server assigns that id, the flyer can only be dropped in after the workshop
- * exists; the Artwork card says as much on create.
+ * Matches `WorkshopCreateRequest` exactly (`backend/models.py`):
+ * `slot_id` (must reference an existing `workshop_slots` document — created
+ * under "Manage slots", not here), `name`, `description`, `venue`, `capacity`,
+ * `instructions`, `registration_start`, `registration_end`, and
+ * `registration_open`, all required except the last. This used to invent its
+ * own `YYYY-MM-DD-morning` slot id convention with no relationship to the
+ * backend's `D<day>S<shift>` pattern, and never collected `description` or the
+ * registration window at all — every create from this form 422'd against the
+ * real API.
  */
 export default function AdminWorkshopEditorPage() {
   const navigate = useNavigate();
@@ -63,13 +71,34 @@ export default function AdminWorkshopEditorPage() {
    */
   const [id, setId] = useState('');
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [venue, setVenue] = useState('');
   const [capacity, setCapacity] = useState(30);
   const [instructions, setInstructions] = useState('');
-  const [date, setDate] = useState('');
-  const [shift, setShift] = useState<WorkshopShift>('morning');
-  /** Kept verbatim when the existing slot id is not a day/shift pair. */
-  const [rawSlot, setRawSlot] = useState<string | null>(null);
+
+  // The slot catalogue, fetched fresh so the picker always offers what
+  // actually exists — `GET /workshop-slots` needs no token.
+  const [slots, setSlots] = useState<WorkshopSlot[] | null>(null);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [slotId, setSlotId] = useState('');
+
+  const [regStart, setRegStart] = useState('');
+  const [regEnd, setRegEnd] = useState('');
+  const [regOpen, setRegOpen] = useState(true);
+
+  useEffect(() => {
+    api
+      .listWorkshopSlots()
+      .then((all) => {
+        setSlots(
+          [...all].sort((a, b) => a.slot_id.localeCompare(b.slot_id, undefined, { numeric: true })),
+        );
+        setSlotsError(null);
+      })
+      .catch((e) =>
+        setSlotsError(e instanceof ApiClientError ? e.message : 'Could not load workshop slots.'),
+      );
+  }, []);
 
   useEffect(() => {
     if (!workshopId) return;
@@ -89,21 +118,17 @@ export default function AdminWorkshopEditorPage() {
       .finally(() => setLoading(false));
 
     function hydrate(workshop: Workshop) {
-      const slot = parseSlotId(workshop.slot_id);
       setRecord(workshop);
       setId(workshop.workshop_id);
       setName(workshop.name);
+      setDescription(workshop.description ?? '');
       setVenue(workshop.venue);
       setCapacity(workshop.capacity);
       setInstructions(workshop.instructions ?? '');
-      if (slot.date && slot.shift) {
-        setDate(slot.date);
-        setShift(slot.shift);
-        setRawSlot(null);
-      } else {
-        // A hand-written slot id is preserved rather than silently rewritten.
-        setRawSlot(workshop.slot_id);
-      }
+      setSlotId(workshop.slot_id);
+      setRegStart(fromIso(workshop.registration_start));
+      setRegEnd(fromIso(workshop.registration_end));
+      setRegOpen(workshop.registration_open ?? true);
     }
   }, [workshopId]);
 
@@ -112,18 +137,19 @@ export default function AdminWorkshopEditorPage() {
     setSaveError(null);
     setBusy(true);
 
-    const slotId = rawSlot ?? formatSlotId(date, shift);
-
     try {
       if (isEdit && workshopId) {
-        // The backend's update schema covers name/venue/capacity/instructions
-        // only — `slot_id` is fixed once created, since participants' bookings
-        // reference it.
+        // `slot_id` is fixed once created, since participants' bookings
+        // reference it — the backend's update schema has no field for it.
         await api.updateWorkshop(workshopId, {
           name: name.trim(),
+          description: description.trim(),
           venue: venue.trim(),
           capacity,
           instructions: instructions.trim(),
+          registration_start: toIso(regStart),
+          registration_end: toIso(regEnd),
+          registration_open: regOpen,
         });
       } else {
         await api.createWorkshop({
@@ -132,9 +158,13 @@ export default function AdminWorkshopEditorPage() {
           workshop_id: serverGeneratedIdPlaceholder(name),
           slot_id: slotId,
           name: name.trim(),
+          description: description.trim(),
           venue: venue.trim(),
           capacity,
           instructions: instructions.trim(),
+          registration_start: toIso(regStart),
+          registration_end: toIso(regEnd),
+          registration_open: regOpen,
         });
       }
       navigate(ROUTES.adminWorkshops);
@@ -177,6 +207,27 @@ export default function AdminWorkshopEditorPage() {
 
   const preview = workshopPosterPaths(id || 'workshop');
 
+  const slotOptions = (slots ?? []).map((s) => ({
+    value: s.slot_id,
+    label: s.slot_id,
+  }));
+  // On edit, the workshop's own slot is fixed and may no longer be in the
+  // catalogue's current list (unlikely, but the picker should still show it
+  // rather than silently blanking a valid, already-saved value).
+  if (isEdit && slotId && !slotOptions.some((o) => o.value === slotId)) {
+    slotOptions.push({ value: slotId, label: slotId });
+  }
+
+  const canSubmit =
+    name.trim() &&
+    description.trim() &&
+    venue.trim() &&
+    instructions.trim() &&
+    capacity > 0 &&
+    regStart &&
+    regEnd &&
+    (isEdit || slotId);
+
   return (
     <FestivalScreen
       title={isEdit ? 'Edit workshop' : 'New workshop'}
@@ -211,6 +262,19 @@ export default function AdminWorkshopEditorPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Intro to Embedded Rust"
             />
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-ink">
+                Description <span className="text-danger">*</span>
+              </span>
+              <textarea
+                rows={4}
+                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What the workshop covers and who it's for."
+                className="w-full rounded-lg border border-input bg-surface p-3 text-sm outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
             <TextInput
               label="Venue"
               required
@@ -227,9 +291,12 @@ export default function AdminWorkshopEditorPage() {
               onChange={(e) => setCapacity(Math.max(1, Number(e.target.value) || 1))}
             />
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-ink">Instructions</span>
+              <span className="text-sm font-medium text-ink">
+                Instructions <span className="text-danger">*</span>
+              </span>
               <textarea
                 rows={5}
+                required
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="What to bring, prerequisites, anything a participant needs to know."
@@ -243,44 +310,92 @@ export default function AdminWorkshopEditorPage() {
               <div>
                 <h2 className="text-base font-black tracking-tight text-ink">Time slot</h2>
                 <p className="text-xs text-muted">
-                  A participant can book only one workshop per shift per day. Two workshops in the
-                  same slot count as a clash.
+                  A participant can book only one workshop per slot. Two workshops in the same slot
+                  count as a clash.
                 </p>
               </div>
 
-              {rawSlot !== null ? (
-                <ResultBanner variant="warning" title="Custom slot id">
-                  This workshop uses <code>{rawSlot}</code>, which is not a day/shift pair. It is
-                  kept as-is; clear it below to switch to a day and shift.
+              {isEdit ? (
+                <TextInput label="Slot" value={slotId} disabled />
+              ) : slotsError ? (
+                <ResultBanner variant="error" title="Could not load slots">
+                  {slotsError}
+                </ResultBanner>
+              ) : slots !== null && slots.length === 0 ? (
+                <ResultBanner variant="warning" title="No slots exist yet">
+                  Create a time slot first, then come back here to schedule a workshop into it.
                   <span className="mt-2 block">
-                    <Button type="button" variant="secondary" onClick={() => setRawSlot(null)}>
-                      Use a day and shift
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate(ROUTES.adminWorkshopSlots)}
+                    >
+                      Manage slots
                     </Button>
                   </span>
                 </ResultBanner>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <TextInput
-                    label="Day"
-                    type="date"
-                    required={!isEdit}
-                    disabled={isEdit}
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                <>
                   <Select
-                    label="Shift"
-                    value={shift}
-                    disabled={isEdit}
-                    onChange={(e) => setShift(e.target.value as WorkshopShift)}
-                    options={WORKSHOP_SHIFTS.map((s) => ({ value: s, label: shiftLabel(s) }))}
+                    label="Slot"
+                    required
+                    placeholder="Select a slot"
+                    value={slotId}
+                    onChange={(e) => setSlotId(e.target.value)}
+                    options={slotOptions}
+                    hint="Slots are managed separately."
                   />
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(ROUTES.adminWorkshopSlots)}
+                    className="self-start text-xs font-medium text-brand underline"
+                  >
+                    Manage slots
+                  </button>
+                </>
               )}
 
               {isEdit && (
                 <p className="text-xs text-muted">
                   The slot is fixed after creation — participants' bookings reference it.
+                </p>
+              )}
+            </Card>
+
+            <Card className="flex flex-col gap-3">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-ink">Registration</h2>
+                <p className="text-xs text-muted">When this workshop accepts registrations.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <TextInput
+                  label="Opens"
+                  type="datetime-local"
+                  required
+                  value={regStart}
+                  onChange={(e) => setRegStart(e.target.value)}
+                />
+                <TextInput
+                  label="Closes"
+                  type="datetime-local"
+                  required
+                  value={regEnd}
+                  onChange={(e) => setRegEnd(e.target.value)}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-ink">
+                <input
+                  type="checkbox"
+                  checked={regOpen}
+                  onChange={(e) => setRegOpen(e.target.checked)}
+                  className="h-4 w-4 rounded border-input text-brand focus:ring-2 focus:ring-brand/30"
+                />
+                Registration open
+              </label>
+              {isEdit && (
+                <p className="text-xs text-muted">
+                  The backend auto-closes this once the closing time passes. Checking it back on
+                  overrides that until the closing time is changed again.
                 </p>
               )}
             </Card>
@@ -326,7 +441,7 @@ export default function AdminWorkshopEditorPage() {
         </div>
 
         <div className="sticky bottom-0 flex gap-3 border-t border-line bg-canvas/95 py-4 backdrop-blur">
-          <Button type="submit" loading={busy}>
+          <Button type="submit" loading={busy} disabled={!canSubmit}>
             {isEdit ? 'Save changes' : 'Create workshop'}
           </Button>
           <Button type="button" variant="ghost" onClick={() => navigate(ROUTES.adminWorkshops)}>

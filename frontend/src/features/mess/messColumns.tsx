@@ -49,31 +49,25 @@ export function useMessColumns({
       },
       {
         key: 'type',
-        header: 'Type',
-        sortValue: (row) => row.typeLabel,
-        cell: (row) => <StatusBadge tone={row.typeTone}>{row.typeLabel}</StatusBadge>,
+        header: 'Diet',
+        sortValue: (row) => row.dietLabel,
+        cell: (row) => <StatusBadge tone={row.dietTone}>{row.dietLabel}</StatusBadge>,
       },
       {
         key: 'region',
         header: 'Region',
         // Halls with no menu declared sort together at one end rather than being
         // scattered through the alphabet by an empty string.
-        sortValue: (row) => row.cuisineLabels.join(', ') || 'zzz',
+        sortValue: (row) => row.cuisineLabel ?? 'zzz',
         cell: (row) =>
-          row.cuisineLabels.length === 0 ? (
+          row.cuisineLabel === null ? (
             // An em dash, not an empty cell: "none declared" is a fact worth
             // showing, and a blank cell reads as a rendering failure.
             <span className="text-muted" title="No regional menu declared">
               —
             </span>
           ) : (
-            <div className="flex flex-col items-start gap-1">
-              {row.cuisineLabels.map((label) => (
-                <StatusBadge key={label} tone="warning">
-                  {label}
-                </StatusBadge>
-              ))}
-            </div>
+            <StatusBadge tone="warning">{row.cuisineLabel}</StatusBadge>
           ),
       },
       {

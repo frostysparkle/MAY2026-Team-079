@@ -43,9 +43,13 @@ import type {
   EventDailyScansResponse,
   EventCapacityCountsResponse,
   EventLogsResponse,
+  AnnouncementCreateRequest,
+  AnnouncementCreateResponse,
+  Announcement,
   EventCreateRequest,
   EventUpdateRequest,
   EventTeamAssignRequest,
+  EventTeamRoleUpdateRequest,
   ParticipantTeamUpdateRequest,
   RecommendationRequest,
   RecommendedEvent,
@@ -53,6 +57,11 @@ import type {
   Workshop,
   WorkshopCreateRequest,
   WorkshopUpdateRequest,
+  WorkshopSlot,
+  WorkshopSlotCreateRequest,
+  WorkshopSlotUpdateRequest,
+  WorkshopSlotUpdateResponse,
+  WorkshopSlotDeleteResponse,
   WorkshopAssignVolunteerRequest,
   WorkshopLogsResponse,
   WorkshopParticipationResponse,
@@ -126,7 +135,8 @@ export interface ApiClient {
   listHostels(): Promise<Hostel[]>;
   createHostel(req: HostelCreateRequest): Promise<MessageResponse>;
   assignHostelTeam(hostelId: string, req: HostelAssignTeamRequest): Promise<MessageResponse>;
-  toggleHostelScan(hostelId: string, userId: string, logging: boolean): Promise<MessageResponse>;
+  /** `attendance`, not `logging` — the query param `toggle_hostel_scan` actually binds. */
+  toggleHostelScan(hostelId: string, userId: string, attendance: boolean): Promise<MessageResponse>;
   allocateHostels(): Promise<MessageResponse>;
   myHostel(): Promise<MyHostelResponse>;
   /** Ask for a hostel place. Idempotent; refused once one is allotted. */
@@ -135,7 +145,7 @@ export interface ApiClient {
   cancelAccommodationRequest(): Promise<MessageResponse>;
   scanHostel(
     hostelId: string,
-    action: 'entry' | 'exit',
+    action: 'entry' | 'exit' | 'permanent_exit',
     body: ScanQRRequest,
   ): Promise<HostelScanResponse>;
   hostelStatistics(hostelId: string): Promise<HostelStatisticsResponse>;
@@ -148,6 +158,14 @@ export interface ApiClient {
   updateEvent(eventId: string, req: EventUpdateRequest): Promise<MessageResponse>;
   deleteEvent(eventId: string): Promise<MessageResponse>;
   assignEventTeam(eventId: string, req: EventTeamAssignRequest): Promise<MessageResponse>;
+  /** Change an existing event team member's role. */
+  updateEventTeamRole(
+    eventId: string,
+    userId: string,
+    req: EventTeamRoleUpdateRequest,
+  ): Promise<MessageResponse>;
+  /** Take somebody off an event's team, freeing them to be assigned elsewhere. */
+  removeEventTeamMember(eventId: string, userId: string): Promise<MessageResponse>;
   /** `req` is optional: the backend declares the body `Optional[...] = None`, so a solo entry with nothing to submit may omit it. */
   registerForEvent(eventId: string, req?: EventRegistrationInput): Promise<MessageResponse>;
   editEventRegistration(
@@ -165,6 +183,19 @@ export interface ApiClient {
   ): Promise<MessageResponse>;
   scanEvent(eventId: string, body: ScanQRRequest): Promise<EventScanResponse>;
   myDailyEventScans(eventId: string): Promise<EventDailyScansResponse>;
+  /**
+   * Publish a notification about this event to everybody registered for it —
+   * Story 8.2. The event's own Event Head, or a Super Admin.
+   */
+  createAnnouncement(
+    eventId: string,
+    req: AnnouncementCreateRequest,
+  ): Promise<AnnouncementCreateResponse>;
+  /**
+   * Newest first. Readable by whoever it is for — a registered participant —
+   * plus whoever might send one: the event's own team, or a Super Admin.
+   */
+  listAnnouncements(eventId: string): Promise<Announcement[]>;
   /** How full one event is, as counts only. Readable by any signed-in user. */
   eventCapacityCounts(eventId: string): Promise<EventCapacityCountsResponse>;
   /** Every attendance scan recorded for one event. Super Admins only. */
@@ -176,6 +207,18 @@ export interface ApiClient {
    * overwrites the saved preference for next time.
    */
   recommendEvents(req: RecommendationRequest): Promise<RecommendedEvent[]>;
+
+  // ---- workshop slots (super admin) ----
+  /** The slot catalogue — `D<day>S<shift>` time blocks. No token required. */
+  listWorkshopSlots(): Promise<WorkshopSlot[]>;
+  createWorkshopSlot(req: WorkshopSlotCreateRequest): Promise<MessageResponse>;
+  /** Cascades an edited `start_time` onto every workshop referencing this slot. */
+  updateWorkshopSlot(
+    slotId: string,
+    req: WorkshopSlotUpdateRequest,
+  ): Promise<WorkshopSlotUpdateResponse>;
+  /** Deletes the slot and every workshop scheduled against it, with their bookings. */
+  deleteWorkshopSlot(slotId: string): Promise<WorkshopSlotDeleteResponse>;
 
   // ---- workshops ----
   /** The published workshop programme — no token required. */

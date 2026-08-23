@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import type { MessCreateRequest } from '@/api/types';
 import { Button, Card, Select, TextInput } from '@/components/ui';
-import { MESS_CUISINE_OPTIONS, MESS_PREFERENCES } from '@/config/constants';
+import { MESS_PREFERENCE_TYPE_OPTIONS, MESS_PREFERENCE_TYPES } from '@/config/constants';
 import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
-
-const PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({ value: p, label: p }));
 
 /**
  * The "+ New Mess" form.
@@ -13,6 +11,14 @@ const PREF_OPTIONS = MESS_PREFERENCES.map((p) => ({ value: p, label: p }));
  * name does not re-render the table, its progress rings, and the summary cards
  * behind it on every keystroke. Unmounting it on cancel is also what forgets the
  * draft, so there is no reset logic to keep in sync with the fields.
+ *
+ * A single "Type" dropdown, not a diet select plus cuisine checkboxes: the
+ * backend's `MessCreateRequest.type` (`backend/routers/mess.py`) is one field —
+ * `"{cuisine}__{diet}"` (e.g. `"north_indian__veg"`) or the standalone `"jain"` —
+ * validated as one closed set, not two independently-checked axes. There used to
+ * be a separate `preference` + `cuisines` pair here, which the backend has no
+ * fields for at all: `POST /mess` would silently drop both and 422 on the
+ * missing `type`.
  */
 export function NewMessForm({
   busy,
@@ -25,10 +31,7 @@ export function NewMessForm({
 }) {
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('100');
-  const [preference, setPreference] = useState<string>(MESS_PREFERENCES[0]);
-  // Which regional menus the hall cooks. A set rather than a single value: a hall
-  // can serve both, as Nilgiri does.
-  const [cuisines, setCuisines] = useState<string[]>([]);
+  const [type, setType] = useState<string>(MESS_PREFERENCE_TYPES[0]);
 
   return (
     <Card className="flex flex-col gap-3">
@@ -49,45 +52,13 @@ export function NewMessForm({
           onChange={(e) => setCapacity(e.target.value)}
         />
         <Select
-          label="Preference"
-          options={PREF_OPTIONS}
-          value={preference}
-          onChange={(e) => setPreference(e.target.value)}
+          label="Type"
+          options={MESS_PREFERENCE_TYPE_OPTIONS}
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          hint="Cuisine and diet together — the exact value auto-allocation matches against a participant's meal preference."
         />
       </div>
-
-      {/* Checkboxes, not a second dropdown: a hall can serve both menus. */}
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium text-ink">Cuisines</legend>
-        <div className="flex flex-wrap gap-4">
-          {MESS_CUISINE_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className="flex cursor-pointer items-center gap-2 text-sm text-ink"
-            >
-              <input
-                type="checkbox"
-                checked={cuisines.includes(option.value)}
-                onChange={(e) =>
-                  setCuisines((prev) =>
-                    e.target.checked
-                      ? [...prev, option.value]
-                      : prev.filter((c) => c !== option.value),
-                  )
-                }
-                className="h-4 w-4 rounded border-input accent-brand"
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <p className="text-xs text-muted">
-        Auto-allocation groups participants by veg/non_veg/jain — anyone whose profile predates that
-        vocabulary will not match a hall. Cuisine is recorded for the programme only; it does not
-        affect who is placed where.
-      </p>
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -99,8 +70,7 @@ export function NewMessForm({
               mess_id: serverGeneratedIdPlaceholder(name),
               name: name.trim(),
               capacity: Number(capacity) || 0,
-              preference,
-              cuisines,
+              type,
             })
           }
         >

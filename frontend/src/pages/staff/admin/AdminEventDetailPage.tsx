@@ -82,7 +82,7 @@ export default function AdminEventDetailPage() {
     <FestivalScreen
       title={view.category.label}
       eyebrow="Super Admin"
-      subtitle={event.open ? 'Registration is open' : 'Registration is closed'}
+      subtitle={event.registration.is_open ? 'Registration is open' : 'Registration is closed'}
       back={backToEvents}
       actions={
         <>
@@ -125,7 +125,7 @@ export default function AdminEventDetailPage() {
         </ResultBanner>
       )}
 
-      {!event.open && (
+      {!event.registration.is_open && (
         <div>
           <StatusBadge tone="neutral">Closed for registration</StatusBadge>
         </div>

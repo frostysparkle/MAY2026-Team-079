@@ -36,9 +36,15 @@ const GANGA: Hostel = {
   category: "Men's block",
   coordinator: { name: 'Dr. Rao', phone: '+91 98765 43210' },
   hostel_team: [
-    { user_id: 'BT1', role: 'other', name: 'Meera R', phone: '9000000002', logging: true },
+    {
+      user_id: 'BT1',
+      role: 'hostel_volunteer',
+      name: 'Meera R',
+      phone: '9000000002',
+      attendance: true,
+    },
     // Nameless and unreachable — the shape the backend produces for a bare record.
-    { user_id: 'BT2', role: 'volunteer', name: 'volunteer', phone: 'N/A', logging: false },
+    { user_id: 'BT2', role: 'guard', name: 'volunteer', phone: 'N/A', attendance: false },
   ],
 };
 
@@ -46,8 +52,7 @@ const HALL: Mess = {
   mess_id: 'M3',
   name: 'Hall C',
   capacity: 500,
-  preference: 'veg',
-  cuisines: ['south_indian'],
+  type: 'south_indian__veg',
   mess_team: [
     { user_id: 'BT3', role: 'other', name: 'Ravi K', phone: '9000000003', logging: true },
   ],

@@ -164,6 +164,12 @@ export const ROUTES = {
   adminWorkshops: '/staff/admin/workshops',
   adminWorkshopNew: '/staff/admin/workshops/new',
   adminWorkshopEdit: '/staff/admin/workshops/:workshopId/edit',
+  /**
+   * The `D<day>S<shift>` time-block catalogue workshops are scheduled
+   * against — `GET/POST/PUT/DELETE /workshop-slots`, Super Admin only for the
+   * writes. A slot must exist before a workshop can be created against it.
+   */
+  adminWorkshopSlots: '/staff/admin/workshops/slots',
   adminMess: '/staff/admin/mess',
   adminHostels: '/staff/admin/hostels',
   adminBackendTeams: '/staff/admin/backend-teams',

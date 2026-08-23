@@ -16,7 +16,13 @@
  */
 
 export const EVENT_HEAD_ROLE = 'event_head';
-export const EVENT_MEMBER_ROLE = 'event_member';
+/**
+ * The backend's vocabulary is `event_head` | `member` | `volunteer`
+ * (`models.EventTeamAssignRequest.role`) — `member`, not `event_member`. The
+ * label shown in the UI stays "Event Member"; only the wire value has to
+ * match what `POST /events/{id}/team` actually accepts.
+ */
+export const EVENT_MEMBER_ROLE = 'member';
 export const EVENT_VOLUNTEER_ROLE = 'volunteer';
 
 /** The exact vocabulary `EventTeamAssignRequest.role` accepts. */

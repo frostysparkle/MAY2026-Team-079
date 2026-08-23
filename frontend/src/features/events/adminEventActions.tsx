@@ -33,7 +33,16 @@ export function useAdminEventActions({
     setBusy(true);
     setError(null);
     try {
-      await api.updateEvent(event.event_id, { open: !event.open });
+      // There is no top-level `open` field on `PUT /events/{id}`. Registration
+      // availability is the Super Admin kill-switch `registration.allowed`
+      // (`RegistrationWindowUpdate`), which the backend merges onto the event's
+      // existing window rather than replacing it — so only `allowed` needs to be
+      // sent here. The effective open/closed state a reader sees afterward is
+      // still `registration.is_open`, which also requires the time window to be
+      // current; toggling `allowed` cannot force registration open outside it.
+      await api.updateEvent(event.event_id, {
+        registration: { allowed: !event.registration.is_open },
+      });
       onChanged?.();
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : 'Could not update the event.');
@@ -82,8 +91,8 @@ export function useAdminEventActions({
           }),
       },
       {
-        label: event.open ? 'Close' : 'Reopen',
-        icon: event.open ? Lock : LockOpen,
+        label: event.registration.is_open ? 'Close' : 'Reopen',
+        icon: event.registration.is_open ? Lock : LockOpen,
         onSelect: () => toggleOpen(event),
         disabled: busy,
       },

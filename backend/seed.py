@@ -2,9 +2,13 @@
 Seed the official Paradox hostel catalogue into the ``hostel`` collection.
 
 The inventory is 22 blocks — 16 men's and 6 women's — each with a capacity of
-300 and no occupants yet. Nothing else is created: no rooms, no allocations, no
-sample participants. Allocation is the job of ``POST /hostels/allocate``, and
-occupancy is only ever moved by the application.
+300 and no occupants yet. `POST /hostels/allocate` (`routers/hostels.py`)
+seats participants into pre-generated rooms, at up to `sharing` occupants per
+room — the same `sharing` + `rooms` shape `POST /hostels` builds via
+`generate_room_numbers` when a block is created through the API. This script
+builds that shape for the catalogue too, so a seeded block is exactly as
+allocatable as one created by hand; no allocations or sample participants are
+created here, and occupancy is only ever moved by the application.
 
 The catalogue itself lives in ``frontend/src/data/paradoxHostels.json``. That
 same dataset is what the frontend's mock API seeds, so the Super Admin dashboard
@@ -28,10 +32,12 @@ instance (and the same ``TESTING=1`` in-memory fallback) as the API.
 
 import argparse
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 
 from database import hostel_collection
+from id_generator import generate_room_numbers
 
 DEFAULT_DATASET = (
     Path(__file__).resolve().parent.parent / "frontend" / "src" / "data" / "paradoxHostels.json"
@@ -40,15 +46,38 @@ DEFAULT_DATASET = (
 # The catalogue facts kept in step with the dataset on every run. `category` is
 # the catalogue wording ("men" / "women"); `gender` is the value the rest of the
 # backend keys on — `POST /hostels/allocate` matches it against a participant's
-# `profile.gender`, which is "male" / "female".
+# `profile.gender`, which is "male" / "female". `sharing` and `rooms` are not
+# read off the dataset — the dataset carries no room layout — they are derived
+# below (see `_rooms_for`) so allocation has the same `sharing` + pre-generated
+# `rooms` shape `POST /hostels` builds for a block created through the API.
 CATALOGUE_FIELDS = ("hostel_id", "name", "category", "gender", "capacity")
+
+# Occupants per room for every seeded block. `POST /hostels/allocate` seats
+# people into rooms at up to this many per room; this is a seed-time choice
+# (the dataset itself has no room layout), not something read from anywhere
+# else, so it is named here rather than left as a bare literal.
+ROOM_SHARING = 3
+
+
+def _rooms_for(capacity: int, sharing: int = ROOM_SHARING) -> list[dict]:
+    """
+    Enough rooms, at ``sharing`` occupants each, to cover ``capacity`` — the
+    same shape `create_hostel` (`routers/hostels.py`) builds from
+    `generate_room_numbers`, reused here rather than re-implemented so the
+    room-numbering scheme (start at "101", sequential) can never drift between
+    a hostel created through the API and one seeded by this script.
+    """
+    num_rooms = math.ceil(capacity / sharing)
+    return [{"room_number": rn, "occupants": []} for rn in generate_room_numbers(num_rooms)]
 
 
 def load_catalogue(dataset: Path = DEFAULT_DATASET) -> list[dict]:
     """
     Read the hostel inventory from ``dataset``.
 
-    Only the catalogue fields are carried over; ``coordinator`` and any other
+    The catalogue fields are carried over as-is; ``sharing`` and ``rooms`` are
+    derived from each block's ``capacity`` (see ``_rooms_for``), since the
+    dataset itself has no room layout. ``coordinator`` and any other
     per-deployment detail in the dataset is left to the application to fill in.
     """
     if not dataset.is_file():
@@ -60,6 +89,15 @@ def load_catalogue(dataset: Path = DEFAULT_DATASET) -> list[dict]:
     ids = [hostel["hostel_id"] for hostel in catalogue]
     if len(set(ids)) != len(ids):
         raise SystemExit(f"Dataset has duplicate hostel_ids: {dataset}")
+
+    for hostel in catalogue:
+        # `POST /hostels/allocate` computes a block's bed ceiling as
+        # `sharing * len(rooms)`, capped by `capacity`
+        # (`min(capacity, sharing * len(rooms))`) — without `rooms`/`sharing`
+        # that ceiling is 0 and the block can never receive anyone, which is
+        # exactly the defect this seed fix closes.
+        hostel["sharing"] = ROOM_SHARING
+        hostel["rooms"] = _rooms_for(hostel["capacity"], ROOM_SHARING)
 
     return catalogue
 
@@ -74,11 +112,20 @@ def seed_hostels(
     """
     Upsert the catalogue into ``collection`` and return a tally of what changed.
 
-    Each document is handled in two halves: the catalogue fields (name,
-    category, gender, capacity) are corrected if they have drifted, while
-    occupancy and creation time are seeded once and then left alone. A block
-    that already matches is left completely untouched, so ``updated_at`` only
-    moves when something genuinely changed.
+    Each document is handled in three parts. The catalogue fields (name,
+    category, gender, capacity) are corrected if they have drifted; occupancy
+    and creation time are seeded once and then left alone; and ``sharing`` /
+    ``rooms`` are *backfilled* only when a block has neither yet — never
+    diffed against the freshly-generated catalogue value the way the other
+    catalogue fields are. `POST /hostels/allocate` writes real participants
+    into ``rooms[i].occupants``, so treating a freshly regenerated (empty)
+    ``rooms`` array as "drift" on every run would silently wipe out every
+    room assignment the moment this script is re-run after an allocation. A
+    block that already has rooms keeps exactly the ones it has; only a block
+    seeded before this fix existed (or created some other way without them)
+    gets them filled in. A block that already matches everything is left
+    completely untouched, so ``updated_at`` only moves when something
+    genuinely changed.
     """
     if catalogue is None:
         catalogue = load_catalogue()
@@ -87,6 +134,8 @@ def seed_hostels(
 
     for hostel in catalogue:
         hostel_id = hostel["hostel_id"]
+        catalogue_fields = {f: hostel[f] for f in CATALOGUE_FIELDS}
+        room_fields = {f: hostel[f] for f in ("sharing", "rooms")}
 
         # A block already stored under a different id would be a duplicate the
         # upsert can't see. Report it and leave both records untouched.
@@ -99,7 +148,17 @@ def seed_hostels(
         existing = collection.find_one({"hostel_id": hostel_id})
 
         if existing is not None:
-            drift = {f: v for f, v in hostel.items() if existing.get(f) != v}
+            drift = {f: v for f, v in catalogue_fields.items() if existing.get(f) != v}
+
+            # Backfill only what is missing — a block with no `rooms` yet (every
+            # block seeded before this fix, or one written some other way without
+            # them) has nothing for `POST /hostels/allocate` to seat anyone into,
+            # and gets the catalogue's derived layout. A block that already has
+            # rooms, even an empty list on a 0-room block, is left exactly as it
+            # is: it may already hold real occupants this script must not touch.
+            if not existing.get("rooms"):
+                drift.update(room_fields)
+
             if not drift:
                 tally["unchanged"] += 1
                 continue

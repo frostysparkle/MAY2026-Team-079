@@ -24,6 +24,8 @@ import {
   type EventMetaRow,
 } from '@/features/events/eventExtras';
 import { EventTeamPanel } from '@/features/events/EventTeamPanel';
+import { EventAnnouncementsPanel } from '@/features/events/EventAnnouncementsPanel';
+import { useEventAnnouncements } from '@/features/events/useEventAnnouncements';
 import { serverGeneratedIdPlaceholder } from '@/lib/serverGeneratedId';
 
 /**
@@ -138,6 +140,12 @@ export default function AdminEventEditorPage() {
    */
   const [record, setRecord] = useState<Event | null>(null);
 
+  // Story 8.2. A Super Admin may always publish, per `create_announcement` in
+  // `backend/routers/events.py` — unlike the staff dashboard's duty section,
+  // this screen needs no Event Head check. Only meaningful once the event
+  // exists, so it is skipped entirely on `new`.
+  const announcements = useEventAnnouncements(eventId ?? '');
+
   useEffect(() => {
     if (!eventId) return;
     api
@@ -166,7 +174,7 @@ export default function AdminEventEditorPage() {
       setPoster(event.poster ?? '');
       setTeamMin(event.team?.min ?? 1);
       setTeamMax(event.team?.max ?? 1);
-      setHouse(event.team?.house ?? false);
+      setHouse(event.team?.house_vs_house_event ?? false);
       setAllowSingle(event.team?.allow_single_registration ?? true);
       setRegStart(window.startTime ?? '');
       setRegEnd(window.endTime ?? '');
@@ -239,7 +247,7 @@ export default function AdminEventEditorPage() {
       team: {
         min: teamMin,
         max: teamMax,
-        house,
+        house_vs_house_event: house,
         allow_single_registration: allowSingle,
       },
       prize_money: keptPrizes.map(({ position, amount }) => ({ position, amount })),
@@ -687,6 +695,16 @@ export default function AdminEventEditorPage() {
             canManage
             onChanged={refreshRecord}
           />
+        </div>
+      )}
+
+      {/* Story 8.2. Also edit-only: an announcement is posted against an event
+          that already exists, the same reason the team panel above waits for
+          one. A Super Admin may always publish here, unlike the staff
+          dashboard's own copy of this panel, which is Event-Head-gated. */}
+      {isEdit && eventId && (
+        <div className="mt-8">
+          <EventAnnouncementsPanel state={announcements} canPublish />
         </div>
       )}
     </FestivalScreen>

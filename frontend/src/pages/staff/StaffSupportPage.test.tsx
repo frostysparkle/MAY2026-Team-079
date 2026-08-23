@@ -65,7 +65,9 @@ const GANGA: Hostel = {
   capacity: 300,
   gender: 'male',
   coordinator: {},
-  hostel_team: [{ user_id: 'BT1', role: 'volunteer', name: 'Meera R', phone: 'x', logging: true }],
+  hostel_team: [
+    { user_id: 'BT1', role: 'hostel_volunteer', name: 'Meera R', phone: 'x', attendance: true },
+  ],
 };
 
 function record(overrides: Partial<QueryRecord> = {}): QueryRecord {

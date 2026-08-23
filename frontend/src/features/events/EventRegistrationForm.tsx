@@ -3,6 +3,7 @@ import { Pencil, ShieldAlert, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, RegistrationField } from '@/api/types';
 import { Button, ResultBanner, Select, TextInput } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { currentParticipant } from '@/stores/authStore';
 import { optionsForField, readEventExtras } from './eventExtras';
 import { eventTeamRoleLabel, eventTeamRoleOf } from './eventTeam';
@@ -46,11 +47,19 @@ export function EventRegistrationForm({
 }) {
   const extras = readEventExtras(event.registration);
   const fields = event.registration_fields ?? [];
-  const team = event.team ?? { min: 1, max: 1, house: false, allow_single_registration: true };
+  const team = event.team ?? {
+    min: 1,
+    max: 1,
+    house_vs_house_event: false,
+    allow_single_registration: true,
+  };
   const isEdit = mode === 'edit';
   const isTeamEvent = team.max > 1 && !isEdit;
 
+  /** Create a new team, or join a teammate's by its `team_id`. Solo otherwise. */
+  const [teamMode, setTeamMode] = useState<'solo' | 'create' | 'join'>('solo');
   const [teamName, setTeamName] = useState('');
+  const [teamId, setTeamId] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>(() =>
     seedAnswers(fields, initialAnswers),
   );
@@ -92,7 +101,9 @@ export function EventRegistrationForm({
         await api.editEventRegistration(event.event_id, { registration_data: answers });
       } else {
         await api.registerForEvent(event.event_id, {
-          team_name: isTeamEvent && teamName.trim() ? teamName.trim() : undefined,
+          team_name:
+            isTeamEvent && teamMode === 'create' && teamName.trim() ? teamName.trim() : undefined,
+          team_id: isTeamEvent && teamMode === 'join' && teamId.trim() ? teamId.trim() : undefined,
           registration_data: answers,
         });
       }
@@ -119,7 +130,7 @@ export function EventRegistrationForm({
     }
   }
 
-  if (!event.open) {
+  if (!event.registration.is_open) {
     return (
       <ResultBanner
         variant="warning"
@@ -195,13 +206,54 @@ export function EventRegistrationForm({
       )}
 
       {isTeamEvent && (
-        <TextInput
-          label="Team name"
-          required={!team.allow_single_registration}
-          value={teamName}
-          onChange={(e) => setTeamName(e.target.value)}
-          placeholder="Your team's name"
-        />
+        <div className="flex flex-col gap-2">
+          {/* Solo is offered here only when the event actually allows it — the
+              backend refuses a solo entry otherwise (`team.allow_single_registration`). */}
+          <div className="flex gap-2 rounded-xl bg-surface-2 p-1">
+            {(
+              [
+                ...(team.allow_single_registration
+                  ? [{ key: 'solo' as const, label: 'Solo' }]
+                  : []),
+                { key: 'create' as const, label: 'Create a team' },
+                { key: 'join' as const, label: 'Join a team' },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setTeamMode(option.key)}
+                aria-pressed={teamMode === option.key}
+                className={cn(
+                  'tap flex-1 rounded-lg py-2 text-xs font-semibold',
+                  teamMode === option.key ? 'bg-surface text-brand shadow-card' : 'text-muted',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {teamMode === 'create' && (
+            <TextInput
+              label="Team name"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="Your team's name"
+              hint="You become the team's leader. Share the team id you get back with your teammates so they can join."
+            />
+          )}
+
+          {teamMode === 'join' && (
+            <TextInput
+              label="Team id"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              placeholder="e.g. TMSPO111111"
+              hint="Ask your team's leader for the id they were given when they created it."
+            />
+          )}
+        </div>
       )}
 
       {fields.map((field) => (
@@ -221,7 +273,11 @@ export function EventRegistrationForm({
           type="submit"
           fullWidth={!isEdit}
           loading={busy}
-          disabled={busy || (failure !== null && !failure.retryable)}
+          disabled={
+            busy ||
+            (failure !== null && !failure.retryable) ||
+            (isTeamEvent && teamMode === 'join' && !teamId.trim())
+          }
         >
           {isEdit ? 'Save answers' : 'Register'}
         </Button>

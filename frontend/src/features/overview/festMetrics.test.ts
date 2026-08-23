@@ -36,8 +36,7 @@ function event(id: string, schedule: ScheduleRound[] = [], overrides: Partial<Ev
     event_type: 'technicals',
     name: id,
     description: '',
-    team: { min: 1, max: 1, house: false, allow_single_registration: true },
-    open: true,
+    team: { min: 1, max: 1, house_vs_house_event: false, allow_single_registration: true },
     prize_money: [],
     registration: {},
     schedule,
@@ -346,7 +345,7 @@ const hall = (id: string, team: Mess['mess_team']): Mess => ({
   mess_id: id,
   name: id,
   capacity: 100,
-  preference: 'veg',
+  type: 'north_indian__veg',
   mess_team: team,
 });
 
@@ -362,7 +361,7 @@ describe('buildStaffWorkload', () => {
   const entities = {
     events: [event('E1', [], { event_team: [{ user_id: 'S1', role: 'event_head' }] })],
     mess: [hall('M1', [{ user_id: 'S1', role: 'volunteer', logging: true }])],
-    hostels: [block('H1', [{ user_id: 'S2', role: 'volunteer', logging: false }])],
+    hostels: [block('H1', [{ user_id: 'S2', role: 'hostel_volunteer', attendance: false }])],
     workshops: [],
   };
 
@@ -418,7 +417,7 @@ describe('summariseStaffOps', () => {
         }),
       ],
       mess: [hall('M1', [{ user_id: 'S1', role: 'volunteer', logging: true }])],
-      hostels: [block('H1', [{ user_id: 'S1', role: 'volunteer', logging: true }])],
+      hostels: [block('H1', [{ user_id: 'S1', role: 'hostel_volunteer', attendance: true }])],
       workshops: [],
     };
     const summary = summariseStaffOps(

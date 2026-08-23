@@ -10,6 +10,13 @@ import type { HostelCreateRequest } from '@/api/types';
  * name does not re-render the table, its progress rings, and the summary cards
  * behind it on every keystroke. Unmounting it on cancel is also what forgets the
  * draft, so there is no reset logic to keep in sync with the fields.
+ *
+ * Matches `HostelCreateRequest` (`backend/routers/hostels.py`) exactly: no
+ * `hostel_id` box — the backend always generates the id itself and has no field
+ * to accept one — no `coordinator`, which the backend does not model at all,
+ * and `sharing` / `num_rooms` in their place, both required. `num_rooms *
+ * sharing` must cover `capacity` or the backend 422s, so the ceiling is
+ * validated here too rather than only client-side-optimistically.
  */
 export function NewHostelForm({
   busy,
@@ -20,47 +27,29 @@ export function NewHostelForm({
   onCreate: (req: HostelCreateRequest) => void;
   onCancel: () => void;
 }) {
-  const [hostelId, setHostelId] = useState('');
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('100');
   // Starts unchosen so a block is never silently filed as men's. Allocation
   // matches this against a participant's own gender, so it has to be deliberate.
   const [gender, setGender] = useState('');
-  /**
-   * The block's coordinator — who a resident rings first.
-   *
-   * `coordinator` used to be sent as a hardcoded `{}`, with no inputs for it
-   * anywhere, so the "Coordinator" line on a participant's Accommodation & Mess
-   * screen (`dutyContacts.coordinatorContact`, reading `coordinator.name` and
-   * `coordinator.phone`) was permanently blank for every block created here.
-   * Optional, because the backend types it as a free map and a block can be set up
-   * before its coordinator is decided.
-   */
-  const [coordinatorName, setCoordinatorName] = useState('');
-  const [coordinatorPhone, setCoordinatorPhone] = useState('');
+  const [sharing, setSharing] = useState('2');
+  const [numRooms, setNumRooms] = useState('50');
+
+  const capacityNum = Number(capacity) || 0;
+  const sharingNum = Number(sharing) || 0;
+  const numRoomsNum = Number(numRooms) || 0;
+  const roomsCoverCapacity = numRoomsNum * sharingNum >= capacityNum;
 
   return (
     <Card className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextInput
-          label="Hostel ID"
-          value={hostelId}
-          onChange={(e) => setHostelId(e.target.value)}
-          placeholder="e.g. HS01"
-          autoFocus
-        />
+        {/* No Hostel ID box: `POST /hostels` assigns the id itself. */}
         <TextInput
           label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Alakananda"
-        />
-        <TextInput
-          label="Capacity"
-          type="number"
-          min={0}
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
+          autoFocus
         />
         <Select
           label="Gender"
@@ -70,19 +59,32 @@ export function NewHostelForm({
           onChange={(e) => setGender(e.target.value)}
         />
         <TextInput
-          label="Coordinator name"
-          value={coordinatorName}
-          onChange={(e) => setCoordinatorName(e.target.value)}
-          placeholder="e.g. Anitha Raman"
-          hint="Optional. Shown to residents as this block's first point of contact."
+          label="Capacity"
+          type="number"
+          min={0}
+          value={capacity}
+          onChange={(e) => setCapacity(e.target.value)}
         />
         <TextInput
-          label="Coordinator phone"
-          type="tel"
-          value={coordinatorPhone}
-          onChange={(e) => setCoordinatorPhone(e.target.value)}
-          placeholder="e.g. 9876543210"
-          hint="Optional. Offered to residents as a tap-to-call link."
+          label="Sharing"
+          type="number"
+          min={1}
+          value={sharing}
+          onChange={(e) => setSharing(e.target.value)}
+          hint="Max occupants per room."
+        />
+        <TextInput
+          label="Number of rooms"
+          type="number"
+          min={1}
+          value={numRooms}
+          onChange={(e) => setNumRooms(e.target.value)}
+          hint="Rooms to pre-generate for this block."
+          error={
+            !roomsCoverCapacity
+              ? `Rooms × sharing (${numRoomsNum * sharingNum}) must cover capacity (${capacityNum}).`
+              : undefined
+          }
         />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -90,21 +92,23 @@ export function NewHostelForm({
           className="w-fit"
           loading={busy}
           // Gender joins the required set now that it starts unchosen: a block
-          // with no gender is one allocation can never place anyone in.
-          disabled={!hostelId.trim() || !name.trim() || !gender}
+          // with no gender is one allocation can never place anyone in. Rooms
+          // must actually cover capacity, or the backend refuses the create.
+          disabled={
+            !name.trim() ||
+            !gender ||
+            capacityNum <= 0 ||
+            sharingNum <= 0 ||
+            numRoomsNum <= 0 ||
+            !roomsCoverCapacity
+          }
           onClick={() =>
             onCreate({
-              hostel_id: hostelId.trim(),
               name: name.trim(),
-              capacity: Number(capacity) || 0,
+              capacity: capacityNum,
               gender,
-              // Only the keys actually filled in. `coordinatorContact` treats a
-              // blank string as absent anyway, but storing one would make the
-              // record claim a contact it does not have.
-              coordinator: {
-                ...(coordinatorName.trim() ? { name: coordinatorName.trim() } : {}),
-                ...(coordinatorPhone.trim() ? { phone: coordinatorPhone.trim() } : {}),
-              },
+              sharing: sharingNum,
+              num_rooms: numRoomsNum,
             })
           }
         >

@@ -64,8 +64,7 @@ const HALL: Mess = {
   mess_id: 'M3',
   name: 'Hall C',
   capacity: 500,
-  preference: 'veg',
-  cuisines: ['south_indian'],
+  type: 'south_indian__veg',
   mess_team: [
     { user_id: 'BT3', role: 'other', name: 'Ravi K', phone: '9000000003', logging: true },
   ],
@@ -74,7 +73,7 @@ const HALL: Mess = {
 const ALLOTTED: MyHostelResponse = {
   assigned_hostel: 'H12',
   room: '101',
-  logged_in: false,
+  inside: false,
   registered: true,
   volunteers: [
     { name: 'Meera R', phone: '9000000002' },
@@ -86,7 +85,7 @@ const ALLOTTED: MyHostelResponse = {
 const NO_HOSTEL: MyHostelResponse = {
   assigned_hostel: null,
   room: null,
-  logged_in: false,
+  inside: false,
   registered: false,
   volunteers: [],
 };

@@ -11,18 +11,30 @@ import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import {
   readHostelScanFailure,
   readHostelScanSuccess,
+  type HostelScanAction,
   type HostelScanOutcome,
 } from '@/features/stay/hostelScanOutcome';
 import { cn } from '@/lib/cn';
 
+/** The three actions offered on the toggle, and how each one reads. */
+const ACTIONS: { value: HostelScanAction; label: string }[] = [
+  { value: 'entry', label: 'Entry' },
+  { value: 'exit', label: 'Exit' },
+  { value: 'permanent_exit', label: 'Permanent Exit' },
+];
+
 /**
- * Hostel scanner: single Entry/Exit toggle, no slot/day concept.
+ * Hostel scanner: Entry / Exit / Permanent Exit, no slot/day concept.
  *
- * Each of the route's four 400s gets its own state rather than one red banner
+ * Each of the route's refusals gets its own state rather than one red banner
  * (`features/stay/hostelScanOutcome.ts`). "Already inside" and "already outside"
  * matter most: they are not somebody to turn away, they are the desk having
  * pressed the wrong side of the toggle — and they carry the participant's actual
- * state, which is what the guard needs to see.
+ * state, which is what the guard needs to see. Permanent exit is separated from
+ * the entry/exit pair rather than folded into "exit", because the backend treats
+ * it as a one-way, terminal action — once logged, the participant cannot be
+ * scanned back in without a Super Admin correcting the record — so a desk should
+ * not reach it by accident on a toggle meant for routine comings and goings.
  */
 export default function HostelScannerPage() {
   const { hostelId = '' } = useParams();
@@ -30,7 +42,7 @@ export default function HostelScannerPage() {
   const staff = currentStaff();
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [action, setAction] = useState<'entry' | 'exit'>('entry');
+  const [action, setAction] = useState<HostelScanAction>('entry');
   const [outcome, setOutcome] = useState<HostelScanOutcome | null>(null);
   /** A code has been read and the log is in flight — the camera is already down. */
   const [pending, setPending] = useState(false);
@@ -87,7 +99,7 @@ export default function HostelScannerPage() {
       </FestivalScreen>
     );
   }
-  if (!membership.logging) {
+  if (!membership.attendance) {
     return (
       <FestivalScreen title="Scan" width="md" back={back}>
         <ErrorState title="Scanning disabled for you" />
@@ -104,26 +116,39 @@ export default function HostelScannerPage() {
       back={back}
     >
       <div className="flex gap-2 rounded-xl bg-surface-2 p-1">
-        {(['entry', 'exit'] as const).map((a) => (
+        {ACTIONS.map((a) => (
           <button
-            key={a}
-            onClick={() => setAction(a)}
-            aria-pressed={action === a}
+            key={a.value}
+            onClick={() => setAction(a.value)}
+            aria-pressed={action === a.value}
             className={cn(
-              'tap flex-1 rounded-lg py-2 text-sm font-semibold capitalize',
-              action === a ? 'bg-surface text-brand shadow-card' : 'text-muted',
+              'tap flex-1 rounded-lg py-2 text-sm font-semibold',
+              action === a.value ? 'bg-surface text-brand shadow-card' : 'text-muted',
             )}
           >
-            {a}
+            {a.label}
           </button>
         ))}
       </div>
+
+      {action === 'permanent_exit' && !outcome && (
+        <ResultBanner variant="warning" title="This cannot be undone from here">
+          Marking a permanent exit means this participant has left the fest for good. They cannot be
+          scanned back in afterwards without a Super Admin correcting the record.
+        </ResultBanner>
+      )}
 
       {!outcome && (
         <ScannerViewfinder
           scanner={scanner}
           busy={pending}
-          busyLabel={action === 'entry' ? 'Logging entry…' : 'Logging exit…'}
+          busyLabel={
+            action === 'entry'
+              ? 'Logging entry…'
+              : action === 'exit'
+                ? 'Logging exit…'
+                : 'Logging permanent exit…'
+          }
         />
       )}
 
@@ -139,8 +164,20 @@ export default function HostelScannerPage() {
               "where is this person?". */}
           {outcome.state !== 'unknown' && (
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-ink">
-              <StatusBadge tone={outcome.state === 'inside' ? 'success' : 'neutral'}>
-                {outcome.state === 'inside' ? 'Inside the block' : 'Outside the block'}
+              <StatusBadge
+                tone={
+                  outcome.state === 'inside'
+                    ? 'success'
+                    : outcome.state === 'departed'
+                      ? 'danger'
+                      : 'neutral'
+                }
+              >
+                {outcome.state === 'inside'
+                  ? 'Inside the block'
+                  : outcome.state === 'departed'
+                    ? 'Permanently departed'
+                    : 'Outside the block'}
               </StatusBadge>
             </p>
           )}
@@ -158,6 +195,23 @@ export default function HostelScannerPage() {
               }}
             >
               Switch to {outcome.kind === 'already-inside' ? 'Exit' : 'Entry'} and scan again
+            </Button>
+          )}
+
+          {/* A permanent exit requires the participant to be inside first — the
+              obvious fix is to log the entry that was missed, not to retry the
+              same action. */}
+          {outcome.kind === 'must-be-inside-to-depart' && (
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setAction('entry');
+                setOutcome(null);
+                scanner.retry();
+              }}
+            >
+              Switch to Entry and scan again
             </Button>
           )}
 

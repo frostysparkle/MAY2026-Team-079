@@ -31,7 +31,7 @@ const returningUser: ParticipantLoginResponse = {
   ...newUser,
   full_name: 'Ananya Raghavan',
   dob: '2003-04-11',
-  house: 'Wayanad House',
+  house: 'Wayanad',
   gender: 'female',
   phone: '9876543210',
   country: 'India',
