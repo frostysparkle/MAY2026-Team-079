@@ -72,9 +72,12 @@ export default function MyRegistrationsPage() {
   const entries = useMemo<Entry[]>(() => {
     if (!registrations) return [];
     return registrations.flatMap((registration) => {
+      // `event_id` is null when the backend could not resolve the registration
+      // to a live event — its own deletion, same as a null `workshop_id` on the
+      // workshop side. Either way there is nothing to show and nowhere to link;
+      // the count in the subtitle still reflects it.
+      if (registration.event_id === null) return [];
       const event = events.find((e) => e.event_id === registration.event_id);
-      // A registration whose event has since been deleted has nothing to show and
-      // nowhere to link; the count in the subtitle still reflects it.
       return event ? [{ registration, event }] : [];
     });
   }, [registrations, events]);

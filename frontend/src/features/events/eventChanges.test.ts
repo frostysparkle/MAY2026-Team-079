@@ -241,7 +241,7 @@ describe('registeredEvents', () => {
   it('keeps only the events the participant holds a registration for', () => {
     const all = [event(), event({ event_id: 'quiz', name: 'Quiz' })];
     const mine: MyEventRegistration[] = [
-      { event_id: 'quiz', team_id: null, team_role: null, registration_data: {} },
+      { event_id: 'quiz', name: 'Quiz', team_id: null, team_role: null, registration_data: {} },
     ];
     expect(registeredEvents(all, mine).map((e) => e.event_id)).toEqual(['quiz']);
   });
@@ -279,7 +279,13 @@ describe('storage', () => {
 describe('syncEventChanges', () => {
   const participant = 'p-sync';
   const mine: MyEventRegistration[] = [
-    { event_id: 'hack-2026', team_id: null, team_role: null, registration_data: {} },
+    {
+      event_id: 'hack-2026',
+      name: 'Hack 2026',
+      team_id: null,
+      team_role: null,
+      registration_data: {},
+    },
   ];
 
   beforeEach(() => clearEventWatch(participant));

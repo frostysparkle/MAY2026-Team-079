@@ -673,13 +673,35 @@ def deregister_event(event_id: str, current_user: dict = Depends(get_current_par
 
 @router.get("/my_registrations")
 def my_registrations(current_user: dict = Depends(get_current_participant)):
+    """
+    This participant's own event registrations.
+
+    Mirrors `GET /workshops/my_registrations`: `participants.events[].event_id`
+    stores the event's raw ObjectId, not its readable `event_id`, so each entry
+    is resolved back to the catalogue id (and name) the rest of the API — and
+    every other screen — actually uses. Returning the ObjectId string as-is
+    left every client-side match against `GET /events`/`GET /events/public`
+    (which never expose `_id`) unable to succeed, so a real registration
+    rendered as if it did not exist.
+
+    `event_id`/`name` are `None` when the event was deleted after registering
+    (mirrors the workshop route's same behaviour for a deleted workshop) —
+    `team_id`/`team_role`/`registration_data` survive either way.
+    """
     if "participant_id" not in current_user:
         return []
-    events = current_user.get("events", [])
-    for ev in events:
-        if "event_id" in ev and not isinstance(ev["event_id"], str):
-            ev["event_id"] = str(ev["event_id"])
-    return events
+
+    registrations = []
+    for ev in current_user.get("events", []):
+        event = event_collection.find_one({"_id": ev.get("event_id")})
+        registrations.append({
+            "event_id": event.get("event_id") if event else None,
+            "name": event.get("name") if event else None,
+            "team_id": ev.get("team_id"),
+            "team_role": ev.get("team_role"),
+            "registration_data": ev.get("registration_data"),
+        })
+    return registrations
 
 
 def _unique_attendance_today(event: dict) -> int:

@@ -56,6 +56,38 @@ export function hoursAgoIso(hours: number, now: Date = new Date()): string {
   return new Date(now.getTime() - hours * 3_600_000).toISOString();
 }
 
+/**
+ * `READ_*_ROSTER`/`READ_*_LOGS` actions — audited reads of a roster or a log,
+ * not something that happened at the fest.
+ *
+ * The board's own medium/slow tiers are themselves the biggest source of these:
+ * every 60s/120s refresh calls one statistics/participation/logs endpoint per
+ * hostel block, mess hall, event and workshop, and each of those calls is
+ * audited server-side (`READ_HOSTEL_ROSTER`, `READ_MESS_ROSTER`,
+ * `READ_PARTICIPANT_ROSTER`, `READ_EVENT_LOGS`, `READ_WORKSHOP_LOGS`) because the
+ * response carries names/contact details worth tracing back to who read them.
+ * That is the right call for the audit trail itself, but it means a "what just
+ * happened at the fest" feed that does not filter these out is partly measuring
+ * its own polling — an admin with the Overview tab open generates dozens of
+ * these an hour just by having the page on screen, which can swamp a quiet fest's
+ * genuine activity and even trip the spike detector on nothing but the board's
+ * own traffic.
+ *
+ * Excluded here, not at the source: the audit trail itself (the Audit Logs page)
+ * is exactly where these rows belong and must keep recording them for
+ * accountability. Only the board's *derived* "what is happening right now" views
+ * — the Live activity ticker and the activity pulse/spike detector — should
+ * disregard them.
+ */
+export function isBoardOwnReadAction(action: string): boolean {
+  return action.toUpperCase().startsWith('READ_');
+}
+
+/** `logs` with the board's own audited reads (see `isBoardOwnReadAction`) removed. */
+export function excludeBoardOwnReads(logs: AuditLogEntry[]): AuditLogEntry[] {
+  return logs.filter((log) => !isBoardOwnReadAction(log.action));
+}
+
 /** Rows that fall on `day` (default: today) in the viewer's timezone. */
 export function rowsOnDay(logs: AuditLogEntry[], day: Date = new Date()): AuditLogEntry[] {
   const key = localDayKey(day);

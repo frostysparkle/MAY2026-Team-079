@@ -72,7 +72,9 @@ export default function EventDetailPage() {
           return;
         }
         setEvent(found);
-        setRegistration(registrations.find((r) => r.event_id === eventId) ?? null);
+        setRegistration(
+          registrations.find((r) => r.event_id !== null && r.event_id === eventId) ?? null,
+        );
         setLoadError(null);
       })
       .catch((e) =>

@@ -448,8 +448,21 @@ export interface EventRegistrationInput {
   registration_data?: Record<string, unknown>;
 }
 
+/**
+ * One of this participant's own event registrations, from
+ * `GET /events/my_registrations`.
+ *
+ * `participants.events[].event_id` stores the event's raw Mongo ObjectId, which
+ * is meaningless to a client — `GET /events`/`GET /events/public` never expose
+ * `_id`. The backend resolves it back to the readable catalogue `event_id` (and
+ * `name`) before returning, the same way `GET /workshops/my_registrations`
+ * resolves a booking's `workshop_id`. Both are `null` when the event was
+ * deleted after registering — `team_id`/`team_role`/`registration_data` survive
+ * either way.
+ */
 export interface MyEventRegistration {
-  event_id: string;
+  event_id: string | null;
+  name: string | null;
   team_id: string | null;
   team_role: 'leader' | 'member' | null;
   registration_data: Record<string, unknown>;

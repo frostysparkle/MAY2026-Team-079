@@ -17,6 +17,7 @@ export function EventDetailView({
   view,
   action,
   crowd,
+  headingLevel = 'h2',
 }: {
   view: EventView;
   action?: ReactNode;
@@ -26,8 +27,26 @@ export function EventDetailView({
    * this same component without one.
    */
   crowd?: ReactNode;
+  /**
+   * The event's own name has to be a heading, but which level depends on
+   * whether the page around it already put an `<h1>` up top.
+   *
+   * `AdminEventDetailPage` and the participant `EventDetailPage` both wrap this
+   * in `FestivalScreen`, which renders its own `<h1>` (the category label, e.g.
+   * "Technicals") above this component — so this heading has to be an `<h2>`
+   * there, or the page carries two `<h1>`s with no heading between them, which
+   * is both an invalid document outline and, read aloud, two "level 1" landmarks
+   * for one screen.
+   *
+   * `PublicEventDetailPage` renders no page-level title of its own (its chrome
+   * is only given a `title` on section-index pages, not on a single event), so
+   * there this component's heading is the page's only one and has to be the
+   * `<h1>` — the default of `h2` is overridden there explicitly.
+   */
+  headingLevel?: 'h1' | 'h2';
 }) {
   const { category } = view;
+  const NameHeading = headingLevel;
 
   return (
     <div className="flex flex-col gap-6">
@@ -62,9 +81,9 @@ export function EventDetailView({
             >
               {category.label}
             </span>
-            <h1 className="mt-3 text-3xl font-black uppercase leading-tight tracking-tight text-ink sm:text-4xl">
+            <NameHeading className="mt-3 text-3xl font-black uppercase leading-tight tracking-tight text-ink sm:text-4xl">
               {view.name}
-            </h1>
+            </NameHeading>
           </div>
 
           <MetaGrid view={view} />

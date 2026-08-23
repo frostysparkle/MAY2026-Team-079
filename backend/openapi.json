@@ -5,227 +5,6 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/auth/register": {
-      "post": {
-        "summary": "Register",
-        "operationId": "register_auth_register_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "summary": "Login",
-        "operationId": "login_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/admin/login": {
-      "post": {
-        "summary": "Admin Login",
-        "operationId": "admin_login_auth_admin_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/password/forgot": {
-      "post": {
-        "summary": "Forgot Password",
-        "operationId": "forgot_password_auth_password_forgot_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ForgotPasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/password/reset": {
-      "post": {
-        "summary": "Reset Password",
-        "operationId": "reset_password_auth_password_reset_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/password/change": {
-      "post": {
-        "summary": "Change Password",
-        "operationId": "change_password_auth_password_change_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/profile/complete": {
       "patch": {
         "summary": "Complete Profile",
@@ -267,8 +46,250 @@
         ]
       }
     },
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register",
+        "operationId": "register_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/admin/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Admin Login",
+        "operationId": "admin_login_auth_admin_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password/forgot": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Forgot Password",
+        "operationId": "forgot_password_auth_password_forgot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password/reset": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Reset Password",
+        "operationId": "reset_password_auth_password_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password/change": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change Password",
+        "operationId": "change_password_auth_password_change_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/backend_teams": {
       "get": {
+        "tags": [
+          "Backend Teams"
+        ],
         "summary": "Get Backend Teams",
         "operationId": "get_backend_teams_backend_teams_get",
         "responses": {
@@ -288,6 +309,9 @@
         ]
       },
       "post": {
+        "tags": [
+          "Backend Teams"
+        ],
         "summary": "Create Backend Team",
         "operationId": "create_backend_team_backend_teams_post",
         "requestBody": {
@@ -329,6 +353,9 @@
     },
     "/backend_teams/{paradox_id}": {
       "put": {
+        "tags": [
+          "Backend Teams"
+        ],
         "summary": "Update Backend Team",
         "operationId": "update_backend_team_backend_teams__paradox_id__put",
         "security": [
@@ -379,6 +406,9 @@
         }
       },
       "delete": {
+        "tags": [
+          "Backend Teams"
+        ],
         "summary": "Delete Backend Team",
         "operationId": "delete_backend_team_backend_teams__paradox_id__delete",
         "security": [
@@ -491,7 +521,7 @@
           "Workshops"
         ],
         "summary": "List Public Workshops",
-        "description": "The workshop programme, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login workshops catalogue the\nlanding page and /workshops render, and it must work for a visitor with no\naccount. Only the published fields above are returned \u2014 never\n`workshop_team` (which carries staff identities) or internal bookkeeping.\n\nMirrors GET /events/public. Declared before any `/{workshop_id}` route so\nthe literal path is not captured as a workshop id.",
+        "description": "The workshop programme, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login workshops catalogue the\nlanding page and /workshops render, and it must work for a visitor with no\naccount. Only the published fields above are returned \u2014 never\n`workshop_team` (which carries staff identities) or internal bookkeeping.\n\nMirrors GET /events/public. Declared before any `/{workshop_id}` route so\nthe literal path is not captured as a workshop id.\n\nEach workshop is passed through the registration-window sync before its\n`registration_open` is read, so a just-lapsed workshop reports closed the\nfirst time it is listed, not only after something else has resolved it.\n\nThe full document (not just the public fields) is fetched so the sync can\nsee `registration_closed_by_system` \u2014 the internal field is stripped from\neach result afterward, never returned to the caller.",
         "operationId": "list_public_workshops_workshops_public_get",
         "responses": {
           "200": {
@@ -503,6 +533,51 @@
             }
           }
         }
+      }
+    },
+    "/workshops/recommendations": {
+      "post": {
+        "tags": [
+          "Workshops"
+        ],
+        "summary": "Recommend Workshops",
+        "description": "The full workshop catalogue, re-ranked by cosine similarity to a query or\nto this participant's saved preference embedding. Mirrors\n`POST /events/recommendations` exactly, except it reads/writes\n`embedding.workshop` instead of `embedding.event` \u2014 a separate slot on the\nsame participant document, so ranking workshops never disturbs whatever\nwas saved for events, and vice versa.\n\nNothing is filtered out: every workshop that exists is returned, only\nreordered, most similar first. `query` omitted/blank reuses the saved\nvector without calling `generate_embedding`; a participant with no saved\npreference and no query gets back the zero vector's similarity (0.0\nagainst everything, per `cosine_similarity`), which still returns the\nfull catalogue rather than erroring.\n\nDeclared before any `/{workshop_id}` route so \"recommendations\" is never\ncaptured as a workshop id.",
+        "operationId": "recommend_workshops_workshops_recommendations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/workshops/my_registrations": {
@@ -689,6 +764,7 @@
           "Workshops"
         ],
         "summary": "Toggle Volunteer Scan",
+        "description": "Switch a volunteer's desk scanning on or off.\n\nThe volunteer is named by the `{user_id}` path segment \u2014 as the path always\nadvertised, and as the sibling `DELETE .../volunteers/{user_id}` already did.\nThe handler used to read a `volunteer_user_id` parameter that appears nowhere\nin the path, so FastAPI made it a *required query* parameter: the RESTful call\nthe route documents was a 422, and the volunteer had to be repeated in the\nquery string instead.\n\nA filter matching nothing is a 404. It used to answer 200 \"Volunteer scanning\ntoggled\" with `applied: false` buried in the audit row, so an admin who\nbelieved they had just re-enabled somebody had changed nothing, and found out\nwhen that volunteer was refused at the desk.",
         "operationId": "toggle_volunteer_scan_workshops__workshop_id__volunteers__user_id__toggle_scan_put",
         "security": [
           {
@@ -706,12 +782,12 @@
             }
           },
           {
-            "name": "volunteer_user_id",
-            "in": "query",
+            "name": "user_id",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Volunteer User Id"
+              "title": "User Id"
             }
           },
           {
@@ -1107,12 +1183,174 @@
         }
       }
     },
+    "/workshop-slots": {
+      "get": {
+        "tags": [
+          "Workshop Slots"
+        ],
+        "summary": "List Workshop Slots",
+        "description": "The slot catalogue \u2014 no token required. Unlike a workshop, a slot carries\nno participant, staff, or bookkeeping data; it is calendar metadata that a\ncreate-workshop form needs to read before a user has signed in.",
+        "operationId": "list_workshop_slots_workshop_slots_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workshop Slots"
+        ],
+        "summary": "Create Workshop Slot",
+        "operationId": "create_workshop_slot_workshop_slots_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopSlotCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/workshop-slots/{slot_id}": {
+      "put": {
+        "tags": [
+          "Workshop Slots"
+        ],
+        "summary": "Update Workshop Slot",
+        "operationId": "update_workshop_slot_workshop_slots__slot_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slot Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopSlotUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workshop Slots"
+        ],
+        "summary": "Delete Workshop Slot",
+        "description": "Deletes the slot, and every workshop scheduled against it \u2014 a Super\nAdmin decision, not a soft-orphan: a workshop with no slot has no time and\nno way to be scheduled again, so it is removed rather than left dangling.\n\nParticipants' bookings for each removed workshop are pulled the same way\n`delete_workshop` already does for a single workshop, so no participant is\nleft holding a reference to a workshop that no longer exists.",
+        "operationId": "delete_workshop_slot_workshop_slots__slot_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "tags": [
           "Events"
         ],
         "summary": "List Events",
+        "description": "`created_by` holds the creating admin's raw ObjectId, which is not JSON\nserialisable, so it is projected out. There is no `logs` field to project\nout any more \u2014 the registration roster mirror was removed; the source of\ntruth is `participants.events[]`, read by `/capacity` and `/participation`.\n\n`registration.is_open` is attached per event without being stored, so it\nreflects `registration.allowed` and the time window at read time.",
         "operationId": "list_events_events_get",
         "responses": {
           "200": {
@@ -1179,7 +1417,7 @@
           "Events"
         ],
         "summary": "List Public Events",
-        "description": "The festival brochure \u2014 every event, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login events catalogue the\nlanding page renders, and it must work for a visitor with no account. Only\nthe published fields above are returned \u2014 never `event_team` (which carries\nstaff identities), `registration_fields`, or internal bookkeeping and logs.\n\nDeclared before any `/{event_id}` route so the literal path is not captured\nas an event id.",
+        "description": "The festival brochure \u2014 every event, readable without signing in.\n\nDeliberately unauthenticated: this is the pre-login events catalogue the\nlanding page renders, and it must work for a visitor with no account. Only\nthe published fields above are returned \u2014 never `event_team` (staff\nidentities), `registration_fields`, `announcements`, or internal\nbookkeeping.\n\nDeclared before any `/{event_id}` route so the literal path is not\ncaptured as an event id.",
         "operationId": "list_public_events_events_public_get",
         "responses": {
           "200": {
@@ -1191,6 +1429,51 @@
             }
           }
         }
+      }
+    },
+    "/events/recommendations": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Recommend Events",
+        "description": "The full events catalogue, re-ranked by cosine similarity to a query or to\nthis participant's saved preference embedding \u2014 nothing is filtered out,\nevery event that exists is returned, only reordered, most similar first.\n\nA `query` is embedded and persisted to `embedding.event` on this\nparticipant's own document, replacing whatever was saved there before \u2014\nthe same slot `PATCH /profile/complete` writes from `event_preferences`,\nso asking here updates the one profile-wide event preference rather than\ncreating a second, competing copy of it. Omitting `query` (or sending it\nnull/blank) reuses that saved vector as-is and does *not* call\n`generate_embedding` \u2014 there is no text to embed, and embedding an empty\nstring would silently overwrite a real saved preference with a zero\nvector.\n\nA participant who has never set a preference and sends no query has an\nall-zero `embedding.event` (set at `POST /auth/register`); `cosine_similarity`\ndefines that as 0.0 against everything, so this still returns the full\ncatalogue rather than erroring \u2014 just in whatever order Mongo happens to\nreturn it, since every similarity ties.\n\nDeclared here, directly after the two other literal `GET`/`POST /events`\npaths and before `PUT /{event_id}` and its siblings, so \"recommendations\"\nis never captured as an `event_id`.",
+        "operationId": "recommend_events_events_recommendations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/events/{event_id}": {
@@ -1297,6 +1580,7 @@
           "Events"
         ],
         "summary": "Assign Event Team",
+        "description": "Add a staff member to this event's team.\n\nA `user_id` must reference an existing `backend_teams` account \u2014 an event\nteam names people who can scan, allocate teams, and post announcements,\nand an id nobody holds would grant those to nothing.\n\nOne person, one event: enforced by refusing the assignment if `user_id` is\nalready on *any* event's team, this one included (an existing member is\nchanged via `PATCH .../team/{user_id}`, not re-added via `POST`).",
         "operationId": "assign_event_team_events__event_id__team_post",
         "security": [
           {
@@ -1324,6 +1608,123 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/team/{team_user_id}": {
+      "patch": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Update Event Team Role",
+        "operationId": "update_event_team_role_events__event_id__team__team_user_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "team_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventTeamRoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Remove Event Team Member",
+        "description": "Frees this person up to be assigned to a different event's team.",
+        "operationId": "remove_event_team_member_events__event_id__team__team_user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "team_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team User Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1510,6 +1911,7 @@
           "Events"
         ],
         "summary": "My Registrations",
+        "description": "This participant's own event registrations.\n\nMirrors `GET /workshops/my_registrations`: `participants.events[].event_id`\nstores the event's raw ObjectId, not its readable `event_id`, so each entry\nis resolved back to the catalogue id (and name) the rest of the API \u2014 and\nevery other screen \u2014 actually uses. Returning the ObjectId string as-is\nleft every client-side match against `GET /events`/`GET /events/public`\n(which never expose `_id`) unable to succeed, so a real registration\nrendered as if it did not exist.\n\n`event_id`/`name` are `None` when the event was deleted after registering\n(mirrors the workshop route's same behaviour for a deleted workshop) \u2014\n`team_id`/`team_role`/`registration_data` survive either way.",
         "operationId": "my_registrations_events_my_registrations_get",
         "responses": {
           "200": {
@@ -1670,6 +2072,7 @@
           "Events"
         ],
         "summary": "Scan Event Participant",
+        "description": "Admit one participant at an event gate.\n\nThis route had the largest blind spot in the system. A scan of somebody not\nregistered for the event returned **200** with `is_participating: false` and\nwrote nothing at all \u2014 no log row, no audit row \u2014 so a refused entry was\nindistinguishable from no scan ever having happened. It was also the only scan\nendpoint in the codebase with no `log_audit` call of any kind, successful or\notherwise.\n\nThe response is deliberately unchanged, including the 200 for a non-participant:\nthe gate app decides what to show from `is_participating`, and changing the\nstatus code would break it. What changes is that all three outcomes \u2014 admitted,\nrefused, and already-scanned \u2014 now leave a record.",
         "operationId": "scan_event_participant_events__event_id__scan_post",
         "security": [
           {
@@ -1874,6 +2277,152 @@
         }
       }
     },
+    "/events/{event_id}/announcements": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Create Announcement",
+        "description": "Publish a notification about this event to everybody registered for it.\n\nRestricted to the event's own Event Head, or a Super Admin \u2014 a volunteer\nor member on the team can scan and view participation, but broadcasting to\nevery registrant is a head-of-event decision.\n\nAppended to `event.announcements`; delivered to participants via\n`GET /{event_id}/announcements` (poll) or `GET /{event_id}/announcements/stream`\n(SSE) \u2014 see below.",
+        "operationId": "create_announcement_events__event_id__announcements_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "List Announcements",
+        "description": "Newest first. Readable by whoever the announcement is *for* \u2014 a registered\nparticipant \u2014 plus whoever might have sent it: the event's own team, or a\nSuper Admin.",
+        "operationId": "list_announcements_events__event_id__announcements_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/announcements/stream": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Stream Announcements",
+        "description": "Live announcements for this event, as `text/event-stream`.\n\nAuthenticated exactly like every other route in this API \u2014 an\n`Authorization: Bearer` header via `get_current_user` \u2014 rather than a\n`?token=` query parameter. The browser's native `EventSource` cannot send\na header, so a browser client must instead open this with `fetch` and read\n`response.body` as a stream (or a small helper library such as\n`@microsoft/fetch-event-source` that does that parsing). This keeps the\ntoken out of the URL \u2014 and therefore out of server access logs, browser\nhistory, and any `Referer` header \u2014 matching every other endpoint here.\n\nAccess is the same as the polling list above: the event's registered\nparticipants, its team, or a Super Admin.",
+        "operationId": "stream_announcements_events__event_id__announcements_stream_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/mess": {
       "get": {
         "tags": [
@@ -1938,6 +2487,196 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/mess/register": {
+      "post": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Register For Mess",
+        "description": "Ask for a meal plan during the fest.\n\nIdempotent: asking twice is not an error, it just stays requested.\n\nRefused once a hall has been allotted, matching\n`POST /hostels/register` \u2014 moving somebody who has already been seated is an\norganiser's decision, and re-running allocation will not move them anyway\n(the allocator only looks at participants with no `mess.mess_id`).",
+        "operationId": "register_for_mess_mess_register_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Cancel Mess Request",
+        "description": "Withdraw a pending meal plan request.\n\nRefused once a hall has been allotted: releasing a seat somebody has been\ngiven is an organiser decision, not a self-service one. Same rule as\n`DELETE /hostels/register`.",
+        "operationId": "cancel_mess_request_mess_register_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/mess/{mess_id}": {
+      "put": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Update Mess",
+        "operationId": "update_mess_mess__mess_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mess_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mess Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Delete Mess",
+        "operationId": "delete_mess_mess__mess_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mess_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mess Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Get Mess",
+        "description": "A single hall's document. Declared last so it never captures a literal\npath (`/my_mess`, `/allocate`) defined earlier in this file.",
+        "operationId": "get_mess_mess__mess_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mess_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mess Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/mess/{mess_id}/menu": {
@@ -2137,6 +2876,51 @@
         ]
       }
     },
+    "/mess/pay": {
+      "post": {
+        "tags": [
+          "Mess"
+        ],
+        "summary": "Pay Mess Fee",
+        "description": "Simulate settling the mess fee.\n\nMock end to end: there is no real gateway behind this, `simulate_payment`\nalways succeeds today, and `MESS_FEE` is the only amount this can ever\ncharge \u2014 never one the client supplies. Deliberately independent of\n`mess.registered` / `mess.mess_id`: this only records that the fee was\npaid, it does not opt a participant into allocation or place them in a\nhall, so it can be called in any order relative to those.",
+        "operationId": "pay_mess_fee_mess_pay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/mess/my_mess": {
       "get": {
         "tags": [
@@ -2167,6 +2951,7 @@
           "Mess"
         ],
         "summary": "Scan Mess",
+        "description": "Admit one participant to one sitting.\n\nEvery refusal below is recorded with a reason. This is the endpoint a\nparticipant is most likely to come back and dispute \u2014 \"I was turned away from\ndinner on day 2\" \u2014 and before this the only trace a refusal left was a 400 on\na handheld device. Successful scans keep their original `MESS_SCAN` audit row\nand its exact `details` keys, because `GET /audit-logs/summary` counts meals\nfrom them.",
         "operationId": "scan_mess_mess__mess_id__scan_post",
         "security": [
           {
@@ -2432,12 +3217,12 @@
             }
           },
           {
-            "name": "logging",
+            "name": "attendance",
             "in": "query",
             "required": true,
             "schema": {
               "type": "boolean",
-              "title": "Logging"
+              "title": "Attendance"
             }
           }
         ],
@@ -2476,6 +3261,51 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/hostels/pay": {
+      "post": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Pay Hostel Fee",
+        "description": "Simulate settling the hostel fee.\n\nMock end to end: there is no real gateway behind this, `simulate_payment`\nalways succeeds today, and `HOSTEL_FEE` is the only amount this can ever\ncharge \u2014 never one the client supplies. Deliberately independent of\n`accommodation.registered` / `accommodation.hostel_id`: this only records\nthat the fee was paid, it does not opt a participant into allocation or\nplace them in a block, so it can be called in any order relative to those.",
+        "operationId": "pay_hostel_fee_hostels_pay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2565,6 +3395,7 @@
           "Hostels"
         ],
         "summary": "Scan Hostel",
+        "description": "Record one participant crossing a hostel door.\n\nThe most safety-relevant endpoint in the system: `accommodation.inside` is what\nanswers \"who is in this building\" if the building ever has to be evacuated, and\n`arrival` / `departure` are what answer \"was this student ever here at all\".\n\nEvery refusal is now recorded with the state that caused it. Before this, a\nrefused scan produced a 400 at the door and nothing else \u2014 so a resident\ninsisting they had been let out, against a record saying they were still\ninside, was an argument with no evidence on either side. The state triple\n(`inside`, `arrival`, `departure`) goes into every line precisely so that\nargument becomes answerable.",
         "operationId": "scan_hostel_hostels__hostel_id__scan_post",
         "security": [
           {
@@ -2601,6 +3432,96 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hostels/{hostel_id}": {
+      "delete": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Delete Hostel",
+        "description": "Delete a hostel block, Super Admin only.\n\nCascades: every participant currently pointing at this hostel has their\naccommodation reset (hostel_id, room, inside, arrival, departure) so they\nare no longer marked as living somewhere that no longer exists.\n`registered` is left untouched, since they still want a bed \u2014 just not this\none \u2014 and should be eligible for a future `/allocate` run.",
+        "operationId": "delete_hostel_hostels__hostel_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hostel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Hostel Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Get Hostel",
+        "description": "A single hostel's document. Declared last so it never captures a literal\npath (`/allocate`, `/register`, `/my_hostel`) defined earlier in this file.",
+        "operationId": "get_hostel_hostels__hostel_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hostel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Hostel Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2668,13 +3589,114 @@
         }
       }
     },
+    "/audit-logs/summary": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "Audit Log Summary",
+        "description": "Exact counts over the trail, with no row limit.\n\n`GET /audit-logs` takes a `limit`, which is right for a table but wrong for a\ntotal: the dashboard was reading `rows.length` off a capped page and labelling\nit \"Recorded Actions\", so a fest with more history than the cap silently\nreported the cap. Counting server-side is the only way for those figures to be\ntotals rather than floors, and it costs one request instead of paging the\nwhole trail into the browser.\n\n`actor_ids` is the distinct set, not a sample, which is what lets the caller\nanswer \"which staff acted in this window\" exactly. It replaces intersecting\nthe staff roster with whatever actors happened to appear in the newest N rows.\n\n`meals` is present only when the window could contain `MESS_SCAN` rows \u2014 that\nis, when `action` is unset or is `MESS_SCAN` \u2014 and is `null` otherwise, so a\ncaller asking about hostel entries is not handed a meal count.",
+        "operationId": "audit_log_summary_audit_logs_summary_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/audit-logs": {
       "get": {
         "tags": [
           "Audit"
         ],
         "summary": "View Audit Logs",
-        "description": "The audit trail, newest first.\n\n``target_id`` narrows the trail to one entity \u2014 an event, workshop, mess hall,\nor hostel block \u2014 which is what the dashboard's per-entity log view reads.\nFiltering server-side rather than pulling the whole trail and sifting it in the\nclient matters here: ``limit`` would otherwise silently cut off an entity's\nolder entries, because it applies before any client-side filter can run.\n\n``action`` narrows to one kind of action, e.g. ``HOSTEL_ENTRY``. Both are\noptional, so the unfiltered call is unchanged.",
+        "description": "The audit trail, newest first.\n\n``target_id`` narrows the trail to one entity \u2014 an event, workshop, mess hall,\nor hostel block \u2014 which is what the dashboard's per-entity log view reads.\nFiltering server-side rather than pulling the whole trail and sifting it in the\nclient matters here: ``limit`` would otherwise silently cut off an entity's\nolder entries, because it applies before any client-side filter can run.\n\n``action`` narrows to one kind of action, e.g. ``HOSTEL_ENTRY``. Both are\noptional, so the unfiltered call is unchanged.\n\n``since`` and ``until`` are ISO 8601 instants bounding ``timestamp``, half-open\nso consecutive windows tile cleanly. They exist because \"today\" was previously\napproximated by fetching the newest N rows and filtering them in the browser,\nwhich makes any daily figure a floor the moment the fest produces more than N\nrows in a day. Filtering here removes the cap from the question entirely.\n``GET /audit-logs/summary`` takes the same four filters and returns exact\ncounts over them.\n\nEvery entry carries a ``names`` map from each person id it mentions to that\nperson's name, so the client can show \"Priya Raman\" where it used to show\n``BT1755\u2026`` without knowing which collection an id belongs to. Entries written\nsince names began being recorded already carry ``actor_name``; the map is what\nmakes the entries written before that readable too. ``actor_id`` and\n``details`` are unchanged, so exports and filters that key on ids still work.",
         "operationId": "view_audit_logs_audit_logs_get",
         "security": [
           {
@@ -2688,6 +3710,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
               "default": 100,
               "title": "Limit"
             }
@@ -2722,6 +3746,38 @@
                 }
               ],
               "title": "Action"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
             }
           }
         ],
@@ -2824,6 +3880,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
               "default": 200,
               "title": "Limit"
             }
@@ -3001,7 +4059,7 @@
           "Queries"
         ],
         "summary": "List Queries",
-        "description": "The staff queue \u2014 Story 6.3, and the source for the operational dashboard's\nopen-queries and hostel-issues panels (Story 9.1).\n\nScoped to the caller: a Super Admin sees every query including ``general``\nones; anybody else sees only the blocks, halls, events, and workshops they\nare named on a team for, plus anything handed to them by name. A staff member\non no team gets an empty list rather than a 403 \u2014 an empty queue is a real\nstate, not an authorisation failure.\n\n``status`` and ``category`` filter server-side for the same reason\n``/audit-logs`` does: ``limit`` applies before any client-side filter could.",
+        "description": "The shared queue \u2014 Story 6.3, and the source for the operational\ndashboard's open-queries and hostel-issues panels (Story 9.1).\n\nNot scoped by entity any more: a Super Admin and every member of the query\nresolution team see the same unrestricted queue, across every category\nincluding ``general``, resolved queries included \u2014 a query team member can\nself-claim any of it by ``PATCH``-ing ``assigned_to`` to their own id. A\nstaff member who is on neither gets a 403; there is no per-entity scope\nleft to fall back to an empty result with.\n\n``status`` and ``category`` filter server-side for the same reason\n``/audit-logs`` does: ``limit`` applies before any client-side filter could.",
         "operationId": "list_queries_queries_get",
         "security": [
           {
@@ -3047,6 +4105,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
               "default": 100,
               "title": "Limit"
             }
@@ -3105,7 +4165,7 @@
           "Queries"
         ],
         "summary": "Update Query",
-        "description": "Set status and assignment \u2014 Story 6.3.\n\nOnly the fields a request carries are written, so a screen that reassigns a\nquery cannot blank its status on the way past.",
+        "description": "Set status and assignment \u2014 Story 6.3.\n\nOnly the fields a request carries are written, so a screen that reassigns a\nquery cannot blank its status on the way past. A query team member sets\n``assigned_to`` to their own id to self-claim a query; a Super Admin may\nassign to anyone.",
         "operationId": "update_query_queries__query_id__patch",
         "security": [
           {
@@ -3161,7 +4221,7 @@
           "Queries"
         ],
         "summary": "Reply To Query",
-        "description": "The conversation \u2014 Story 6.4, and the half of 6.2 that makes a status useful.\n\nTakes either token type: the participant who raised it and the staff member\nhandling it write to the same thread. Nobody else can read or write it, which\nis checked per-role rather than per-token, so a staff member who is not on\nthe owning team is refused even though their token is valid.",
+        "description": "The conversation \u2014 Story 6.4, and the half of 6.2 that makes a status useful.\n\nTakes either token type: the participant who raised it and a query team\nmember write to the same thread. Nobody else can read or write it, which is\nchecked per-role rather than per-token, so a staff member off the query\nteam is refused even though their token is valid.\n\nNeither refusal discloses whether the id exists. The route used to look the\nquery up and 404 first, so any authenticated user could tell a real query id\nfrom an invented one \u2014 and these threads hold participants' free text, the one\nplace in this API where a student writes something another user reads back.\nThe two sides get there differently, because their refusals are different\nkinds of thing:\n\n  * a staff member off the query team may handle *no* query, so which one was\n    asked for never enters into it. Refused before the lookup, exactly as\n    `update_query` and every other staff-side route here already does.\n  * a participant may only handle their *own*, which cannot be decided without\n    the document. So \"not yours\" and \"not there\" collapse into the same 404:\n    for a participant, no other query exists \u2014 the same thing `GET\n    /queries/mine` says by omitting it from the list.",
         "operationId": "reply_to_query_queries__query_id__replies_post",
         "security": [
           {
@@ -3189,6 +4249,120 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/queries/team": {
+      "get": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "List Query Team",
+        "description": "The current roster \u2014 Super Admin only, same as `event_team` details are staff-gated.",
+        "operationId": "list_query_team_queries_team_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "Add Query Team Member",
+        "description": "Add a staff member to the query resolution team \u2014 Super Admin only.\n\n`user_id` must already exist in `backend_teams_collection`; this roster\ngrants query access on top of an existing staff account, it does not\ncreate one.",
+        "operationId": "add_query_team_member_queries_team_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryTeamAssignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/queries/team/{user_id}": {
+      "delete": {
+        "tags": [
+          "Queries"
+        ],
+        "summary": "Remove Query Team Member",
+        "description": "Frees this person from query duty. Does not touch anything they already replied to or were assigned.",
+        "operationId": "remove_query_team_member_queries_team__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3322,6 +4496,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
               "default": 100,
               "title": "Limit"
             }
@@ -3380,7 +4556,7 @@
           "Issues"
         ],
         "summary": "Update Issue",
-        "description": "Move a report along, and say something the reporter will read.\n\nScoped identically to GET /issues \u2014 only a Super Admin or somebody on that\nfacility's own team may answer for it, so the reporter cannot resolve their\nown report. Every call appends to `updates` rather than overwriting, so a\nparticipant sees the history rather than only the latest word. A note with no\nstatus change is valid; an empty body is a 400, as is a status outside\nopen | in_progress | resolved. Audited as ISSUE_UPDATE against the facility\nid.",
+        "description": "Move a report along, and say something the reporter will read.\n\nScoped identically to GET /issues \u2014 only a Super Admin or somebody on that\nfacility's own team may answer for it, so the reporter cannot resolve their\nown report. Every call appends to `updates` rather than overwriting, so a\nparticipant sees the history rather than only the latest word. A note with no\nstatus change is valid; an empty body is a 400, as is a status outside\nopen | in_progress | resolved. Audited as ISSUE_UPDATE against the facility\nid.\n\nThe report is resolved and the caller authorised before the body is judged.\nThe other order reported the body's shape for an issue that was not there \u2014\n\"Provide a status, a note, or both\" against `ISS-NOPE` \u2014 which sends whoever\nis debugging it to look at their payload when the id is what is wrong. Same\nreason `update_participant_team` and `update_query` check existence first.",
         "operationId": "update_issue_issues__issue_id__patch",
         "security": [
           {
@@ -3433,6 +4609,30 @@
   },
   "components": {
     "schemas": {
+      "AnnouncementCreateRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "mid",
+              "high"
+            ],
+            "title": "Priority",
+            "default": "mid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "AnnouncementCreateRequest"
+      },
       "BackendTeamCreateRequest": {
         "properties": {
           "email": {
@@ -3447,15 +4647,42 @@
           },
           "role": {
             "type": "string",
+            "enum": [
+              "super_admin",
+              "admin",
+              "other",
+              "volunteer"
+            ],
             "title": "Role"
           },
           "department": {
             "type": "string",
+            "enum": [
+              "technical",
+              "sports",
+              "culturals",
+              "uhc",
+              "hostels",
+              "mess",
+              "workshops"
+            ],
             "title": "Department"
           },
           "designation": {
             "type": "string",
+            "minLength": 1,
             "title": "Designation"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           }
         },
         "type": "object",
@@ -3470,42 +4697,33 @@
       },
       "BackendTeamUpdateRequest": {
         "properties": {
-          "role": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Role"
-          },
-          "department": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Department"
-          },
           "designation": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
               }
             ],
             "title": "Designation"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           }
         },
         "type": "object",
-        "title": "BackendTeamUpdateRequest"
+        "title": "BackendTeamUpdateRequest",
+        "description": "`role` and `department` are deliberately absent: both drive the\n`paradox_id` prefix assigned at creation and are treated as immutable \u2014\nchanging either means deleting the account and creating a new one, not\npatching this one. See `create_backend_team` / `update_backend_team`."
       },
       "ChangePasswordRequest": {
         "properties": {
@@ -3618,20 +4836,24 @@
       },
       "EventCreateRequest": {
         "properties": {
-          "event_id": {
-            "type": "string",
-            "title": "Event Id"
-          },
           "event_type": {
             "type": "string",
+            "enum": [
+              "technical",
+              "culturals",
+              "sports",
+              "others"
+            ],
             "title": "Event Type"
           },
           "name": {
             "type": "string",
+            "minLength": 1,
             "title": "Name"
           },
           "description": {
             "type": "string",
+            "minLength": 1,
             "title": "Description"
           },
           "poster": {
@@ -3658,11 +4880,7 @@
             "default": []
           },
           "registration": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Registration"
+            "$ref": "#/components/schemas/RegistrationWindow"
           },
           "schedule": {
             "items": {
@@ -3683,7 +4901,6 @@
         },
         "type": "object",
         "required": [
-          "event_id",
           "event_type",
           "name",
           "description",
@@ -3705,6 +4922,17 @@
             ],
             "title": "Team Name"
           },
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          },
           "registration_data": {
             "additionalProperties": true,
             "type": "object",
@@ -3713,16 +4941,23 @@
           }
         },
         "type": "object",
-        "title": "EventRegistrationInput"
+        "title": "EventRegistrationInput",
+        "description": "How a participant registers for an event: solo, creating a new team, or\njoining one that already exists. Exactly one of these three \u2014 never a\nteam_name *and* a team_id together, since that would be asking to both\ncreate and join in the same request.\n\n- Leave both fields unset to register solo.\n- Set `team_name` to create a new team and become its leader. The\n  backend assigns that team's `team_id` \u2014 the same way `event_id` and\n  `round_id` are assigned, via `id_generator.EventIDGenerator` \u2014 and\n  returns it in the response. Share that id with teammates so they can\n  join; the raw `team_name` text is never itself used as the id.\n- Set `team_id` to the id returned when the team was created, to join\n  that existing team as a member.\n\nWhether solo registration or team registration is required/allowed for a\ngiven event is governed by that event's `team.max` and\n`team.allow_single_registration` \u2014 enforced in the route, not here, since\nit depends on the event being registered for."
       },
       "EventTeamAssignRequest": {
         "properties": {
           "user_id": {
             "type": "string",
+            "minLength": 1,
             "title": "User Id"
           },
           "role": {
             "type": "string",
+            "enum": [
+              "event_head",
+              "member",
+              "volunteer"
+            ],
             "title": "Role"
           }
         },
@@ -3732,6 +4967,24 @@
           "role"
         ],
         "title": "EventTeamAssignRequest"
+      },
+      "EventTeamRoleUpdateRequest": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "event_head",
+              "member",
+              "volunteer"
+            ],
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "EventTeamRoleUpdateRequest"
       },
       "EventUpdateRequest": {
         "properties": {
@@ -3768,17 +5021,6 @@
             ],
             "title": "Poster"
           },
-          "open": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Open"
-          },
           "team": {
             "anyOf": [
               {
@@ -3806,16 +5048,12 @@
           "registration": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
+                "$ref": "#/components/schemas/RegistrationWindowUpdate"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Registration"
+            ]
           },
           "schedule": {
             "anyOf": [
@@ -3879,80 +5117,61 @@
       "HostelAssignTeamRequest": {
         "properties": {
           "user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "User Id"
           },
           "role": {
             "type": "string",
             "title": "Role"
           },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "phone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
+          "attendance": {
+            "type": "boolean",
+            "title": "Attendance",
+            "default": true
           }
         },
         "type": "object",
         "required": [
+          "user_id",
           "role"
         ],
         "title": "HostelAssignTeamRequest"
       },
       "HostelCreateRequest": {
         "properties": {
-          "hostel_id": {
-            "type": "string",
-            "title": "Hostel Id"
-          },
           "name": {
             "type": "string",
             "title": "Name"
           },
           "capacity": {
             "type": "integer",
+            "exclusiveMinimum": 0.0,
             "title": "Capacity"
           },
           "gender": {
             "type": "string",
             "title": "Gender"
           },
-          "coordinator": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Coordinator"
+          "sharing": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Sharing",
+            "description": "Max occupants per room"
+          },
+          "num_rooms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Num Rooms",
+            "description": "Number of rooms to pre-generate"
           }
         },
         "type": "object",
         "required": [
-          "hostel_id",
           "name",
           "capacity",
           "gender",
-          "coordinator"
+          "sharing",
+          "num_rooms"
         ],
         "title": "HostelCreateRequest"
       },
@@ -4116,19 +5335,12 @@
           },
           "capacity": {
             "type": "integer",
+            "exclusiveMinimum": 0.0,
             "title": "Capacity"
           },
-          "preference": {
+          "type": {
             "type": "string",
-            "title": "Preference"
-          },
-          "cuisines": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Cuisines",
-            "default": []
+            "title": "Type"
           }
         },
         "type": "object",
@@ -4136,42 +5348,58 @@
           "mess_id",
           "name",
           "capacity",
-          "preference"
+          "type"
         ],
         "title": "MessCreateRequest"
       },
-      "MessMenuDay": {
+      "MessMealSlot": {
         "properties": {
-          "day": {
-            "type": "integer",
-            "title": "Day"
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Time"
           },
-          "slots": {
-            "items": {
-              "$ref": "#/components/schemas/MessMenuSlot"
-            },
-            "type": "array",
-            "title": "Slots",
-            "default": []
+          "end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End Time"
+          },
+          "menu": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Menu"
           }
         },
         "type": "object",
         "required": [
-          "day"
+          "start_time",
+          "end_time",
+          "menu"
         ],
-        "title": "MessMenuDay"
+        "title": "MessMealSlot",
+        "description": "One meal sitting on one day: when it runs, and what it serves."
       },
       "MessMenuRequest": {
         "properties": {
-          "days": {
-            "items": {
-              "$ref": "#/components/schemas/MessMenuDay"
+          "menu": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/MessMealSlot"
+              },
+              "type": "object"
             },
-            "type": "array",
-            "title": "Days",
-            "default": []
-          },
-          "note": {
+            "type": "object",
+            "title": "Menu",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "MessMenuRequest",
+        "description": "A full replacement for a hall's `menu`.\n\nKeyed exactly as it is stored: `day_1`, `day_2`, ... each holding whichever\nof `breakfast` / `lunch` / `dinner` that day actually serves. A day need\nnot carry all three \u2014 this is what lets an admin give a travel day\nbreakfast only, and how many days there are is entirely up to them.\n\nA full replacement rather than a per-day patch: it keeps one write path\nfor \"add a day\", \"drop a slot\", or \"move a sitting\", instead of three."
+      },
+      "MessUpdateRequest": {
+        "properties": {
+          "name": {
             "anyOf": [
               {
                 "type": "string"
@@ -4180,42 +5408,54 @@
                 "type": "null"
               }
             ],
-            "title": "Note"
+            "title": "Name"
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
           }
         },
         "type": "object",
-        "title": "MessMenuRequest"
+        "title": "MessUpdateRequest",
+        "description": "Every field optional: a caller updates only what it names."
       },
-      "MessMenuSlot": {
+      "MockPaymentRequest": {
         "properties": {
-          "slot": {
-            "type": "string",
-            "title": "Slot"
-          },
-          "start_time": {
-            "type": "string",
-            "title": "Start Time"
-          },
-          "end_time": {
-            "type": "string",
-            "title": "End Time"
-          },
-          "dishes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Dishes",
-            "default": []
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method",
+            "default": "upi"
           }
         },
         "type": "object",
-        "required": [
-          "slot",
-          "start_time",
-          "end_time"
-        ],
-        "title": "MessMenuSlot"
+        "title": "MockPaymentRequest",
+        "description": "A mock payment attempt for the mess or hostel fee (`POST /mess/pay`,\n`POST /hostels/pay`).\n\nThe amount is never accepted from the client \u2014 each route charges its own\nfixed fee, so a participant cannot pay an arbitrary amount \u2014 so this model\ncarries only the payment method, which exists purely to label the mock\nreceipt the same way `StayPaymentPage`'s frontend mock does."
       },
       "ParticipantAdminUpdateRequest": {
         "properties": {
@@ -4358,10 +5598,12 @@
         "properties": {
           "position": {
             "type": "string",
+            "minLength": 1,
             "title": "Position"
           },
           "amount": {
             "type": "integer",
+            "minimum": 0.0,
             "title": "Amount"
           }
         },
@@ -4403,8 +5645,7 @@
                 "type": "null"
               }
             ],
-            "title": "Mess Preference",
-            "default": "South Indian"
+            "title": "Mess Preference"
           },
           "country": {
             "type": "string",
@@ -4529,6 +5770,21 @@
         ],
         "title": "QueryReplyRequest"
       },
+      "QueryTeamAssignRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "QueryTeamAssignRequest",
+        "description": "Adds an existing backend_teams member to the flat query resolution\nteam roster (see routers/queries.py)."
+      },
       "QueryUpdateRequest": {
         "properties": {
           "status": {
@@ -4568,6 +5824,24 @@
         "type": "object",
         "title": "QueryUpdateRequest"
       },
+      "RecommendationRequest": {
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "title": "RecommendationRequest",
+        "description": "`POST /events/recommendations` and `POST /workshops/recommendations`.\n\n`query` is free text to embed and rank the catalogue against. Omitted or\nnull falls back to the participant's already-saved preference embedding\nfor that domain (`embedding.event` / `embedding.workshop` on their own\ndocument) \u2014 set the first time either endpoint is called with a query, or\nby `PATCH /profile/complete`'s `event_preferences`. Shared by both routers\nrather than declared twice, since the shape is identical."
+      },
       "RegisterRequest": {
         "properties": {
           "email": {
@@ -4592,10 +5866,12 @@
         "properties": {
           "field_id": {
             "type": "string",
+            "minLength": 1,
             "title": "Field Id"
           },
           "label": {
             "type": "string",
+            "minLength": 1,
             "title": "Label"
           },
           "type": {
@@ -4615,6 +5891,70 @@
           "type"
         ],
         "title": "RegistrationField"
+      },
+      "RegistrationWindow": {
+        "properties": {
+          "start_time": {
+            "type": "string",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "title": "End Time"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_time",
+          "end_time"
+        ],
+        "title": "RegistrationWindow",
+        "description": "When an event accepts registrations, and the manual kill-switch beside it.\n\n`allowed` is a Super Admin override, independent of the time window: the\neffective open/closed state an API response reports is\n``allowed AND now within [start_time, end_time]`` (see\n``events._registration_open``). Neither bound is optional \u2014 an event with\nno window has no reliable answer to \"is registration open\", which is the\nambiguity that used to be papered over by a bare ``open: bool``."
+      },
+      "RegistrationWindowUpdate": {
+        "properties": {
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          }
+        },
+        "type": "object",
+        "title": "RegistrationWindowUpdate",
+        "description": "Same as `RegistrationWindow`, but every field optional so `PUT\n/events/{id}` can flip just `allowed` without having to resend the window."
       },
       "ResetPasswordRequest": {
         "properties": {
@@ -4673,6 +6013,7 @@
           },
           "name": {
             "type": "string",
+            "minLength": 1,
             "title": "Name"
           },
           "description": {
@@ -4719,17 +6060,19 @@
         "properties": {
           "min": {
             "type": "integer",
+            "minimum": 1.0,
             "title": "Min",
             "default": 1
           },
           "max": {
             "type": "integer",
+            "minimum": 1.0,
             "title": "Max",
             "default": 1
           },
-          "house": {
+          "house_vs_house_event": {
             "type": "boolean",
-            "title": "House",
+            "title": "House Vs House Event",
             "default": false
           },
           "allow_single_registration": {
@@ -4757,7 +6100,11 @@
           "team_role": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "leader",
+                  "member"
+                ]
               },
               {
                 "type": "null"
@@ -4767,7 +6114,8 @@
           }
         },
         "type": "object",
-        "title": "TeamUpdateInput"
+        "title": "TeamUpdateInput",
+        "description": "A partial update: a head may move a participant without restating their role,\nor change the role without restating the team.\n\nBoth fields default to ``None``, so \"absent\" and \"explicitly null\" look the\nsame on the model \u2014 the route separates them with ``model_fields_set``\ninstead. Only ``team_id`` is nullable in the data: clearing it takes the\nparticipant off their team, whereas a stored ``team_role`` is always one of\n`models.PARTICIPANT_TEAM_ROLES` \u2014 \"leader\" or \"member\"."
       },
       "ValidationError": {
         "properties": {
@@ -4834,44 +6182,60 @@
       },
       "WorkshopCreateRequest": {
         "properties": {
-          "workshop_id": {
-            "type": "string",
-            "title": "Workshop Id"
-          },
           "slot_id": {
             "type": "string",
+            "pattern": "^D\\d+S\\d+$",
             "title": "Slot Id"
           },
           "name": {
             "type": "string",
+            "minLength": 1,
             "title": "Name"
           },
           "description": {
             "type": "string",
+            "minLength": 1,
             "title": "Description"
           },
           "venue": {
             "type": "string",
+            "minLength": 1,
             "title": "Venue"
           },
           "capacity": {
             "type": "integer",
+            "exclusiveMinimum": 0.0,
             "title": "Capacity"
           },
           "instructions": {
             "type": "string",
+            "minLength": 1,
             "title": "Instructions"
+          },
+          "registration_start": {
+            "type": "string",
+            "title": "Registration Start"
+          },
+          "registration_end": {
+            "type": "string",
+            "title": "Registration End"
+          },
+          "registration_open": {
+            "type": "boolean",
+            "title": "Registration Open",
+            "default": true
           }
         },
         "type": "object",
         "required": [
-          "workshop_id",
           "slot_id",
           "name",
           "description",
           "venue",
           "capacity",
-          "instructions"
+          "instructions",
+          "registration_start",
+          "registration_end"
         ],
         "title": "WorkshopCreateRequest"
       },
@@ -4903,6 +6267,59 @@
         "type": "object",
         "title": "WorkshopParticipantUpdateRequest",
         "description": "An authorised correction to one participant's record *for one workshop*.\n\nBoth fields are optional so a caller sends only what changes; an empty body is\nrejected by the route rather than silently doing nothing.\n\nDeliberately scoped to the two fields the workshop owns on\n``participants.workshops[]`` \u2014 whether they turned up, and whether the seat was\nbooked ahead or taken at the door. Identity fields (name, email, phone, house,\nacademic record) are *not* editable here: they belong to the participant, they\nare read by every other screen in the fest, and a workshop volunteer is not who\nshould be rewriting them."
+      },
+      "WorkshopSlotCreateRequest": {
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "pattern": "^D\\d+S\\d+$",
+            "title": "Slot Id"
+          },
+          "start_time": {
+            "type": "string",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "title": "End Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot_id",
+          "start_time",
+          "end_time"
+        ],
+        "title": "WorkshopSlotCreateRequest"
+      },
+      "WorkshopSlotUpdateRequest": {
+        "properties": {
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          }
+        },
+        "type": "object",
+        "title": "WorkshopSlotUpdateRequest",
+        "description": "Every field optional so a caller can push just one of the two \u2014 the route\nmerges whatever is given onto the stored document before re-validating\nend > start, the same pattern `events.py` uses for `RegistrationWindowUpdate`."
       },
       "WorkshopUpdateRequest": {
         "properties": {
@@ -4942,7 +6359,8 @@
           "capacity": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -4960,10 +6378,44 @@
               }
             ],
             "title": "Instructions"
+          },
+          "registration_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Start"
+          },
+          "registration_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration End"
+          },
+          "registration_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Open"
           }
         },
         "type": "object",
-        "title": "WorkshopUpdateRequest"
+        "title": "WorkshopUpdateRequest",
+        "description": "Every field optional so a caller updates only what it names. `slot_id` is\ndeliberately absent: a workshop's slot is fixed at creation because\nparticipants' bookings reference it (same rule as before this restructure).\n`start_time` is likewise absent as a direct field \u2014 it only ever changes\nvia a cascaded slot edit (`PUT /workshop-slots/{slot_id}`), never directly."
       }
     },
     "securitySchemes": {

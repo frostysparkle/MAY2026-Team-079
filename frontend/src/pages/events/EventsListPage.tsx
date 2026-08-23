@@ -98,7 +98,7 @@ export default function EventsListPage() {
   }
 
   const registeredIds = useMemo(
-    () => new Set(registrations.map((r) => r.event_id)),
+    () => new Set(registrations.map((r) => r.event_id).filter((id): id is string => id !== null)),
     [registrations],
   );
 

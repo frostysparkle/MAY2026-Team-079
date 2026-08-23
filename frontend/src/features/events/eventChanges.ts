@@ -257,7 +257,11 @@ export function clearEventWatch(participantId: string): void {
 
 /** The events this participant holds a registration for. */
 export function registeredEvents(events: Event[], registrations: MyEventRegistration[]): Event[] {
-  const mine = new Set(registrations.map((r) => r.event_id));
+  // `event_id` is null for a registration whose event was since deleted — there
+  // is no live event left to watch for changes on.
+  const mine = new Set(
+    registrations.map((r) => r.event_id).filter((id): id is string => id !== null),
+  );
   return events.filter((event) => mine.has(event.event_id));
 }
 

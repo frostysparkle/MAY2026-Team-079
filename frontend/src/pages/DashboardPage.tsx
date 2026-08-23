@@ -140,7 +140,12 @@ export default function DashboardPage() {
   /** The events this participant holds a registration for. */
   const myEvents = useMemo(() => {
     if (!events || !registrations) return [];
-    const registered = new Set(registrations.map((r) => r.event_id));
+    // `event_id` is null for a registration whose event was since deleted —
+    // nothing in the catalogue to match it to, so it is excluded here (the
+    // registration itself still counts towards `registrations.length`).
+    const registered = new Set(
+      registrations.map((r) => r.event_id).filter((id): id is string => id !== null),
+    );
     return events.filter((e) => registered.has(e.event_id));
   }, [events, registrations]);
 
@@ -290,7 +295,9 @@ export default function DashboardPage() {
                           : 'Solo entry'
                       }
                       trailing={
-                        !event.registration.is_open && <StatusBadge tone="neutral">Closed</StatusBadge>
+                        !event.registration.is_open && (
+                          <StatusBadge tone="neutral">Closed</StatusBadge>
+                        )
                       }
                     />
                   </Link>

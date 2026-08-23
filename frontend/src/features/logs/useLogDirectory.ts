@@ -32,15 +32,19 @@ import {
  * server-side over the whole trail — so a fest with more history than this limit
  * no longer reports the limit as its total.
  *
- * The default, not the only option: `GET /audit-logs?limit=` takes any value, and
- * the screen offers the choices below. It matters because `limit` is applied
- * *before* any client-side filter could run, so searching a fest with more history
- * than the window searches only the window.
+ * The default, not the only option: `GET /audit-logs?limit=` takes any value **up
+ * to `backend/models.py`'s `PAGE_LIMIT_MAX` (500)** — a request above that is
+ * rejected outright (422), not silently truncated — and the screen offers the
+ * choices below. `limit` matters because it is applied *before* any client-side
+ * filter could run, so searching a fest with more history than the window
+ * searches only the window.
  */
-export const TRAIL_LIMIT = 1000;
+export const TRAIL_LIMIT = 500;
 
-/** Row windows the audit screen offers, smallest first. */
-export const TRAIL_LIMIT_OPTIONS = [200, 1000, 5000] as const;
+/** Row windows the audit screen offers, smallest first. Capped at the server's
+ * hard limit (`backend/models.py: PAGE_LIMIT_MAX`) — anything above 500 is a
+ * 422, not a bigger page. */
+export const TRAIL_LIMIT_OPTIONS = [100, 200, 500] as const;
 
 export interface LogDirectoryEntity {
   id: string;

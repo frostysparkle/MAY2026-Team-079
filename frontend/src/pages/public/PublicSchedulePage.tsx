@@ -32,7 +32,8 @@ export default function PublicSchedulePage() {
 
   function selectDay(index: number) {
     setDayIndex(index);
-    announce(`Showing ${schedule[index].date}, ${schedule[index].items.length} sessions`);
+    const count = schedule[index].items.length;
+    announce(`Showing ${schedule[index].date}, ${count} session${count === 1 ? '' : 's'}`);
   }
 
   return (
@@ -67,7 +68,9 @@ export default function PublicSchedulePage() {
               <h2 className="text-2xl font-black tracking-tight text-brand sm:text-3xl">
                 {day.date}
               </h2>
-              <p className="mt-0.5 text-sm text-muted">{day.items.length} sessions</p>
+              <p className="mt-0.5 text-sm text-muted">
+                {day.items.length} session{day.items.length === 1 ? '' : 's'}
+              </p>
             </div>
 
             <ol className="flex flex-col gap-3">

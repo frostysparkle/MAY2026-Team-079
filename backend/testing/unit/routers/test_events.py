@@ -711,11 +711,31 @@ def test_deregistering_when_never_registered_still_answers_200(client, participa
                          headers=auth_headers(participant)).status_code == 200
 
 
-def test_my_registrations_stringifies_the_event_id(client, make_participant, event):
+def test_my_registrations_resolves_the_event_id(client, make_participant, event):
+    """
+    Mirrors `test_my_registrations_resolves_the_booking_to_the_workshop` in
+    test_workshops.py: `participants.events[].event_id` stores the event's raw
+    ObjectId, which is meaningless to a client — `GET /events`/`GET
+    /events/public` never expose `_id`, so a client-side match against the
+    catalogue by ObjectId could never succeed. The response resolves it back to
+    the readable `event_id` (and `name`) every other screen already uses.
+    """
     person = make_participant(events=[factories.event_registration(event["_id"], team_id="TM1")])
     rows = client.get("/events/my_registrations", headers=auth_headers(person)).json()
-    assert rows[0]["event_id"] == str(event["_id"])
+    assert rows[0]["event_id"] == event["event_id"]
+    assert rows[0]["name"] == event["name"]
     assert rows[0]["team_id"] == "TM1"
+
+
+def test_my_registrations_reports_a_deleted_event_as_null(client, make_participant, event):
+    """A registration survives its event being deleted; there is simply nothing
+    left to resolve it to — mirrors the workshop route's same behaviour."""
+    person = make_participant(events=[factories.event_registration(event["_id"])])
+    database.event_collection.delete_one({"_id": event["_id"]})
+
+    row = client.get("/events/my_registrations", headers=auth_headers(person)).json()[0]
+    assert row["event_id"] is None
+    assert row["name"] is None
 
 
 def test_my_registrations_is_empty_by_default(client, participant):

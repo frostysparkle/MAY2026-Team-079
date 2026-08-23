@@ -80,7 +80,9 @@ export default function FestSchedulePage() {
     Promise.all([api.listEvents(), api.myEventRegistrations()])
       .then(([allEvents, mine]) => {
         setEvents(allEvents);
-        setRegisteredIds(new Set(mine.map((r) => r.event_id)));
+        setRegisteredIds(
+          new Set(mine.map((r) => r.event_id).filter((id): id is string => id !== null)),
+        );
         setLoadError(null);
       })
       .catch((e) =>

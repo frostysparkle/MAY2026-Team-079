@@ -48,7 +48,13 @@ export default function PublicEventDetailPage() {
         </Link>
       </div>
 
-      <EventDetailView view={view} action={<PublicRegistrationAction view={view} />} />
+      {/* This page's chrome renders no `title`, so this component's own heading
+          is the page's only one and must be the `<h1>`. */}
+      <EventDetailView
+        view={view}
+        action={<PublicRegistrationAction view={view} />}
+        headingLevel="h1"
+      />
     </PublicPageChrome>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/api';
-import { hoursAgoIso, localDayBounds } from './auditSeries';
+import { excludeBoardOwnReads, hoursAgoIso, localDayBounds } from './auditSeries';
 import type {
   AuditLogEntry,
   AuditLogSummary,
@@ -60,23 +60,38 @@ export const TIER_CADENCE = {
 export type TierName = keyof typeof TIER_CADENCE;
 
 /**
+ * Every list endpoint this board calls (`/audit-logs`, `/queries`, `/issues`)
+ * rejects `limit` above this with a 422 (`backend/models.py: PAGE_LIMIT_MAX`).
+ * Every fetch window below must stay at or under it — a bigger number here
+ * does not buy a bigger window, it just turns the call into a silently
+ * swallowed failure (see the `.catch(() => [])` below), which is worse than
+ * the truncation it was trying to avoid.
+ */
+export const SERVER_PAGE_LIMIT_MAX = 500;
+
+/**
  * How much of the audit trail to pull per action. `limit` is applied server-side
  * before any filter, so each action gets its own call — and `MESS_SCAN` gets the
  * largest window because it is the highest-volume action by a wide margin.
+ *
+ * All capped at `SERVER_PAGE_LIMIT_MAX`: the board would rather report an
+ * honest floor over the newest 500 rows than have the request itself fail and
+ * silently report zero.
  */
 export const AUDIT_LIMITS = {
-  messScans: 2000,
-  hostelEntry: 1000,
-  hostelExit: 1000,
-  accommodation: 1000,
-  eventRegistrations: 1000,
+  messScans: SERVER_PAGE_LIMIT_MAX,
+  hostelEntry: SERVER_PAGE_LIMIT_MAX,
+  hostelExit: SERVER_PAGE_LIMIT_MAX,
+  accommodation: SERVER_PAGE_LIMIT_MAX,
+  eventRegistrations: SERVER_PAGE_LIMIT_MAX,
   recent: 60,
   /**
-   * The hourly-trend window. Generous because it is bounded by *time* rather
-   * than by count — `PULSE_HOURS` of rows, whatever that turns out to be — so the
-   * limit is a safety valve rather than the thing deciding the answer.
+   * The hourly-trend window. Bounded by *time* rather than by count —
+   * `PULSE_HOURS` of rows, whatever that turns out to be — but still capped at
+   * the server's hard limit, since a window request that exceeds it fails
+   * outright rather than merely truncating.
    */
-  pulse: 4000,
+  pulse: SERVER_PAGE_LIMIT_MAX,
 } as const;
 
 /**
@@ -314,13 +329,15 @@ export function useFestSnapshot(): FestSnapshot {
       api.participantStatistics().catch(() => null),
       api.listWorkshops().catch(() => null),
       api.listBackendTeams().catch(() => null),
-      // The list endpoints cap themselves, so these ask for a fest-sized window
-      // rather than the 100 either would default to — a board reading "12 open"
-      // off a truncated page would be quietly wrong in the one direction that
-      // matters.
-      api.listQueries({}, 1000).catch(() => null),
+      // The list endpoints cap themselves at SERVER_PAGE_LIMIT_MAX, so these ask
+      // for the largest window the server will accept rather than the 100
+      // either would default to — a board reading "12 open" off a truncated
+      // page would be quietly wrong in the one direction that matters. Asking
+      // for more than the server's cap doesn't buy a bigger page, it fails the
+      // request outright (422), which is why this stays at the cap exactly.
+      api.listQueries({}, SERVER_PAGE_LIMIT_MAX).catch(() => null),
       api
-        .listIssues({}, 1000)
+        .listIssues({}, SERVER_PAGE_LIMIT_MAX)
         .then((response) => response.issues)
         .catch(() => null),
       auditFor('messScans', 'MESS_SCAN'),
@@ -366,8 +383,12 @@ export function useFestSnapshot(): FestSnapshot {
       hostelExit,
       accommodation: [...accommodationIn, ...accommodationOut],
       eventRegistrations: [...eventIn, ...eventOut],
-      recent,
-      pulse,
+      // Both feed "what is happening right now" views (the Live activity ticker
+      // and the activity pulse/spike detector), which should read as fest
+      // activity, not as a trace of the board's own background polling. See
+      // `isBoardOwnReadAction`.
+      recent: excludeBoardOwnReads(recent),
+      pulse: excludeBoardOwnReads(pulse),
       today: todaySummary,
       trail: trailSummary,
       truncated,
