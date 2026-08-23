@@ -4,6 +4,9 @@
 *.md
 node_modules/
 
+# Kiro local settings (MCP server config, machine-specific)
+.kiro/settings/
+
 graphify-out/
 graphify-out
 
