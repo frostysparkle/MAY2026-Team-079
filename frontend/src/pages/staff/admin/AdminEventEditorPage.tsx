@@ -129,17 +129,6 @@ export default function AdminEventEditorPage() {
   const [entryRules, setEntryRules] = useState<string[]>([]);
 
   /**
-   * The event's announcements, carried through untouched.
-   *
-   * This form has no announcements field and should not grow one — notices are
-   * composed on the Announcements screen. But `save()` rebuilds the whole
-   * `registration` map from scratch, so any key this form does not hold is a key
-   * it deletes. Holding the blob opaquely means editing an event's capacity does
-   * not un-send its notices.
-   */
-  const [announcementsRaw, setAnnouncementsRaw] = useState<string | undefined>(undefined);
-
-  /**
    * The saved record, held alongside the form's own fields.
    *
    * The form is the *draft*; this is what the server currently holds. The team
@@ -182,7 +171,6 @@ export default function AdminEventEditorPage() {
       setRegStart(window.startTime ?? '');
       setRegEnd(window.endTime ?? '');
       setRulebook(extras.rulebook ?? '');
-      setAnnouncementsRaw(extras.announcementsRaw);
       setCapacity(extras.capacity ? String(extras.capacity) : '');
       setReportingTime(extras.entry.reportingTime ?? '');
       setIdProof(extras.entry.idProof ?? '');
@@ -232,9 +220,6 @@ export default function AdminEventEditorPage() {
       meta,
       prizeAmounts: keptPrizes.map((p) => p.display),
       roundWhen: keptRounds.map((r) => r.when),
-      // Not editable here; carried so this form does not delete it. See the
-      // state declaration above.
-      announcementsRaw,
       // A blank, zero, or non-numeric box means "no published limit" — the
       // writer drops anything that is not a positive whole number.
       capacity: Number(capacity),

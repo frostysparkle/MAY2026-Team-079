@@ -47,12 +47,12 @@ const PUBLIC_SECTIONS: LandingSection[] = [
  * "you are in" state. Sponsors has no signed-in build, so it stays the public
  * page — reached, like every other section, from this same landing.
  *
- * Announcements and Help & Support close a gap that made both of them look
- * unbuilt. `AppShell`'s rail has always listed them, but the rail only exists
- * *inside* a section — so a student who signed in and went to Events from the
- * portal had no way to discover that the fest could be asked a question at all,
- * and the portal is the screen they land on. A section reachable from one of two
- * navs is a section half the users never find.
+ * Help & Support closes a gap that made it look unbuilt. `AppShell`'s rail has
+ * always listed it, but the rail only exists *inside* a section — so a student
+ * who signed in and went to Events from the portal had no way to discover that
+ * the fest could be asked a question at all, and the portal is the screen they
+ * land on. A section reachable from one of two navs is a section half the users
+ * never find.
  *
  * My Pass and Profile are still absent on purpose: the portal's own top bar
  * carries them for a signed-in participant, and a second copy could only drift.
@@ -64,7 +64,6 @@ const PARTICIPANT_SECTIONS: LandingSection[] = [
   { label: 'Stay', to: ROUTES.accommodation },
   { label: 'Sponsors', to: ROUTES.sponsors },
   { label: 'Dashboard', to: ROUTES.dashboard },
-  { label: 'Announcements', to: ROUTES.announcements },
   { label: 'Help & Support', to: ROUTES.support },
 ];
 

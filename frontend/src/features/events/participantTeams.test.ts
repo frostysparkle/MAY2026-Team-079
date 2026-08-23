@@ -20,6 +20,7 @@ function person(
     house: 'wayanad',
     team_id,
     team_role,
+    photo: null,
   };
 }
 

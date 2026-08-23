@@ -60,6 +60,7 @@ function participation(count: number, scansToday?: number): EventParticipationRe
       house: null,
       team_id: null,
       team_role: null,
+      photo: null,
     })),
     event_team: [],
     ...(scansToday === undefined ? {} : { total_daily_scans: scansToday }),
@@ -100,7 +101,9 @@ describe('EventParticipationPage — entries left (story 3.2)', () => {
     renderPage();
     // The roster still loads — only the capacity block is absent, because an
     // event with no declared limit has no "entries left" to report.
-    expect(await screen.findByText('Registered (150)')).toBeInTheDocument();
+    const registeredHeading = await screen.findByRole('heading', { name: 'Registered' });
+    expect(registeredHeading).toBeInTheDocument();
+    expect(registeredHeading.parentElement).toHaveTextContent('150');
     expect(screen.queryByText('Entry capacity today')).not.toBeInTheDocument();
   });
 

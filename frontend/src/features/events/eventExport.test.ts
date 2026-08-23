@@ -38,6 +38,7 @@ const REGISTRANTS: EventParticipant[] = [
     house: 'Wayanad',
     team_id: 'TE_MX_1',
     team_role: 'leader',
+    photo: null,
   },
   {
     participant_id: 'AE24F1000042',
@@ -47,6 +48,7 @@ const REGISTRANTS: EventParticipant[] = [
     house: null,
     team_id: null,
     team_role: null,
+    photo: null,
   },
 ];
 

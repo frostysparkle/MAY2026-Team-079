@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Ticket } from 'lucide-react';
+import { CalendarDays, Sparkles, Ticket } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Event, MyEventRegistration } from '@/api/types';
+import type { Event, MyEventRegistration, RecommendedEvent } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
@@ -24,6 +24,7 @@ import {
   EventGridSkeleton,
   EventPosterCard,
 } from '@/features/events/EventPosterCard';
+import { AiRecommendBar } from '@/features/ai/AiRecommendBar';
 
 /**
  * The in-app event catalogue, dressed as the festival programme — the same poster
@@ -35,6 +36,14 @@ import {
  * published it. What differs is the layer on top — a "Registered" pill instead of
  * a "⋮" menu, and a card that opens the registration page rather than the editor.
  */
+
+/**
+ * How many of the top-ranked cards carry the "Suggested" badge when an AI
+ * ranking is active. The backend already returns every event sorted most
+ * similar first, so this is purely a display cutoff — cards ranked 6th or
+ * lower stay in the list (nothing is hidden), they just lose the badge.
+ */
+const TOP_RECOMMENDED_COUNT = 5;
 
 /** A category heading plus the events filed under it. */
 interface Section {
@@ -53,6 +62,14 @@ export default function EventsListPage() {
   const [registrations, setRegistrations] = useState<MyEventRegistration[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // The AI-ranked view, when active: every event the plain list already has,
+  // just carrying a `similarity` score and sorted by it. `null` means the
+  // banner has never been used (or has been cleared) — render the normal
+  // category-grouped grid instead.
+  const [recommended, setRecommended] = useState<RecommendedEvent[] | null>(null);
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendError, setRecommendError] = useState<string | null>(null);
+
   // Clearing the error on success rather than up front keeps this free of a
   // synchronous setState when it runs as the mount effect.
   function load() {
@@ -67,6 +84,25 @@ export default function EventsListPage() {
       );
   }
   useEffect(load, []);
+
+  function handleRecommend(query: string) {
+    setRecommendLoading(true);
+    setRecommendError(null);
+    api
+      .recommendEvents({ query: query || null })
+      .then((ranked) => setRecommended(ranked))
+      .catch((e) =>
+        setRecommendError(
+          e instanceof ApiClientError ? e.message : 'Could not get recommendations.',
+        ),
+      )
+      .finally(() => setRecommendLoading(false));
+  }
+
+  function clearRecommendations() {
+    setRecommended(null);
+    setRecommendError(null);
+  }
 
   const registeredIds = useMemo(
     () => new Set(registrations.map((r) => r.event_id)),
@@ -138,6 +174,25 @@ export default function EventsListPage() {
         </>
       }
     >
+      {events !== null && events.length > 0 && (
+        <AiRecommendBar
+          noun="events"
+          placeholder="e.g. dance, coding, quizzes…"
+          active={recommended !== null}
+          loading={recommendLoading}
+          onSearch={handleRecommend}
+          onClear={clearRecommendations}
+        />
+      )}
+
+      {recommendError && (
+        <ErrorState
+          title="Could not get recommendations"
+          description={recommendError}
+          onRetry={() => handleRecommend('')}
+        />
+      )}
+
       {events === null ? (
         <EventGridSkeleton />
       ) : events.length === 0 ? (
@@ -146,6 +201,50 @@ export default function EventsListPage() {
           description="The programme appears here as soon as the organisers publish it."
           icon={Ticket}
         />
+      ) : recommended !== null ? (
+        <SectionBlock
+          title="Recommended for you"
+          meta={`${recommended.length} event${recommended.length === 1 ? '' : 's'} · ranked by match`}
+        >
+          <ul className={EVENT_GRID_CLASS}>
+            {recommended.map((event, index) => (
+              <EventPosterCard
+                key={event.event_id}
+                to={path(ROUTES.eventDetail, { eventId: event.event_id })}
+                name={event.name}
+                poster={event.poster}
+                fallbackImage={
+                  PUBLIC_EVENT_CATEGORIES.find(
+                    (c) => c.slug === categorySlugForEventType(event.event_type),
+                  )?.image ?? UNLISTED_CATEGORY.image
+                }
+                meta={metaFor(event)}
+                badge={
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {/* Backend already sorts by similarity, most similar first,
+                        so the top 5 by array position are the top 5 by score. */}
+                    {index < TOP_RECOMMENDED_COUNT && (
+                      <StatusBadge tone="info" className="shadow-card ring-1 ring-line">
+                        <Sparkles size={11} strokeWidth={2.5} className="mr-1 inline" />
+                        Suggested
+                      </StatusBadge>
+                    )}
+                    {registeredIds.has(event.event_id) && (
+                      <StatusBadge tone="success" className="shadow-card ring-1 ring-line">
+                        Registered
+                      </StatusBadge>
+                    )}
+                    {!event.open && (
+                      <StatusBadge tone="neutral" className="shadow-card ring-1 ring-line">
+                        Registration Closed
+                      </StatusBadge>
+                    )}
+                  </span>
+                }
+              />
+            ))}
+          </ul>
+        </SectionBlock>
       ) : (
         sections.map((section) => (
           <SectionBlock

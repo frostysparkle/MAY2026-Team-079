@@ -52,11 +52,6 @@ export const ROUTES = {
   /** The mock checkout that settles that choice. */
   accommodationPayment: '/app/accommodation/payment',
   /**
-   * Official notices addressed to this participant — Stories 8.1/8.2. The
-   * dashboard carries the first few; this is the full list.
-   */
-  announcements: '/app/announcements',
-  /**
    * Help & Support — every way a participant reaches a human, in one section.
    *
    * One route with three tabs, selected by `?tab=`:
@@ -178,12 +173,6 @@ export const ROUTES = {
    * profile. Admin-only, because both routes behind it are Super Admin only.
    */
   adminParticipants: '/staff/admin/participants',
-  /**
-   * The announcement desk — Stories 8.1/8.2. Admin-only because
-   * `PUT /events/{event_id}`, which is where a notice is stored, refuses anybody
-   * but a Super Admin. Other staff receive announcements on their duty board.
-   */
-  adminAnnouncements: '/staff/admin/announcements',
   adminAuditLogs: '/staff/admin/audit-logs',
   /**
    * Every log record for one entity. `domain` is events | workshops | mess |

@@ -62,13 +62,12 @@ describe('landingSections', () => {
     expect(sections.find((s) => s.label === 'Sponsors')?.to).toBe(ROUTES.sponsors);
   });
 
-  it('offers a participant Announcements and Help & Support from the landing itself', () => {
-    // Both were reachable only from `AppShell`'s rail, which exists only *inside*
-    // a section — so a student who signed in and opened Events from the portal
+  it('offers a participant Help & Support from the landing itself', () => {
+    // It was reachable only from `AppShell`'s rail, which exists only *inside* a
+    // section — so a student who signed in and opened Events from the portal
     // never learned the fest could be asked a question at all. The landing is the
-    // screen they arrive on, so it has to name them.
+    // screen they arrive on, so it has to name it.
     const sections = landingSections(participant());
-    expect(sections.find((s) => s.label === 'Announcements')?.to).toBe(ROUTES.announcements);
     expect(sections.find((s) => s.label === 'Help & Support')?.to).toBe(ROUTES.support);
   });
 

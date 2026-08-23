@@ -4,8 +4,11 @@ import {
   BarChart3,
   Download,
   DoorOpen,
+  LayoutGrid,
+  List,
   RefreshCw,
   ScanLine,
+  Search,
   UserCheck,
   UserMinus,
   Users,
@@ -16,8 +19,10 @@ import { path, ROUTES } from '@/config/routes';
 import { isSuperAdmin } from '@/stores/authStore';
 import { downloadCsv, toCsv } from '@/lib/csv';
 import {
+  ANY,
   Button,
   Card,
+  DataTable,
   EmptyState,
   ErrorState,
   Histogram,
@@ -25,16 +30,23 @@ import {
   ProgressBar,
   RankedBars,
   ResultBanner,
-  SectionHeading,
+  SectionBlock,
+  Select,
   Spinner,
   SplitBar,
   StatCard,
-  StatusBadge,
   TextInput,
+  ViewToggle,
+  sortRows,
+  useTableSort,
   usePagedList,
+  useViewMode,
+  type ViewOption,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { useWorkshopRoster } from '@/features/workshops/useWorkshopRoster';
+import { RosterCards } from '@/features/workshops/RosterCards';
+import { useRosterColumns } from '@/features/workshops/rosterColumns';
 import {
   interestByCohort,
   interestByLevel,
@@ -75,6 +87,11 @@ type Tab = 'attended' | 'absent' | 'on-spot' | 'all';
 
 const PAGE_SIZE = 25;
 
+const VIEW_OPTIONS: readonly ViewOption<'table' | 'cards'>[] = [
+  { value: 'table', label: 'Table view', icon: List },
+  { value: 'cards', label: 'Card view', icon: LayoutGrid },
+];
+
 export default function WorkshopManagePage() {
   const { workshopId = '' } = useParams();
   const navigate = useNavigate();
@@ -84,6 +101,13 @@ export default function WorkshopManagePage() {
 
   const [tab, setTab] = useState<Tab>('attended');
   const [query, setQuery] = useState('');
+  /** A second, finer filter alongside the status tabs — which academic level. */
+  const [levelFilter, setLevelFilter] = useState<string>(ANY);
+  // `POST /workshops/{id}/attendance` authorises only a name on `workshop_team`
+  // and has no Super Admin bypass, unlike the roster route above it — so
+  // `roster.membership` (this staffer's own entry, once the team is known at
+  // all) is the one true signal, not `superAdmin`.
+  const canScan = Boolean(roster.membership);
   /** The participant id whose correction is in flight, so only their row is busy. */
   const [saving, setSaving] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -101,11 +125,21 @@ export default function WorkshopManagePage() {
           : tab === 'on-spot'
             ? lists.onSpot
             : lists.all;
-    const needle = query.trim().toUpperCase();
-    return needle ? source.filter((row) => row.participantId.includes(needle)) : source;
-  }, [tab, query, lists]);
 
-  const paged = usePagedList(rows, { pageSize: PAGE_SIZE, resetKey: `${tab}|${query}` });
+    const withLevel =
+      levelFilter === ANY ? source : source.filter((row) => row.courseStage === levelFilter);
+
+    // Matches on name and email too, when the roster route has them — a name
+    // search finds nothing on a log-built roster, where only the id is known,
+    // but costs nothing to widen for the common case where it is.
+    const needle = query.trim().toLowerCase();
+    if (!needle) return withLevel;
+    return withLevel.filter((row) =>
+      [row.participantId, row.name, row.email]
+        .filter(Boolean)
+        .some((field) => field!.toLowerCase().includes(needle)),
+    );
+  }, [tab, levelFilter, query, lists]);
 
   const levels = useMemo(() => interestByLevel(lists.all), [lists.all]);
   const cohorts = useMemo(() => interestByCohort(lists.all), [lists.all]);
@@ -115,6 +149,28 @@ export default function WorkshopManagePage() {
   // supplied one. A roster rebuilt from log rows carries no profile at all, and
   // the entry-year cohort stands in — labelled as a cohort, never as a level.
   const levelsKnown = levels.counted > 0;
+
+  /** The Level filter's vocabulary, built from what the roster actually has. */
+  const levelOptions = useMemo(
+    () => levels.buckets.filter((bucket) => bucket.value > 0).map((bucket) => bucket.key),
+    [levels.buckets],
+  );
+
+  // Sorted after the tab/level/search narrowing above, so a name sort orders
+  // exactly the rows on screen rather than the whole roster.
+  const sort = useTableSort('name');
+  const columns = useRosterColumns({
+    canCorrect: Boolean(roster.rosterReadable && roster.membership?.attendance !== false),
+    savingId: saving,
+    onToggleAttendance: (entry) => void setAttendance(entry, !entry.attended),
+  });
+  const sorted = useMemo(() => sortRows(rows, columns, sort), [rows, columns, sort]);
+  const paged = usePagedList(sorted, {
+    pageSize: PAGE_SIZE,
+    resetKey: `${tab}|${levelFilter}|${query}|${sort.signature}`,
+  });
+
+  const { view, setView } = useViewMode(VIEW_OPTIONS, 'table');
 
   function exportRows(entries: RosterEntry[], suffix: string) {
     downloadCsv(
@@ -209,19 +265,30 @@ export default function WorkshopManagePage() {
       back={back}
       actions={
         <>
-          <Button
-            className="gap-1.5"
-            onClick={() => navigate(path(ROUTES.scanWorkshop, { workshopId }))}
-          >
-            <ScanLine size={14} /> Scan registered
-          </Button>
-          <Button
-            variant="secondary"
-            className="gap-1.5"
-            onClick={() => navigate(path(ROUTES.scanWorkshopOnSpot, { workshopId }))}
-          >
-            <DoorOpen size={14} /> On-spot scanner
-          </Button>
+          {/* `POST /workshops/{id}/attendance` looks the scanning account up on
+              `workshop_team` and refuses everybody else — there is no Super Admin
+              bypass the way events have none for a UHC/domain admin either — so a
+              Super Admin who opened this desk to check on a workshop rather than
+              to staff it gets no button that is certain to 403. `roster.membership`
+              is this staffer's own entry once the team is known at all; it is
+              `null` rather than `undefined` for a caller confirmed off it. */}
+          {canScan && (
+            <>
+              <Button
+                className="gap-1.5"
+                onClick={() => navigate(path(ROUTES.scanWorkshop, { workshopId }))}
+              >
+                <ScanLine size={14} /> Scan registered
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-1.5"
+                onClick={() => navigate(path(ROUTES.scanWorkshopOnSpot, { workshopId }))}
+              >
+                <DoorOpen size={14} /> On-spot scanner
+              </Button>
+            </>
+          )}
           <Button variant="ghost" className="gap-1.5" onClick={roster.reload}>
             <RefreshCw size={14} /> Refresh
           </Button>
@@ -236,11 +303,10 @@ export default function WorkshopManagePage() {
       )}
 
       {/* ---------------------------------------------------------- figures --- */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading
-          title="Attendance"
-          meta={`${counts.registered} of ${counts.capacity} seats taken`}
-        />
+      <SectionBlock
+        title="Attendance"
+        meta={`${counts.registered} of ${counts.capacity} seats taken`}
+      >
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Users}
@@ -319,19 +385,15 @@ export default function WorkshopManagePage() {
             ]}
           />
         </Card>
-      </section>
+      </SectionBlock>
 
       {/* ------------------------------------------------------- interest --- */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading
-          title="Who is interested"
-          meta={
-            cohorts.counted > 0
-              ? `${cohorts.counted} registrations classified`
-              : 'Awaiting bookings'
-          }
-        />
-
+      <SectionBlock
+        title="Who is interested"
+        meta={
+          cohorts.counted > 0 ? `${cohorts.counted} registrations classified` : 'Awaiting bookings'
+        }
+      >
         {lists.all.length === 0 ? (
           <Card>
             <p className="text-sm text-muted">
@@ -340,10 +402,19 @@ export default function WorkshopManagePage() {
             </p>
           </Card>
         ) : (
+          // Both cards fixed to the same height and each scrolling on its own,
+          // rather than the whole row sharing one scroller or the two cards
+          // sizing to their own content and ending up uneven. `overflow-y-auto`
+          // only engages once a chart's own rows exceed that height — the level
+          // and cohort charts are always three or so rows and never need it,
+          // but "Interest by programme" can run long on an event with many
+          // programmes represented.
           <div className="grid gap-3 lg:grid-cols-2">
             {levelsKnown ? (
-              <Card className="flex flex-col gap-3">
-                <p className="text-sm font-semibold text-ink">Interest by level</p>
+              <Card className="flex h-80 flex-col gap-3 overflow-y-auto">
+                <p className="sticky top-0 bg-surface text-sm font-semibold text-ink">
+                  Interest by level
+                </p>
                 <Histogram
                   buckets={levels.buckets}
                   domain="workshops"
@@ -361,8 +432,10 @@ export default function WorkshopManagePage() {
                 </p>
               </Card>
             ) : (
-              <Card className="flex flex-col gap-3">
-                <p className="text-sm font-semibold text-ink">Interest by cohort</p>
+              <Card className="flex h-80 flex-col gap-3 overflow-y-auto">
+                <p className="sticky top-0 bg-surface text-sm font-semibold text-ink">
+                  Interest by cohort
+                </p>
                 <Histogram
                   buckets={cohorts.buckets}
                   domain="workshops"
@@ -378,8 +451,10 @@ export default function WorkshopManagePage() {
               </Card>
             )}
 
-            <Card className="flex flex-col gap-3">
-              <p className="text-sm font-semibold text-ink">Interest by programme</p>
+            <Card className="flex h-80 flex-col gap-3 overflow-y-auto">
+              <p className="sticky top-0 bg-surface text-sm font-semibold text-ink">
+                Interest by programme
+              </p>
               <RankedBars
                 rows={programmes.buckets}
                 domain="workshops"
@@ -393,11 +468,10 @@ export default function WorkshopManagePage() {
             </Card>
           </div>
         )}
-      </section>
+      </SectionBlock>
 
       {/* --------------------------------------------------------- exports --- */}
-      <section className="flex flex-col gap-3">
-        <SectionHeading title="Exports" />
+      <SectionBlock title="Exports">
         <Card className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
@@ -424,12 +498,13 @@ export default function WorkshopManagePage() {
             <Download size={14} /> Absentees ({lists.absent.length})
           </Button>
         </Card>
-      </section>
+      </SectionBlock>
 
       {/* ---------------------------------------------------------- roster --- */}
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SectionHeading title="Registered students" meta={`${lists.all.length} on record`} />
+      <SectionBlock
+        title="Registered students"
+        meta={`${lists.all.length} on record`}
+        actions={
           <Button
             variant="ghost"
             size="sm"
@@ -439,8 +514,8 @@ export default function WorkshopManagePage() {
           >
             <Download size={14} /> Export this list
           </Button>
-        </div>
-
+        }
+      >
         {actionError && (
           <ResultBanner variant="error" title="Could not update that participant">
             {actionError}
@@ -504,85 +579,74 @@ export default function WorkshopManagePage() {
           ))}
         </div>
 
-        <TextInput
-          label="Search by participant ID"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="e.g. DS23F"
-        />
+        {/* Search plus a Level filter, and the Grid/List toggle — the same
+            arrangement `AdminHostelsPage` and `AdminMessPage` use, so this desk's
+            roster reads the same way every other admin list in the app does. The
+            status tabs above stay as they are: they are the roster's primary
+            split (booked vs. attended vs. on-spot) and predate this pattern by
+            design, not by omission. */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-56 flex-1">
+            <TextInput
+              label="Search registered students"
+              icon={Search}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name, email, or participant ID"
+            />
+          </div>
+          {levelOptions.length > 0 && (
+            <div className="min-w-40">
+              <Select
+                label="Level"
+                value={levelFilter}
+                onChange={(e) => setLevelFilter(e.target.value)}
+                options={[
+                  { value: ANY, label: 'Any level' },
+                  ...levelOptions.map((stage) => ({ value: stage, label: levelLabel(stage) })),
+                ]}
+              />
+            </div>
+          )}
+          <ViewToggle options={VIEW_OPTIONS} value={view} onChange={setView} />
+        </div>
 
         {rows.length === 0 ? (
           <EmptyState
-            title={query ? 'No participant id matches' : 'Nothing on this list yet'}
+            title={query || levelFilter !== ANY ? 'No match' : 'Nothing on this list yet'}
             description={
-              query
-                ? 'Clear the search to see the whole list.'
+              query || levelFilter !== ANY
+                ? 'Clear the search or level filter to see the whole list.'
                 : tab === 'absent'
                   ? 'Everybody who booked has been scanned in.'
                   : 'Rows appear here as bookings are made and codes are scanned.'
             }
             icon={BarChart3}
           />
+        ) : view === 'table' ? (
+          <>
+            <DataTable
+              columns={columns}
+              rows={paged.items}
+              rowKey={(row) => `${row.participantId}-${row.booking}`}
+              sort={sort}
+              caption="Registered students with programme, level, booking, and attendance status"
+            />
+            <Pagination paged={paged} noun="students" />
+          </>
         ) : (
           <>
-            <ul className="flex flex-col gap-2">
-              {paged.items.map((entry) => (
-                <li key={`${entry.participantId}-${entry.booking}`}>
-                  <Card className="flex flex-wrap items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">
-                        {entry.name || entry.participantId}
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {[
-                          entry.name ? entry.participantId : null,
-                          entry.email,
-                          entry.programLabel,
-                          entry.registeredAt
-                            ? `booked ${new Date(entry.registeredAt).toLocaleString('en-IN')}`
-                            : null,
-                          entry.attendedAt
-                            ? `scanned ${new Date(entry.attendedAt).toLocaleString('en-IN')}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || 'No further detail is exposed for this id'}
-                      </p>
-                    </div>
-                    {entry.courseStage && (
-                      <StatusBadge tone="neutral">
-                        {entry.academicLevel ?? levelLabel(entry.courseStage)}
-                      </StatusBadge>
-                    )}
-                    <StatusBadge tone={entry.booking === 'on-spot' ? 'info' : 'neutral'}>
-                      {entry.booking === 'on-spot' ? 'On-spot' : 'Pre-registered'}
-                    </StatusBadge>
-                    <StatusBadge tone={entry.attended ? 'success' : 'warning'}>
-                      {entry.attended ? 'Present' : 'Not scanned'}
-                    </StatusBadge>
-                    {/* The correction, offered only where it can succeed: the
-                        roster route answered (so this account is on the team or an
-                        admin) and its scanning has not been switched off. The
-                        server checks both again. */}
-                    {roster.rosterReadable && roster.membership?.attendance !== false && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        loading={saving === entry.participantId}
-                        disabled={saving !== null}
-                        onClick={() => void setAttendance(entry, !entry.attended)}
-                      >
-                        {entry.attended ? 'Mark absent' : 'Mark present'}
-                      </Button>
-                    )}
-                  </Card>
-                </li>
-              ))}
-            </ul>
+            <RosterCards
+              rows={paged.items}
+              canCorrect={Boolean(roster.rosterReadable && roster.membership?.attendance !== false)}
+              savingId={saving}
+              onToggleAttendance={(entry) => void setAttendance(entry, !entry.attended)}
+            />
             <Pagination paged={paged} noun="students" />
           </>
         )}
-      </section>
+      </SectionBlock>
 
       {/* ------------------------------------------------------------ team --- */}
       <WorkshopTeamPanel

@@ -24,6 +24,7 @@ import type {
   EventUpdateRequest,
   EventTeamAssignRequest,
   ParticipantTeamUpdateRequest,
+  RecommendationRequest,
   IssueCreateRequest,
   IssueUpdateRequest,
   ParticipantAdminUpdateRequest,
@@ -194,6 +195,8 @@ export const realApi: ApiClient = {
   myDailyEventScans: (eventId) => request(`/events/${eventId}/my_daily_scans`),
   eventCapacityCounts: (eventId) => request(`/events/${eventId}/capacity`),
   eventLogs: (eventId) => request(`/events/${eventId}/logs`),
+  recommendEvents: (req: RecommendationRequest) =>
+    request('/events/recommendations', { method: 'POST', body: JSON.stringify(req) }),
 
   // ---- workshops ----
   listPublicWorkshops: () => request('/workshops/public'),
@@ -238,6 +241,8 @@ export const realApi: ApiClient = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  recommendWorkshops: (req: RecommendationRequest) =>
+    request('/workshops/recommendations', { method: 'POST', body: JSON.stringify(req) }),
 
   // ---- backend teams ----
   listBackendTeams: () => request('/backend_teams'),

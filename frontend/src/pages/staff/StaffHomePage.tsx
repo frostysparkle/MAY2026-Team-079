@@ -40,8 +40,6 @@ import {
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import { PanelMasonry } from '@/components/layout/PanelMasonry';
-import { AnnouncementFeed } from '@/features/announcements/AnnouncementFeed';
-import { useAnnouncementInbox } from '@/features/announcements/useAnnouncementInbox';
 
 /**
  * Staff dashboard. Every card is computed from live entity lists, not from a
@@ -74,8 +72,6 @@ export default function StaffHomePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [workshopId, setWorkshopId] = useState('');
-  /** Announcements for this staffer's teams — see the panel comment below. */
-  const inbox = useAnnouncementInbox();
 
   useEffect(() => {
     api
@@ -150,24 +146,6 @@ export default function StaffHomePage() {
       eyebrow={staff?.designation ?? 'Staff'}
       subtitle={staff?.email}
     >
-      {/* Announcements addressed to this staffer — Epic 8's "between teams" half.
-          Above the duty cards, and outside the masonry, because one telling a
-          volunteer their gate has moved has to be read before the gate is. Which
-          teams name them is worked out from the team arrays the catalogue
-          endpoints already return; see `staffReader`. */}
-      <AnnouncementFeed
-        announcements={inbox.announcements}
-        names={inbox.names}
-        onDismiss={inbox.dismiss}
-        onDismissAll={inbox.dismissAll}
-        limit={4}
-        heading={
-          inbox.announcements.length === 1
-            ? 'One announcement for your team'
-            : `${inbox.announcements.length} announcements for your teams`
-        }
-      />
-
       {/* Masonry: columns balance themselves, cards never split across them. */}
       <PanelMasonry>
         {(myMess.length > 0 || myHostels.length > 0 || myWorkshops.length > 0) && (

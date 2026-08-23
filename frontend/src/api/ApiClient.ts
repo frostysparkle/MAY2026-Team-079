@@ -47,6 +47,9 @@ import type {
   EventUpdateRequest,
   EventTeamAssignRequest,
   ParticipantTeamUpdateRequest,
+  RecommendationRequest,
+  RecommendedEvent,
+  RecommendedWorkshop,
   Workshop,
   WorkshopCreateRequest,
   WorkshopUpdateRequest,
@@ -166,6 +169,13 @@ export interface ApiClient {
   eventCapacityCounts(eventId: string): Promise<EventCapacityCountsResponse>;
   /** Every attendance scan recorded for one event. Super Admins only. */
   eventLogs(eventId: string): Promise<EventLogsResponse>;
+  /**
+   * Every event, re-ranked by similarity to `req.query` — or, when omitted, to
+   * this participant's saved preference embedding. Nothing is filtered out;
+   * the list is always the full catalogue, most similar first. A query present
+   * overwrites the saved preference for next time.
+   */
+  recommendEvents(req: RecommendationRequest): Promise<RecommendedEvent[]>;
 
   // ---- workshops ----
   /** The published workshop programme — no token required. */
@@ -208,6 +218,12 @@ export interface ApiClient {
     scanType: 'pre-registered' | 'on-spot',
     body: ScanQRRequest,
   ): Promise<MessageResponse>;
+  /**
+   * Every workshop, re-ranked by similarity to `req.query` — or, when omitted,
+   * to this participant's saved preference embedding. The workshop-side twin
+   * of `recommendEvents`; kept on a separate saved embedding slot from events.
+   */
+  recommendWorkshops(req: RecommendationRequest): Promise<RecommendedWorkshop[]>;
 
   // ---- backend teams (super admin) ----
   listBackendTeams(): Promise<BackendTeamMember[]>;

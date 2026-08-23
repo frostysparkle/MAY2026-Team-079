@@ -32,6 +32,8 @@ export interface EventRegistrant {
   house: string | null;
   teamId: string | null;
   teamRole: string | null;
+  /** The uploaded profile photo, when the participant has one. */
+  photo: string | null;
   /** `DS`, when the id parses. */
   program: string | null;
   /** `Data Science`, when the id parses. */
@@ -53,6 +55,7 @@ export function eventRegistrants(participants: readonly EventParticipant[]): Eve
         house: p.house,
         teamId: p.team_id,
         teamRole: p.team_role,
+        photo: p.photo,
         program,
         programme: program ? (PROGRAM_LABEL[program] ?? program) : null,
         entryYear,

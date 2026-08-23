@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BedDouble,
   Download,
+  LayoutGrid,
+  List,
   Pencil,
   Save,
   Search,
@@ -28,10 +30,13 @@ import {
   StatusBadge,
   TablePager,
   TextInput,
+  ViewToggle,
   sortRows,
   useTableSort,
   usePagedList,
+  useViewMode,
   type DataTableColumn,
+  type ViewOption,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import {
@@ -48,6 +53,7 @@ import {
   standingOf,
   type ParticipantForm,
 } from '@/features/participants/participantAdmin';
+import { ParticipantCards } from '@/features/participants/ParticipantCards';
 
 /**
  * One dashboard for participant records — Story 7.3.
@@ -69,10 +75,24 @@ import {
  * * **Search is server-side.** `GET /participants` takes `q` and `house` and caps
  *   the response, so a fest of thousands is never pulled into the browser to be
  *   filtered there.
+ *
+ * Layered on top of that server search are three client-side filters — profile
+ * status, stay, and mess — plus a Grid/List view toggle, matching the pattern
+ * `AdminHostelsPage` and `AdminMessPage` use. Those two narrow a fest-wide
+ * collection the browser already holds in full; this page's server search stays
+ * exactly as it is, and the extra filters only ever narrow the (already capped)
+ * page that search returned.
  */
 
 const PAGE_SIZE = 12;
 const FETCH_LIMIT = 200;
+
+type TriState = 'any' | 'yes' | 'no';
+
+const VIEW_OPTIONS: readonly ViewOption<'table' | 'cards'>[] = [
+  { value: 'table', label: 'Table view', icon: List },
+  { value: 'cards', label: 'Card view', icon: LayoutGrid },
+];
 
 export default function AdminParticipantsPage() {
   const [participants, setParticipants] = useState<ParticipantRecord[] | null>(null);
@@ -177,6 +197,34 @@ export default function AdminParticipantsPage() {
   }, []);
 
   const filtered = Boolean(query || house);
+
+  /**
+   * Two extra filters over the loaded page — profile completeness and whether a
+   * stay has been allotted. Unlike `query`/`house` these narrow the page already
+   * in the browser rather than asking the server again, so they are plain
+   * component state rather than URL-backed `useListFilters`: the server search
+   * and this refinement are two different questions, and conflating them risked
+   * the server search silently losing its own params.
+   *
+   * A third filter — mess allocation — was dropped rather than squeezed onto the
+   * row: Stay already answers "has this person been allotted somewhere", and a
+   * fifth control (Search, House, Profile, Stay, plus the view toggle) fit one
+   * row cleanly where a sixth started to crowd it. `standingOf(row).mess` is
+   * still visible in the Stay/Profile columns' neighbourhood via the table, and
+   * in the summary cards above, so nothing here is unreachable — only unfiltered.
+   */
+  const [profileFilter, setProfileFilter] = useState<TriState>('any');
+  const [stayFilter, setStayFilter] = useState<TriState>('any');
+  const refinementActive = profileFilter !== 'any' || stayFilter !== 'any';
+  const toolbarActive = Boolean(query || house) || refinementActive;
+
+  function clearToolbar() {
+    setSearch('');
+    setQuery('');
+    setHouse('');
+    setProfileFilter('any');
+    setStayFilter('any');
+  }
 
   /**
    * The four stat cards.
@@ -356,15 +404,28 @@ export default function AdminParticipantsPage() {
     [hostels],
   );
 
+  // The two refinement filters, applied to the loaded (server-searched) page.
+  const refined = useMemo(() => {
+    const rows = participants ?? [];
+    if (!refinementActive) return rows;
+    return rows.filter((row) => {
+      const standing = standingOf(row);
+      if (profileFilter === 'yes' && !standing.profileComplete) return false;
+      if (profileFilter === 'no' && standing.profileComplete) return false;
+      if (stayFilter === 'yes' && !standing.hostel) return false;
+      if (stayFilter === 'no' && standing.hostel) return false;
+      return true;
+    });
+  }, [participants, refinementActive, profileFilter, stayFilter]);
+
   const sort = useTableSort('name');
-  const sorted = useMemo(
-    () => sortRows(participants ?? [], columns, sort),
-    [participants, columns, sort],
-  );
+  const sorted = useMemo(() => sortRows(refined, columns, sort), [refined, columns, sort]);
   const paged = usePagedList(sorted, {
     pageSize: PAGE_SIZE,
-    resetKey: `${query}|${house}|${sort.signature}`,
+    resetKey: `${query}|${house}|${profileFilter}|${stayFilter}|${sort.signature}`,
   });
+
+  const { view, setView } = useViewMode(VIEW_OPTIONS, 'table');
 
   if (loadError) {
     return (
@@ -525,49 +586,107 @@ export default function AdminParticipantsPage() {
         </Card>
       )}
 
+      {/* One panel holds the search, the filters, the rows, and the pager —
+          matching Mess, Hostels, and Staff, which put every control (search,
+          the visible filters, and the view toggle) on one wrapped row rather
+          than splitting them across a search row and a filters row. `q` and
+          `house` stay a server round trip on submit, same as before; Profile
+          and Stay narrow the returned page in the browser. Both kinds of
+          control sit in the same row because that is what the other three
+          admin lists do — an admin who has learned one should not find a
+          second layout here. */}
       <div className="flex flex-col gap-4 rounded-2xl bg-surface p-4 shadow-card ring-1 ring-black/[0.03]">
         <form
-          className="flex flex-wrap items-end gap-3"
+          className="flex flex-col gap-1.5"
           onSubmit={(e) => {
             e.preventDefault();
             setQuery(search.trim());
           }}
         >
-          <div className="min-w-56 flex-1">
-            <TextInput
-              label="Search"
-              icon={Search}
-              value={search}
-              placeholder="Name, email, or participant ID"
-              hint="Matched by the server, so a fest of thousands is never filtered in the browser."
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-56 flex-1">
+              <TextInput
+                label="Search"
+                icon={Search}
+                value={search}
+                placeholder="Name, email, or participant ID"
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="min-w-36">
+              <Select
+                label="House"
+                value={house}
+                placeholder="Every house"
+                onChange={(e) => setHouse(e.target.value)}
+                options={houses.map((option) => ({ value: option, label: option }))}
+              />
+            </div>
+            <div className="min-w-36">
+              <Select
+                label="Profile"
+                value={profileFilter}
+                onChange={(e) => setProfileFilter(e.target.value as TriState)}
+                options={[
+                  { value: 'any', label: 'Any profile' },
+                  { value: 'yes', label: 'Complete' },
+                  { value: 'no', label: 'Incomplete profile' },
+                ]}
+              />
+            </div>
+            <div className="min-w-36">
+              <Select
+                label="Stay"
+                value={stayFilter}
+                onChange={(e) => setStayFilter(e.target.value as TriState)}
+                options={[
+                  { value: 'any', label: 'Any stay' },
+                  { value: 'yes', label: 'In a block' },
+                  { value: 'no', label: 'Not allotted' },
+                ]}
+              />
+            </div>
+            {/* An invisible label-height spacer, same trick the buttons below
+                use: `TextInput`/`Select` are "label + gap + bordered field",
+                so a bare button in the same `items-end` row sits a touch high
+                and a touch short without one — matching height, matching
+                (transparent) border, same baseline as every field beside it. */}
+            <div className="flex flex-col gap-1">
+              <span aria-hidden className="invisible text-sm font-medium">
+                Search
+              </span>
+              <Button type="submit" className="border border-transparent">
+                <Search size={15} strokeWidth={2.5} /> Search
+              </Button>
+            </div>
+            {toolbarActive && (
+              <div className="flex flex-col gap-1">
+                <span aria-hidden className="invisible text-sm font-medium">
+                  Clear
+                </span>
+                <Button variant="ghost" className="border border-transparent" onClick={clearToolbar}>
+                  <X size={13} strokeWidth={2.5} /> Clear
+                </Button>
+              </div>
+            )}
+            <div className="ml-auto flex flex-col gap-1">
+              <span aria-hidden className="invisible text-sm font-medium">
+                View
+              </span>
+              <ViewToggle options={VIEW_OPTIONS} value={view} onChange={setView} />
+            </div>
           </div>
-          <div className="min-w-40">
-            <Select
-              label="House"
-              value={house}
-              placeholder="Every house"
-              onChange={(e) => setHouse(e.target.value)}
-              options={houses.map((option) => ({ value: option, label: option }))}
-            />
-          </div>
-          <Button type="submit">
-            <Search size={15} strokeWidth={2.5} /> Search
-          </Button>
-          {(query || house) && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSearch('');
-                setQuery('');
-                setHouse('');
-              }}
-            >
-              Clear
-            </Button>
-          )}
+          <p className="text-xs text-muted">
+            Matched by the server, so a fest of thousands is never filtered in the browser. Profile
+            and Stay narrow what came back.
+          </p>
         </form>
+
+        {refinementActive && participants !== null && (
+          <p className="text-xs text-muted">
+            {refined.length} of {participants.length} shown
+          </p>
+        )}
 
         {participants === null ? (
           <div className="flex flex-col gap-2" aria-busy="true">
@@ -585,7 +704,13 @@ export default function AdminParticipantsPage() {
                 : 'Accounts appear here as soon as people register.'
             }
           />
-        ) : (
+        ) : refined.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No matching participants"
+            description="Try a different profile or stay filter."
+          />
+        ) : view === 'table' ? (
           <>
             <DataTable
               columns={columns}
@@ -594,6 +719,11 @@ export default function AdminParticipantsPage() {
               sort={sort}
               caption="Registered participants with house, stay, registrations, and profile status"
             />
+            <TablePager paged={paged} noun="participants" />
+          </>
+        ) : (
+          <>
+            <ParticipantCards rows={paged.items} hostels={hostels} onEdit={beginEdit} />
             <TablePager paged={paged} noun="participants" />
           </>
         )}

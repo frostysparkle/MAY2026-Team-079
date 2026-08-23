@@ -39,8 +39,6 @@ import { MessWidget } from '@/features/mess/MessWidget';
 import { HostelWidget } from '@/features/hostel/HostelWidget';
 import { useNow } from '@/features/schedule/useNow';
 import { EventChangeAlerts } from '@/features/events/EventChangeAlerts';
-import { AnnouncementFeed } from '@/features/announcements/AnnouncementFeed';
-import { useAnnouncementInbox } from '@/features/announcements/useAnnouncementInbox';
 import {
   dismissAllEventChanges,
   dismissEventChange,
@@ -98,12 +96,6 @@ export default function DashboardPage() {
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [changes, setChanges] = useState<EventChange[]>([]);
-  /**
-   * Announcements addressed to this participant. Self-fetching rather than fed
-   * from this page's loader, because the audience rules need the block and hall
-   * allocations that the dashboard does not otherwise read.
-   */
-  const inbox = useAnnouncementInbox();
   /**
    * How much of this participant's Help & Support is still open.
    *
@@ -208,18 +200,6 @@ export default function DashboardPage() {
         changes={changes}
         onDismiss={(id) => setChanges(dismissEventChange(participantId, id))}
         onDismissAll={() => setChanges(dismissAllEventChanges(participantId))}
-      />
-
-      {/* Official notices, same reasoning and the same place. Capped at three
-          with a link to the rest, so a busy noticeboard cannot push the figures
-          off the screen — Stories 8.1/8.2. */}
-      <AnnouncementFeed
-        announcements={inbox.announcements}
-        names={inbox.names}
-        onDismiss={inbox.dismiss}
-        onDismissAll={inbox.dismissAll}
-        limit={3}
-        moreTo={ROUTES.announcements}
       />
 
       {/* ---- headline figures ----

@@ -23,11 +23,10 @@ import { cn } from '@/lib/cn';
  * about.
  *
  * That claim used to be untrue. This rail carried thirteen entries while the
- * landing carried seven, and the four it had that the portal did not —
- * Announcements, Help, Report, Queries — were reachable *only* from here, which
- * meant a student who went straight from signing in to a section never learned
- * they existed. Three of those four are now one Help & Support entry, and both
- * lists name it.
+ * landing carried seven, and three it had that the portal did not — Help,
+ * Report, Queries — were reachable *only* from here, which meant a student who
+ * went straight from signing in to a section never learned they existed. Those
+ * three are now one Help & Support entry, and both lists name it.
  */
 const NAV: { to: string; label: string }[] = [
   { to: ROUTES.home, label: 'Home' },
@@ -37,7 +36,6 @@ const NAV: { to: string; label: string }[] = [
   { to: ROUTES.accommodation, label: 'Stay' },
   { to: ROUTES.sponsors, label: 'Sponsors' },
   { to: ROUTES.dashboard, label: 'Dashboard' },
-  { to: ROUTES.announcements, label: 'Announcements' },
   // One entry where Help, Report, and Queries used to be three. They answered a
   // single need — I want somebody to deal with this — split by what the
   // participant wanted back: an answer, a repair, or a phone number. Splitting the

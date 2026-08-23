@@ -31,7 +31,6 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
-import { PanelMasonry } from '@/components/layout/PanelMasonry';
 import {
   courseStageLabel,
   formatDob,
@@ -59,10 +58,14 @@ import {
  * actually needs a right-hand half, and the other three are read where they
  * belong, in the panels.
  *
- * **No `grid` for the panels.** The fact groups are 3 and 4 rows tall, so a
- * grid row is as tall as its tallest panel and every shorter one trails a strip
- * of empty surface. The masonry `HomePage` already uses packs them by height
- * instead, which is why the columns end level.
+ * A `grid`, not the masonry other screens use, for the panels below: the fact
+ * groups here are all facets of one record rather than unrelated cards, so a
+ * shorter one ("Personal") is meant to match a taller neighbour ("Location")
+ * rather than settle at its own height. Every panel in that row shares one
+ * fixed height (`h-72`) rather than stretching to match whichever is tallest —
+ * stretching a three-row panel to a four-row panel's height just moves the
+ * unused space from beside the card to inside it. The panels that can run past
+ * that height scroll their own content instead of growing past it.
  *
  * Read-only by construction: every control here navigates, and nothing writes.
  * Editing is `CompleteProfilePage`'s job.
@@ -206,24 +209,47 @@ export default function ProfilePage() {
       </section>
 
       {/* ---- the record itself ----
-          Masonry rather than a grid: the groups are 3 and 4 rows tall, and
-          columns that pack by height end level where grid rows do not. Shared
-          with the dashboard through `PanelMasonry`, so the two screens' panels
-          are spaced identically. */}
-      <PanelMasonry>
+          A grid, not the masonry the dashboard uses: masonry packs columns by
+          height on purpose, so a shorter panel settles at its own content
+          height instead of matching a taller neighbour — right when the panels
+          are unrelated cards, wrong here, where five fact-groups of the same
+          record read as one uneven page if "Location"'s four rows and
+          "Personal"'s three end at different heights.
+
+          Matching height by *stretching* the shorter panels — `items-stretch`
+          plus `h-full`, this row's previous shape — matches the outline but not
+          the content: "Personal" and "Academic & Fest" grew a card-height taller
+          than their own three rows fill, and the gap between the last row and
+          the bottom edge is exactly what reads as an unfinished card. Neither
+          panel has a fourth fact to add — every field the profile actually
+          collects for "Personal" is already one of its three rows.
+
+          So the row is capped at a fixed height sized to that common case
+          instead — `h-72`, comfortable room for three or four rows — rather
+          than borrowed from whichever neighbour happens to be tallest. Every
+          `FactList` in the row carries the same `overflow-y-auto` safety net
+          regardless of how many rows it normally holds: at the sizes these
+          panels are built for, none of them fill it, but a long wrapped
+          address or a `mess_preference` row landing on an already-full card
+          scrolls inside its own panel instead of pushing the card's outline
+          taller than its neighbours'. The same trade the workshop interest
+          cards make (`WorkshopManagePage`'s `h-80` charts): a shared height
+          sized to the normal content, with the rare overflow handled inside
+          it rather than by growing the row to fit it. */}
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {/* The name is not repeated here: it is the largest thing on the header
             block above, and a screen that says it twice reads as a form
             print-out rather than as a profile. */}
-        <DetailPanel title="Personal">
-          <FactList>
+        <DetailPanel className="h-72" title="Personal">
+          <FactList className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
             <Fact icon={Cake} label="Date of Birth" value={formatDob(participant.dob)} />
             <Fact icon={UserRound} label="Gender" value={genderLabel(participant.gender)} />
             <Fact icon={Phone} label="Phone" value={participant.phone} />
           </FactList>
         </DetailPanel>
 
-        <DetailPanel title="Location">
-          <FactList>
+        <DetailPanel className="h-72" title="Location">
+          <FactList className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
             <Fact icon={MapPin} label="City" value={participant.city} />
             <Fact icon={Map} label="State" value={participant.state} />
             <Fact icon={Globe2} label="Country" value={participant.country} />
@@ -237,8 +263,8 @@ export default function ProfilePage() {
             appears only once a profile save has merged it into the session — an
             absent row means "not loaded", never "not chosen", and must not be
             rendered as an empty one. */}
-        <DetailPanel title="Academic & Fest">
-          <FactList>
+        <DetailPanel className="h-72" title="Academic & Fest">
+          <FactList className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
             <Fact icon={GraduationCap} label="Program" value={participant.program} />
             <Fact
               icon={BookOpen}
@@ -254,10 +280,11 @@ export default function ProfilePage() {
 
         {emergency && (
           <DetailPanel
+            className="h-72"
             title="Emergency Contact"
             footer="Used by the organisers only if something happens to you on campus."
           >
-            <FactList>
+            <FactList className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
               <Fact icon={UserRound} label="Name" value={emergency.name} />
               <Fact icon={LifeBuoy} label="Relation" value={emergency.relation} />
               <Fact icon={Phone} label="Phone" value={emergency.phone} />
@@ -267,23 +294,30 @@ export default function ProfilePage() {
 
         {!complete && (
           <DetailPanel
+            className="h-72"
             title="Still Missing"
             meta={`${completion.missing.length}`}
             footer="Some modules — hostel and mess allocation among them — need a complete profile."
           >
-            <div className="flex flex-wrap gap-1.5">
-              {completion.missing.map((label) => (
-                <StatusBadge key={label} tone="warning">
-                  {label}
-                </StatusBadge>
-              ))}
+            {/* Badges rather than `Fact` rows here, so this is the one panel in
+                the row that can genuinely outgrow `h-72` — up to twelve labels
+                wrapping, against three or four fixed rows everywhere else — and
+                the one that gets the scroll for it. */}
+            <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-wrap gap-1.5">
+                {completion.missing.map((label) => (
+                  <StatusBadge key={label} tone="warning">
+                    {label}
+                  </StatusBadge>
+                ))}
+              </div>
             </div>
             <Button size="sm" onClick={() => navigate(ROUTES.completeProfile)} className="w-fit">
               <FileEdit size={BUTTON_ICON.sm} strokeWidth={BUTTON_ICON_STROKE} /> Add them
             </Button>
           </DetailPanel>
         )}
-      </PanelMasonry>
+      </div>
     </FestivalScreen>
   );
 }

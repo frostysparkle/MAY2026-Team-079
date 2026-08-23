@@ -4,6 +4,7 @@ pymongo
 pydantic
 pydantic-settings
 python-dotenv
+python-dateutil==2.9.0.post0
 passlib[bcrypt]
 python-jose[cryptography]
 cryptography

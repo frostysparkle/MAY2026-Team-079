@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Wrench } from 'lucide-react';
+import { CalendarDays, Sparkles, Wrench } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Workshop } from '@/api/types';
+import type { RecommendedWorkshop, Workshop } from '@/api/types';
 import { path, ROUTES } from '@/config/routes';
 import {
   Button,
@@ -26,6 +26,7 @@ import {
 import { useLiveSeats } from '@/features/workshops/useLiveSeats';
 import { sortWorkshops, workshopView, WORKSHOP_COVER } from '@/features/workshops/workshopView';
 import { shiftLabel, workshopDayLabel } from '@/features/workshops/workshopSlot';
+import { AiRecommendBar } from '@/features/ai/AiRecommendBar';
 
 /**
  * The in-app workshop programme — the same flyer grid, grouped by the day each
@@ -46,10 +47,26 @@ interface Section {
 /** Workshops whose slot id carries no date still need somewhere to live. */
 const UNDATED = 'Unscheduled';
 
+/**
+ * How many of the top-ranked cards carry the "Suggested" badge when an AI
+ * ranking is active. The backend already returns every workshop sorted most
+ * similar first, so this is purely a display cutoff — cards ranked 6th or
+ * lower stay in the list (nothing is hidden), they just lose the badge.
+ */
+const TOP_RECOMMENDED_COUNT = 5;
+
 export default function WorkshopsListPage() {
   const navigate = useNavigate();
   const [workshops, setWorkshops] = useState<Workshop[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // The AI-ranked view, when active — every workshop the plain list already
+  // has, carrying a `similarity` score and sorted by it. `null` means the
+  // banner has never been used (or was cleared): render the normal
+  // day-grouped grid instead.
+  const [recommended, setRecommended] = useState<RecommendedWorkshop[] | null>(null);
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendError, setRecommendError] = useState<string | null>(null);
 
   // The slots this participant already holds, read from
   // `GET /workshops/my_registrations` — so a clash stays greyed out after a
@@ -70,6 +87,33 @@ export default function WorkshopsListPage() {
       );
   }
   useEffect(load, []);
+
+  function handleRecommend(query: string) {
+    setRecommendLoading(true);
+    setRecommendError(null);
+    api
+      .recommendWorkshops({ query: query || null })
+      .then((ranked) => setRecommended(ranked))
+      .catch((e) =>
+        setRecommendError(
+          e instanceof ApiClientError ? e.message : 'Could not get recommendations.',
+        ),
+      )
+      .finally(() => setRecommendLoading(false));
+  }
+
+  function clearRecommendations() {
+    setRecommended(null);
+    setRecommendError(null);
+  }
+
+  // Kept in the backend's similarity order — most-similar-first — rather than
+  // run through `sortWorkshops`, which reorders chronologically. Re-ranking by
+  // match is the entire point of this view.
+  const recommendedViews = useMemo(
+    () => recommended?.map(workshopView) ?? null,
+    [recommended],
+  );
 
   const sections = useMemo<Section[]>(() => {
     if (!workshops) return [];
@@ -121,6 +165,25 @@ export default function WorkshopsListPage() {
         </Button>
       }
     >
+      {workshops !== null && workshops.length > 0 && (
+        <AiRecommendBar
+          noun="workshops"
+          placeholder="e.g. hands-on coding, design, public speaking…"
+          active={recommendedViews !== null}
+          loading={recommendLoading}
+          onSearch={handleRecommend}
+          onClear={clearRecommendations}
+        />
+      )}
+
+      {recommendError && (
+        <ErrorState
+          title="Could not get recommendations"
+          description={recommendError}
+          onRetry={() => handleRecommend('')}
+        />
+      )}
+
       {workshops === null ? (
         <EventGridSkeleton />
       ) : workshops.length === 0 ? (
@@ -129,6 +192,24 @@ export default function WorkshopsListPage() {
           description="The programme appears here as soon as the organisers publish it."
           icon={Wrench}
         />
+      ) : recommendedViews !== null ? (
+        <SectionBlock
+          title="Recommended for you"
+          meta={`${recommendedViews.length} workshop${recommendedViews.length === 1 ? '' : 's'} · ranked by match`}
+        >
+          <ul className={EVENT_GRID_CLASS}>
+            {/* Backend already sorts by similarity, most similar first, so the
+                top 5 by array position are the top 5 by score. */}
+            {recommendedViews.map((view, index) => (
+              <WorkshopPosterCard
+                key={view.id}
+                view={view}
+                bookings={bookings}
+                suggested={index < TOP_RECOMMENDED_COUNT}
+              />
+            ))}
+          </ul>
+        </SectionBlock>
       ) : (
         sections.map((section) => (
           <SectionBlock
@@ -157,9 +238,12 @@ export default function WorkshopsListPage() {
 function WorkshopPosterCard({
   view,
   bookings,
+  suggested = false,
 }: {
   view: ReturnType<typeof workshopView>;
   bookings: MyWorkshopBookings;
+  /** Marks this tile as part of the AI-ranked view, alongside its other badges. */
+  suggested?: boolean;
 }) {
   const seats = useLiveSeats(
     view.id,
@@ -175,7 +259,7 @@ function WorkshopPosterCard({
   const clashes = status === 'conflict';
   const soldOut = seats !== null && seats.remaining_seats <= 0;
 
-  const badge = clashes ? (
+  const statusBadge = clashes ? (
     <StatusBadge tone="warning" className="shadow-card ring-1 ring-line">
       Clashes
     </StatusBadge>
@@ -192,6 +276,18 @@ function WorkshopPosterCard({
       {seats.remaining_seats} left
     </StatusBadge>
   ) : null;
+
+  const badge = (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {suggested && (
+        <StatusBadge tone="info" className="shadow-card ring-1 ring-line">
+          <Sparkles size={11} strokeWidth={2.5} className="mr-1 inline" />
+          Suggested
+        </StatusBadge>
+      )}
+      {statusBadge}
+    </span>
+  );
 
   return (
     <EventPosterCard
