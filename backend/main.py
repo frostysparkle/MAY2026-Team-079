@@ -20,7 +20,7 @@ from routers import (
     queries, issues, auth, backend_teams
 )
 from dependencies import get_current_participant
-from database import participants_collection
+from database import client, participants_collection
 from embedding_service import generate_embedding
 from logger import log_audit, log_denied
 from request_logging import (
@@ -32,6 +32,16 @@ from request_logging import (
 _log = log_config.get_logger("paradox.profile")
 
 app = FastAPI(title="Paradox Connect API", lifespan=lifespan)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    """Container readiness check: the API is healthy only when MongoDB answers."""
+    try:
+        client.admin.command("ping")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+    return {"status": "ok"}
 
 # Browser origins allowed to call the API, as a comma-separated CORS_ORIGINS env
 # value. Defaults to the Vite dev server; "*" would also disable the credential

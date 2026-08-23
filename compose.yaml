@@ -1,0 +1,117 @@
+name: paradox-connect
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--auth"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-paradox}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --username \"$${MONGO_INITDB_ROOT_USERNAME}\" --password \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval 'db.adminCommand({ping:1}).ok' | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-paradox}:${MONGO_ROOT_PASSWORD}@mongo:27017/paradox?authSource=admin
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      QR_MASTER_KEY: ${QR_MASTER_KEY:?Set QR_MASTER_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    expose:
+      - "8000"
+    networks:
+      - app
+      - data
+    volumes:
+      - backend_logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "80"
+    networks:
+      - app
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost}
+    depends_on:
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app
+
+  seed:
+    build:
+      context: ./backend
+    profiles: ["seed"]
+    restart: "no"
+    environment:
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-paradox}:${MONGO_ROOT_PASSWORD}@mongo:27017/paradox?authSource=admin
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      QR_MASTER_KEY: ${QR_MASTER_KEY:?Set QR_MASTER_KEY in .env}
+      PARADOX_ADMIN_PASSWORD: ${DEMO_PASSWORD:-ParadoxDemo2026!}
+      PARADOX_STAFF_PASSWORD: ${DEMO_PASSWORD:-ParadoxDemo2026!}
+      DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+      - data
+    command:
+      - sh
+      - -ec
+      - |
+        python seed_staff.py --bootstrap --roster --admin-email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed.py --email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed_mess.py --email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed_events.py --email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed_workshops.py --email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed_staff.py --assign --admin-email "$${DEMO_ADMIN_EMAIL:-paradox.admin@example.com}"
+        python seed_students.py --password "$${PARADOX_ADMIN_PASSWORD}"
+
+networks:
+  app:
+  data:
+    internal: true
+
+volumes:
+  mongo_data:
+  backend_logs:
+  caddy_data:
+  caddy_config:

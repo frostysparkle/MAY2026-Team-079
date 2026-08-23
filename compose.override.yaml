@@ -1,0 +1,39 @@
+# Local hosting tweaks (untracked).
+# - Nginx Proxy Manager (nginx-proxy-npm-1) reaches these by Docker DNS on the
+#   shared external network "proxy_net": http://paradox-frontend:80 and
+#   http://paradox-backend:8000. No host ports are published.
+# - Bundled Caddy disabled (host NPM owns 80/443); local mongo disabled
+#   (backend uses the Atlas URI from .env).
+services:
+  frontend:
+    build:
+      args:
+        VITE_API_BASE_URL: https://sepbe.ashds.dev
+    networks:
+      app: null
+      proxy_net:
+        aliases:
+          - paradox-frontend
+
+  backend:
+    # compose.yaml pins MONGODB_URI to the local mongo service; repoint it at
+    # the Atlas cluster from .env instead.
+    environment:
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in .env}
+    depends_on: !reset null
+    networks:
+      app: null
+      data: null
+      proxy_net:
+        aliases:
+          - paradox-backend
+
+  caddy:
+    profiles: ["disabled"]
+
+  mongo:
+    profiles: ["disabled"]
+
+networks:
+  proxy_net:
+    external: true
