@@ -1,331 +1,1024 @@
-# Paradox Connect: Frontend Integration & Architecture Guide
-
-This is the **absolute source of truth** for the Frontend Developer. Every endpoint, access rule, and behaviour documented here is derived **directly from the backend source code**.
+# Paradox Connect Frontend Integration Guide v2
 
 ---
 
-## 1. Global Concepts & Security
+## Table of Contents
 
-### 1.1 Authentication
+1. [Core Concepts & Conventions](#1-core-concepts--conventions)
+   - 1.1 URL Structure & Base
+   - 1.2 HTTP Status Codes
+   - 1.3 Pagination (limit & offset)
+   - 1.4 Request & Response Format
+2. [Authentication](#2-authentication)
+   - 2.1 Bearer Tokens
+   - 2.2 Public Routes (No Auth)
+   - 2.3 Staff vs Participant Credentials
+   - 2.4 Token Refresh & Password Change
+3. [QR Code Handling](#3-qr-code-handling)
+   - 3.1 QR Generation (Backend)
+   - 3.2 QR Scanning (Frontend)
+   - 3.3 Error Handling (400/404)
+   - 3.4 Example QR Payload
+4. [Roles & Permissions Matrix](#4-roles--permissions-matrix)
+   - 4.1 Super Admins (Staff)
+   - 4.2 Participant Roles (team_leader, team_member, volunteer)
+5. [Time Windows & Scanning Logic](#5-time-windows--scanning-logic)
+   - 5.1 Workshop Scanning Windows
+   - 5.2 Mess Hall Scanning Window
+   - 5.3 Computed `is_open` Field
+6. [Domain-Specific Endpoints Reference](#6-domain-specific-endpoints-reference)
+   - 6.1 Auth & Profile
+   - 6.2 Participants & Statistics
+   - 6.3 Events
+   - 6.4 Workshops & Slots
+   - 6.5 Mess Halls
+   - 6.6 Hostels
+   - 6.7 Queries
+   - 6.8 Issues
+   - 6.9 Audit Logs
+   - 6.10 Embeddings
+7. [Real-Time Streams & SSE](#7-real-time-streams--sse)
+   - 7.1 Announcements Stream
+   - 7.2 Workshop Seats Stream
+8. [Role Journeys & Screen Flows](#8-role-journeys--screen-flows)
+   - 8.1 Participant Journey
+   - 8.2 Workshop Volunteer Journey
+   - 8.3 Staff Admin Journey
+9. [TypeScript Types & Appendix](#9-typescript-types--appendix)
+   - 9.1 Core Types
+   - 9.2 API Client Skeleton
+   - 9.3 SSE Helpers
+   - 9.4 QR Generation Sample
 
-All protected routes require: `Authorization: Bearer <token>`
+---
 
-There are **two separate login endpoints** — the JWT embeds a `type` claim that the backend enforces. A participant token will be rejected when used to access a staff-only resource and vice versa:
+## 1. Core Concepts & Conventions
 
-| Population | Login Endpoint | Token `type` Claim | Email Constraint | Who Creates |
-|---|---|---|---|---|
-| Participants | `POST /auth/login` | `"participant"` | Must match `@*.study.iitm.ac.in` | Self-register via `/auth/register` |
-| Backend Staff | `POST /auth/admin/login` | `"staff"` | Any email | Super Admin via `POST /backend_teams` |
+### 1.1 URL Structure & Base
 
-> **Frontend must have two separate login pages/routes:** e.g. `/login` for participants and `/admin/login` for all backend staff (hostel guards, mess employees, volunteers, event heads, domain admins, UHC, super admins).
+All endpoints are prefixed with `/api/v1`. Your frontend should construct full URLs as:
 
-### 1.2 Login Responses
+```
+https://your-backend-domain.com/api/v1{path}
+```
 
-**`POST /auth/login` (Participants only)** returns:
+Example:  
+`GET /participants/statistics` → `https://backend.example.com/api/v1/participants/statistics`
+
+### 1.2 HTTP Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success (body contains data) |
+| 201 | Resource created (for POST) |
+| 400 | Invalid request body, missing required fields, business rule violation |
+| 401 | Invalid or expired token, or user not found |
+| 403 | Insufficient permissions (wrong token type, role, or guard check) |
+| 404 | Entity not found |
+| 422 | Validation error (e.g., `limit` out of range 1–500) |
+| 429 | Rate limit exceeded (embeddings, embeddings endpoint only) |
+| 500 | Internal server error (defensive handler fallback) |
+
+### 1.3 Pagination (limit & offset)
+
+| Endpoint | Default | Min | Max |
+|----------|---------|-----|-----|
+| `/participants` | 200 | 1 | 500 |
+| `/issues` | 100 | 1 | 500 |
+| `/queries` | 100 | 1 | 500 |
+| `/audit-logs` | 100 | 1 | 500 |
+
+All paginated endpoints return:
+
 ```json
 {
-  "id": "DS23F1000001",
-  "email": "...",
-  "access_token": "...",
+  "count": 200,
+  "participants": [ ... ]
+}
+```
+
+If `limit > 500`, the server returns `422 Unprocessable Entity`.
+
+### 1.4 Request & Response Format
+
+All requests (except QR scanning) expect `Content-Type: application/json`.  
+Responses are JSON unless documented otherwise (e.g., SSE streams).
+
+---
+
+## 2. Authentication
+
+### 2.1 Bearer Tokens
+
+Use the `Authorization` header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Tokens are JWTs issued by:
+- `POST /auth/login` (participant token, `token_type: "participant"`)
+- `POST /auth/admin/login` (staff token, `token_type: "staff"`)
+
+Store tokens in memory or secure storage; avoid `localStorage`.
+
+### 2.2 Public Routes (No Auth)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/events/public` | Public event list |
+| GET | `/workshops/public` | Public workshop list |
+| GET | `/workshop-slots` | List all time slots |
+| GET | `/workshops/{id}/seats/stream` | Unauthenticated SSE for seats |
+| POST | `/auth/register` | Participant registration |
+| POST | `/auth/login` | Participant login |
+| POST | `/auth/admin/login` | Staff login |
+| POST | `/auth/password/forgot` | Request password reset (stub) |
+| POST | `/auth/password/reset` | Reset password with token (stub) |
+
+All other routes require `Authorization: Bearer`.
+
+### 2.3 Staff vs Participant Credentials
+
+The backend distinguishes staff (`token_type: "staff"`) from participant (`token_type: "participant"`) at the dependency layer.
+
+If a participant token hits a staff-only route, you receive:
+
+```
+403 "Participant credentials required. Use /auth/login."
+```
+
+If a staff token hits a participant route, you receive:
+
+```
+403 "Staff credentials required. Use /auth/admin/login."
+```
+
+### 2.4 Token Refresh & Password Change
+
+- **Refresh**: Re-login (`POST /auth/login`) to obtain a new token.  
+- **Password Change**: `POST /auth/password/change` (Bearer required). Returns new token.
+
+---
+
+## 3. QR Code Handling
+
+### 3.1 QR Generation (Backend)
+
+Each participant is assigned a QR code upon registration. The code contains:
+
+```json
+{
+  "uid": "DS23F1001726",
+  "ts": 1723456789,
+  "sig": "<base64_hmac_sha256>"
+}
+```
+
+- `uid`: Participant ID
+- `ts`: Unix timestamp (seconds)
+- `sig`: HMAC-SHA256 signature of `(uid + ts)` using backend secret
+
+### 3.2 QR Scanning (Frontend)
+
+Send a POST to the relevant scan endpoint with JSON body:
+
+```json
+{
+  "qr_code": "base64_encoded_qr_payload",
+  "q": { ... }  // domain-specific query param as `q`
+}
+```
+
+Example for workshop attendance scan:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"qr_code": "ey...==", "q": {"scan_type": "pre-registered"}}' \
+  https://backend.example.com/api/v1/workshops/WKSP111/attendance
+```
+
+### 3.3 Error Handling (400/404)
+
+| Status | Detail | Fix |
+|--------|--------|-----|
+| 404 | `"Scanned user not found"` | Participant ID doesn't exist |
+| 400 | `"User missing private key"` | Backend misconfiguration (rare) |
+| 400 | `"QR Code expired"` | QR is older than 60 seconds (`QR_MAX_AGE=60`) |
+| 400 | `"Invalid timestamp format"` | Backend couldn't parse timestamp |
+| 400 | `"Invalid or corrupted QR code"` | Malformed JSON or signature mismatch |
+
+### 3.4 Example QR Payload
+
+```json
+{
+  "uid": "DS23F1001726",
+  "ts": 1723456789,
+  "sig": "abc123..."
+}
+```
+
+Decode from base64 on the frontend to show debug info (do not verify signature on frontend).
+
+---
+
+## 4. Roles & Permissions Matrix
+
+### 4.1 Super Admins (Staff)
+
+Staff (token_type = "staff") can access:
+
+| Endpoint Group | Permission String |
+|----------------|-------------------|
+| `/backend_teams/*` | `"Only Super Admins can manage backend teams"` |
+| `/audit-logs/*` | `"Only Super Admins can view audit logs"` |
+| `/queries/team/*` | `"Only Super Admins can manage the query team"` |
+| `/events/*` (create/edit/delete) | `"Only Super Admins can perform this action"` |
+| `/workshop-slots/*` | `"Only Super Admins can perform this action"` |
+| `/mess/*` (admin create/edit) | `"Only Super Admins can perform this action"` |
+| `/hostels/*` (admin create/edit) | `"Only Super Admins can perform this action"` |
+| `/participants/*` (admin edit) | `"Not authorized"` (general staff guard) |
+
+### 4.2 Participant Roles
+
+Participants can hold `team_role` in events: `leader` or `member`.  
+These are set via `PUT /events/{id}/participant_teams/{pid}`.
+
+- `leader`: Can view team members, update team info.
+- `member`: Read-only access to team data.
+
+---
+
+## 5. Time Windows & Scanning Logic
+
+### 5.1 Workshop Scanning Windows
+
+Workshop attendance scanning is time-gated. The backend computes the window:
+
+| Scenario | Opens | Closes |
+|----------|-------|--------|
+| Pre-registered | 30 min before start | 30 min after start |
+| On-spot | 15 min before start | 30 min after start |
+| Changes (team_member update) | 0 min | 30 min after start |
+
+If scanned outside the window:
+
+```
+403 "Scanning window not yet open. Opens N min before start (in ~M min)."
+403 "Scanning window closed. It closes 30 min after the workshop starts."
+```
+
+### 5.2 Mess Hall Scanning Window
+
+Each mess has a `SCAN_WINDOW=15` minutes centered on the slot start time.
+
+```
+403 "Scanning window not yet open for this slot"
+403 "Scanning window closed for this slot"
+```
+
+### 5.3 Computed `is_open` Field
+
+Events expose `registration.is_open` (computed at query time), combining:
+
+- `registration.allowed`
+- Current time within the event's registration window
+
+Do not store this field — always fetch from `/events` or `/events/{id}`.
+
+---
+
+## 6. Domain-Specific Endpoints Reference
+
+### 6.1 Auth & Profile
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/register` | none | Create participant account |
+| POST | `/auth/login` | none | Login as participant |
+| POST | `/auth/admin/login` | none | Login as staff |
+| POST | `/auth/password/forgot` | none | Request reset link (stub) |
+| POST | `/auth/password/reset` | none | Reset password (stub) |
+| POST | `/auth/password/change` | Bearer | Change password |
+| PATCH | `/profile/complete` | Bearer | Complete participant profile |
+
+#### Profile Complete Request
+
+```json
+{
+  "full_name": "Jane Doe",
+  "dob": "2003-05-12",
+  "house": "Kanha",
+  "gender": "female",
+  "phone": "9876543210",
+  "mess_preference": "north_indian__veg",
+  "country": "India",
+  "state": "MP",
+  "city": "Bhopal",
+  "address": "Sector 10",
+  "emergency_contact": {
+    "name": "John Doe",
+    "phone": "9876543211",
+    "relation": "father"
+  },
+  "program": "DS",
+  "course_stage": "foundational",
+  "event_preferences": ["technical", "sports"],
+  "photo": "base64_image_or_url"
+}
+```
+
+#### Login Response
+
+```json
+{
+  "id": "DS23F1001726",
+  "email": "ds23f1001726@iiti.ac.in",
+  "access_token": "eyJ...",
   "token_type": "participant",
-  "full_name": "...", "dob": "...", "house": "...", "gender": "...", "phone": "...",
-  "country": "...", "state": "...", "city": "...", "address": "...",
-  "program": "...", "course_stage": "...",
-  "photo": "...",
-  "public_key": "<RSA PEM public key>"
+  "full_name": "Jane Doe",
+  "dob": "2003-05-12",
+  "house": "Kanha",
+  "gender": "female",
+  "phone": "9876543210",
+  "country": "India",
+  "state": "MP",
+  "city": "Bhopal",
+  "address": "Sector 10",
+  "program": "DS",
+  "course_stage": "foundational",
+  "photo": "https://...",
+  "public_key": "base64_public_key"
 }
 ```
 
-**`POST /auth/admin/login` (Backend Staff only)** returns:
+### 6.2 Participants & Statistics
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/participants/statistics` | Bearer | Overall participant stats |
+| GET | `/participants` | Bearer | Paginated participant list |
+| PATCH | `/participants/{participant_id}` | Bearer | Admin edit participant |
+
+#### Participant Statistics Response
+
 ```json
 {
-  "id": "BT1234567890",
-  "email": "...",
-  "access_token": "...",
-  "token_type": "staff",
-  "role": "super_admin | event_head | ...",
-  "department": "technical | uhc | ...",
-  "designation": "..."
+  "total_registered": 1234,
+  "profile_complete": 1100,
+  "profile_incomplete": 134,
+  "mess_registered": 800,
+  "mess_allotted": 750,
+  "hostel_registered": 600,
+  "hostel_allotted": 550,
+  "hostel_pending": 50,
+  "currently_on_campus": 520,
+  "with_event_registrations": 900,
+  "with_workshop_registrations": 600,
+  "by_house": {"Kanha": 120, "Saranda": 98, ...},
+  "by_program": {"DS": 600, "MS": 400, "AE": 150, "ES": 84},
+  "by_course_stage": {"foundational": 700, "diploma": 300, "degree": 234},
+  "by_gender": {"male": 800, "female": 434},
+  "signups_by_day": {"2026-08-01": 23, "2026-08-02": 45, ...}
 }
 ```
 
-> Staff tokens do **not** include a `public_key`. Staff never generate QR codes. The frontend uses `token_type` to route the user to the correct dashboard after login.
+### 6.3 Events
 
-### 1.3 Dynamic QR Code (Participants Only)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/events` | Bearer | Create event (staff only) |
+| GET | `/events` | Bearer | List events |
+| GET | `/events/public` | none | Public event list |
+| PUT | `/events/{event_id}` | Bearer | Update event |
+| DELETE | `/events/{event_id}` | Bearer | Delete event |
+| POST | `/events/{event_id}/team` | Bearer | Assign team member |
+| PATCH | `/events/{event_id}/team/{team_user_id}` | Bearer | Update team member role |
+| DELETE | `/events/{event_id}/team/{team_user_id}` | Bearer | Remove team member |
+| POST | `/events/{event_id}/register` | Bearer | Register participant |
+| PUT | `/events/{event_id}/register` | Bearer | Update registration |
+| DELETE | `/events/{event_id}/register` | Bearer | Deregister |
+| GET | `/events/my_registrations` | Bearer | My registrations |
+| GET | `/events/{event_id}/capacity` | Bearer | Current registration count |
+| GET | `/events/{event_id}/participation` | Bearer | Full participation data |
+| POST | `/events/{event_id}/allocate_teams` | Bearer | Auto-allocate teams |
+| POST | `/events/{event_id}/scan` | Bearer | Scan participant QR |
+| GET | `/events/{event_id}/my_daily_scans` | Bearer | My daily unique scans |
+| GET | `/events/{event_id}/logs` | Bearer | Event logs |
+| PUT | `/events/{event_id}/participant_teams/{participant_id}` | Bearer | Update participant team |
+| POST | `/events/{event_id}/announcements` | Bearer | Publish announcement |
+| GET | `/events/{event_id}/announcements` | Bearer | List announcements |
+| GET | `/events/{event_id}/announcements/stream` | Bearer | SSE stream |
 
-- **Payload:** `{ "id": "<participant_id>", "timestamp": "<ISO8601 UTC>" }`
-- **Encryption:** Encrypt the JSON string using **RSA-OAEP** with the `public_key` from login. Render Base64 ciphertext as a QR code.
-- **Auto-Refresh:** Silently regenerate every **30–60 seconds**. Backend rejects any QR with a timestamp older than 60 seconds → `400 "QR Code expired"`.
-- **UI:** Show a visible countdown timer.
+#### Event Registration Response
 
-### 1.4 Role Hierarchy
+```json
+{
+  "message": "Registered for event successfully.",
+  "team_role": "leader",
+  "team_id": "TM001"
+}
+```
 
-| Role | How to identify | Notes |
-|---|---|---|
-| Participant | `token_type: "participant"` in login response | IITM email; `id` is a roll-number format |
-| Backend Staff (general) | `token_type: "staff"` in login response | `id` is a `BT...` paradox_id |
-| Volunteer / External Staff | In `event_team`/`mess_team`/`hostel_team`/`workshop_team` | Has scanning privilege for that entity |
-| Event Head | In `event.event_team` with `role: "event_head"` | Exclusive team allocation authority |
-| Domain Admin | `backend_teams.department` matches an `event.event_type` | Oversight of matching events |
-| UHC | `backend_teams.department == "uhc"` | House-scoped visibility |
-| Super Admin | `backend_teams.role == "super_admin"` | Global CRUD; **cannot** run `allocate_teams` or CRUD participant teams |
+#### Event Participation Response
+
+```json
+{
+  "count": 120,
+  "participants": [
+    {
+      "participant_id": "DS23F1001726",
+      "name": "Jane Doe",
+      "email": "ds23f1001726@iiti.ac.in",
+      "phone": "9876543210",
+      "house": "Kanha",
+      "team_id": "TM001",
+      "team_role": "leader"
+    }
+  ],
+  "event_team": [
+    {
+      "user_id": "SA001",
+      "role": "event_head",
+      "name": "Admin User",
+      "phone": "9999999999"
+    }
+  ],
+  "total_daily_scans": 145
+}
+```
+
+### 6.4 Workshops & Slots
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/workshop-slots` | Bearer | Create slot (super admin only) |
+| GET | `/workshop-slots` | Bearer | List slots |
+| PUT | `/workshop-slots/{slot_id}` | Bearer | Update slot |
+| DELETE | `/workshop-slots/{slot_id}` | Bearer | Delete slot |
+| POST | `/workshops` | Bearer | Create workshop |
+| GET | `/workshops` | Bearer | List workshops |
+| GET | `/workshops/public` | none | Public workshops |
+| GET | `/workshops/my_registrations` | Bearer | My workshop registrations |
+| PUT | `/workshops/{workshop_id}` | Bearer | Update workshop |
+| DELETE | `/workshops/{workshop_id}` | Bearer | Delete workshop |
+| POST | `/workshops/{workshop_id}/volunteers` | Bearer | Assign volunteer |
+| PUT | `/workshops/{workshop_id}/volunteers/{user_id}/toggle_scan` | Bearer | Toggle volunteer scan flag |
+| GET | `/workshops/{workshop_id}/logs` | Bearer | Workshop logs |
+| POST | `/workshops/{workshop_id}/register` | Bearer | Register participant |
+| GET | `/workshops/{workshop_id}/seats/stream` | none | SSE seats stream |
+| POST | `/workshops/{workshop_id}/attendance` | Bearer | Scan attendance |
+| GET | `/workshops/{workshop_id}/participation` | Bearer | Full participation |
+| PATCH | `/workshops/{workshop_id}/participants/{participant_id}` | Bearer | Update participant record |
+| DELETE | `/workshops/{workshop_id}/volunteers/{user_id}` | Bearer | Remove volunteer |
+
+#### Workshop Attendance Request
+
+```json
+{
+  "qr_code": "base64...",
+  "q": {"scan_type": "pre-registered"}
+}
+```
+
+Valid `scan_type` values: `"pre-registered"`, `"on-spot"`, `"changes"`.  
+Validation order: `scan_type` first → then window.
+
+#### Workshop Participation Response
+
+```json
+{
+  "workshop_id": "WKSP111",
+  "name": "React Advanced",
+  "venue": "Lab 3",
+  "slot_id": "S001",
+  "start_time": "2026-08-30T10:00:00",
+  "registration_start": "2026-08-20T00:00:00",
+  "registration_end": "2026-08-29T23:59:59",
+  "registration_open": true,
+  "capacity": 100,
+  "registration_count": 95,
+  "participant_count": 87,
+  "count": 95,
+  "attended_count": 87,
+  "absent_count": 8,
+  "on_spot_count": 8,
+  "workshop_team": [...],
+  "participants": [...]
+}
+```
+
+### 6.5 Mess Halls
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/mess` | Bearer | Create mess (staff only) |
+| GET | `/mess` | Bearer | List messes |
+| POST | `/mess/register` | Bearer | Request meal plan |
+| DELETE | `/mess/register` | Bearer | Cancel meal plan |
+| PUT | `/mess/{mess_id}` | Bearer | Update mess |
+| DELETE | `/mess/{mess_id}` | Bearer | Delete mess |
+| PUT | `/mess/{mess_id}/menu` | Bearer | Update menu |
+| POST | `/mess/{mess_id}/team` | Bearer | Assign mess team |
+| PUT | `/mess/{mess_id}/team/{team_user_id}/toggle_scan` | Bearer | Toggle mess team scan |
+| POST | `/mess/allocate` | Bearer | Allocate participants |
+| POST | `/mess/pay` | Bearer | Pay mess fee |
+| GET | `/mess/my_mess` | Bearer | My mess details |
+| POST | `/mess/{mess_id}/scan` | Bearer | Scan attendance |
+| GET | `/mess/{mess_id}/statistics` | Bearer | Mess statistics |
+| GET | `/mess/{mess_id}` | Bearer | Get mess by ID |
+
+#### Mess Register Response
+
+```json
+{
+  "message": "Meal plan requested"
+}
+```
+
+### 6.6 Hostels
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/hostels` | Bearer | Create hostel |
+| GET | `/hostels` | Bearer | List hostels |
+| POST | `/hostels/{hostel_id}/team` | Bearer | Assign hostel team |
+| PUT | `/hostels/{hostel_id}/team/{team_user_id}/toggle_scan` | Bearer | Toggle scan |
+| POST | `/hostels/allocate` | Bearer | Allocate participants |
+| POST | `/hostels/pay` | Bearer | Pay hostel fee |
+| POST | `/hostels/register` | Bearer | Request accommodation |
+| DELETE | `/hostels/register` | Bearer | Withdraw request |
+| GET | `/hostels/my_hostel` | Bearer | My hostel details |
+| POST | `/hostels/{hostel_id}/scan` | Bearer | Scan entry/exit |
+| DELETE | `/hostels/{hostel_id}` | Bearer | Delete hostel |
+| GET | `/hostels/{hostel_id}/statistics` | Bearer | Hostel statistics |
+| GET | `/hostels/{hostel_id}` | Bearer | Get hostel |
+
+#### Hostel Scan Request
+
+```json
+{
+  "qr_code": "base64...",
+  "q": {"action": "entry"}
+}
+```
+
+Valid `q.action` values: `"entry"`, `"exit"`, `"permanent_exit"`.
+
+### 6.7 Queries
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/queries` | Bearer | Raise a query |
+| GET | `/queries/mine` | Bearer | My queries |
+| GET | `/queries` | Bearer | List all queries (staff) |
+| PATCH | `/queries/{query_id}` | Bearer | Update query |
+| POST | `/queries/{query_id}/replies` | Bearer | Add reply |
+| POST | `/queries/team` | Bearer | Add to query team (admin only) |
+| GET | `/queries/team` | Bearer | Query team roster |
+| DELETE | `/queries/team/{user_id}` | Bearer | Remove from team |
+
+#### Query Creation
+
+```json
+{
+  "title": "Hostel maintenance",
+  "body": "Room 101 leak",
+  "category": "hostel",
+  "target_id": "HSTL111"
+}
+```
+
+**Validation**: General queries (`category: "general"`) cannot specify `target_id`.
+
+### 6.8 Issues
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/issues` | Bearer | Report an issue |
+| GET | `/issues/mine` | Bearer | My issues |
+| GET | `/issues` | Bearer | List all (staff) |
+| PATCH | `/issues/{issue_id}` | Bearer | Update issue |
+
+#### Issue Request
+
+```json
+{
+  "title": "Leaking pipe",
+  "description": "Kitchen pipe leaking",
+  "type": "maintenance",
+  "hostel_id": "HSTL111",
+  "mess_id": "MESS01"
+}
+```
+
+### 6.9 Audit Logs
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/audit-logs/summary` | Bearer | Audit summary |
+| GET | `/audit-logs` | Bearer | Paginated log rows |
+
+#### Audit Summary Response
+
+```json
+{
+  "total": 1234,
+  "by_action": {"login": 456, "register": 321, ...},
+  "distinct_actors": 15,
+  "actor_ids": ["SA001", "SA002", ...],
+  "meals": {"total_meals_served": 12000, "by_mess": {...}, "by_day": {...}},
+  "window": {"since": "2026-08-01T00:00:00", "until": "2026-08-23T23:59:59"}
+}
+```
+
+### 6.10 Embeddings
+
+| Method | Path | Auth | Description |
+|--------|------|-------------|
+| POST | `/embeddings` | Bearer | Generate OpenAI-compatible embeddings |
+
+Returns:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.123, -0.456, ...],
+      "index": 0
+    }
+  ],
+  "model": "text-embedding-3-small",
+  "usage": {"prompt_tokens": 8, "total_tokens": 8}
+}
+```
+
+Rate limit: `429` with `Retry-After` header.
 
 ---
 
-## 2. User Journeys & Screen Workflows
+## 7. Real-Time Streams & SSE
 
-### Journey A: Participant
+### 7.1 Announcements Stream
 
-1. **Register:** `POST /auth/register` — IITM email enforced. Returns `{ "message": "Registration successful", "participant_id": "..." }`.
-2. **Login:** `POST /auth/login` — Receive and persist JWT + `public_key`.
-3. **Profile Completion (mandatory gate):** Redirect new users to profile completion before any other action. `PATCH /profile/complete` with: `full_name`, `dob`, `house`, `gender`, `phone`, `mess_preference`, `country`, `state`, `city`, `address`, `emergency_contact`, `program`, `course_stage`, optional `photo`.
-4. **Dashboard:**
-   - QR code (auto-refreshing every 30–60s with countdown).
-   - Mess widget: `GET /mess/my_mess` → returns `allotted_mess`, `mess_details`, `slots` (entries per day).
-   - Hostel widget: `GET /hostels/my_hostel` → returns `assigned_hostel`, `room`, `logged_in` status, and masked `volunteers` list (name + phone only).
-5. **Browse Events:** `GET /events` (auth required, all users). Events have `open` boolean — if `open: false` show **"Registration Closed"** badge.
-6. **Register for Event:** `POST /events/{event_id}/register` with optional body `{ "team_name": "...", "registration_data": {} }`.
-   - **If already registered** → `409 "User is already registered for this event."`
-   - **If registration closed** → `400 "Registration is closed for this event"`
-   - **If user is on event_team** → `403 "Event team members cannot register as participants for their own event."` — frontend must pre-check and **disable the Register button** with helper text.
-7. **Edit Registration:** `PUT /events/{event_id}/register` — Updates `registration_data`. Blocked if `open: false`.
-8. **Cancel Registration:** `DELETE /events/{event_id}/register` — Blocked if `open: false`.
-9. **My Registrations:** `GET /events/my_registrations`.
-10. **Browse Workshops:** `GET /workshops` — Non-admins receive list **without** `workshop_team` field. Shows `registration_count`, `capacity`. Display live remaining seats badge via SSE.
-11. **Live Workshop Seats:** Connect to `GET /workshops/{workshop_id}/seats/stream` using `EventSource` (no auth header — unauthenticated SSE). Emits `{ "remaining_seats": N, "capacity": M }` on change.
-12. **Register for Workshop:** `POST /workshops/{workshop_id}/register` (participants only).
-    - Full → `400 "Workshop is full"`
-    - Already registered → `400 "Already registered for this workshop"`
-    - Slot conflict → `400 "Already registered for another workshop in this time slot"` — **grey-out conflicting slot workshops** in the catalog.
-    - Race condition → `400 "Failed to register. Workshop might have just filled up."`
-    - Frontend must parse `slot_id` on each workshop and disable registration for any other workshop sharing the same `slot_id`.
+Open an SSE connection:
 
----
+```http
+GET /events/{event_id}/announcements/stream
+Authorization: Bearer <token>
+Accept: text/event-stream
+```
 
-### Journey B: Volunteer / External Staff (Scanning)
+Server sends:
 
-All scanning staff log in via **`/auth/admin/login`** (staff token required). Scanning permission is granted by being in the entity's team array (`mess_team`, `hostel_team`, `event_team`, `workshop_team`). Additionally, each team member has a `logging` flag (mess/hostel) or `attendance` flag (workshop) — if disabled by Super Admin, the backend returns `403 "Scanning disabled for you"`.
+```text
+data: {"announcement_id": "ANN001", "message": "Event starts in 10 min", "priority": "high", "created_by": "SA001", "created_at": "2026-08-30T09:50:00"}
 
-#### B.1 Mess Scanner
-- **Slot auto-detection:** The frontend reads the device clock and compares it against the mess's slot time boundaries (from the mess `slots` config — `start_time`/`end_time` per slot). **Do not show a manual slot dropdown** — automatically pass the active slot.
-- Scan: `POST /mess/{mess_id}/scan?slot={auto_slot}&day={auto_day}` + encrypted QR in body.
-- Scanners: **mess team members only** (`logging: true`)
-- Error responses to handle in UI:
-  - `403 "Not authorized to scan for this mess"`
-  - `403 "Scanning disabled for you"`
-  - `400 "Participant not allotted to this mess"`
-  - `400 "Day entry not found"`
-  - `400 "Slot not found"`
-  - `400 "Already logged in for {slot} on day {day}"` → show **"Already Consumed"** toast
+data: {"announcement_id": "ANN002", "message": "Entry closed", "priority": "high", "created_by": "SA001", "created_at": "2026-08-30T10:05:00"}
+```
 
-#### B.2 Hostel Scanner
-- UI: Single **Entry / Exit** toggle.
-- Scan: `POST /hostels/{hostel_id}/scan?action=entry|exit` + QR in body.
-- Scanners: **hostel team members only** (`logging: true`)
-- After scan, display participant's updated inside/outside state.
-- Error responses:
-  - `403 "Not authorized to scan for this hostel"`
-  - `403 "Scanning disabled for you"`
-  - `400 "Participant not allotted to this hostel"`
-  - `400 "Participant is already inside"` (entry attempted when already inside)
-  - `400 "Participant is already outside"` (exit attempted when already outside)
-  - `400 "Invalid action. Must be 'entry' or 'exit'"`
+### 7.2 Workshop Seats Stream
 
-#### B.3 Event Scanner
-- Scan: `POST /events/{event_id}/scan` + QR in body.
-- Scanners: **event team members only** (any role in `event_team`)
-- Response: `{ "name": "...", "email": "...", "is_participating": true|false }` — display this to scanner.
-- Own daily scan count: `GET /events/{event_id}/my_daily_scans` → `{ "daily_unique_scans": N }`.
-- Error: `403 "Not authorized to scan for this event"`
+Open unauthenticated SSE:
 
-#### B.4 Workshop Scanner
-- UI: **Pre-registered / On-spot** toggle.
-- Scan: `POST /workshops/{workshop_id}/attendance?scan_type=pre-registered|on-spot` + QR in body.
-- Scanners: **workshop team members only** (with `attendance: true`)
-- On-spot hard cap = **10% of capacity**. Show `400 "Max on-spot capacity (10%) reached"` as a blocking UI error.
-- Error responses:
-  - `403 "Not authorized to scan for this workshop"`
-  - `403 "Scanning disabled for this volunteer"`
-  - `400 "Participant not pre-registered for this workshop"`
-  - `400 "Participant already marked present for another workshop in this slot"`
-  - `400 "Max on-spot capacity (10%) reached"`
-  - `400 "Invalid scan_type"`
+```http
+GET /workshops/{workshop_id}/seats/stream
+Accept: text/event-stream
+```
+
+Server sends seat count updates:
+
+```text
+data: {"seats_remaining": 87, "timestamp": "2026-08-30T09:55:00"}
+```
 
 ---
 
-### Journey C: Event Head
+## 8. Role Journeys & Screen Flows
 
-Identified by: `paradox_id` in `event.event_team` with `role: "event_head"`.
+### 8.1 Participant Journey
 
-1. **View Participation:** `GET /events/{event_id}/participation`
-   - Returns: `{ "count": N, "participants": [...], "event_team": [...], "total_daily_scans": N }`
-   - Each participant entry: `participant_id`, `name`, `email`, `phone`, `house`, `team_id`, `team_role`.
-2. **Trigger Team Allocation Algorithm:** `POST /events/{event_id}/allocate_teams`
-   - **Event Head exclusive** — Super Admins and Domain Admins cannot call this.
-   - If `event.team.max <= 1` → returns `{ "message": "Not a team event" }` (not an error).
-   - If `event.team.house: true` → groups participants within same `house`. Otherwise random mixed.
-   - Only unassigned solo players (no `team_id`) are grouped. Returns `{ "message": "Allocated N teams" }`.
-3. **Manual Participant Team CRUD (post-allocation):** `PUT /events/{event_id}/participant_teams/{participant_id}` with body `{ "team_id": "...", "team_role": "..." }`
-   - **Event Head exclusive** — Super Admins cannot call this.
-   - Frontend: provide drag-and-drop or edit UI to move participants between teams.
-4. **CSV Export (frontend-only):** Export from `GET /events/{event_id}/participation` response client-side.
+1. **Register** → `POST /auth/register`
+2. **Login** → `POST /auth/login`
+3. **Complete profile** → `PATCH /profile/complete`
+4. **Register for events** → `POST /events/{id}/register`
+5. **Check my registrations** → `GET /events/my_registrations`
+6. **Register for workshops** → `POST /workshops/{id}/register`
+7. **My workshop registrations** → `GET /workshops/my_registrations`
+8. **Request mess** → `POST /mess/register`
+9. **Check mess** → `GET /mess/my_mess`
+10. **Request hostel** → `POST /hostels/register`
+11. **Check hostel** → `GET /hostels/my_hostel`
+12. **Raise query** → `POST /queries`
+13. **Report issue** → `POST /issues`
+14. **Scan at events/workshops/mess/hostel** → `POST /events/{id}/scan`, `POST /workshops/{id}/attendance`, `POST /mess/{id}/scan`, `POST /hostels/{id}/scan`
 
----
+### 8.2 Workshop Volunteer Journey
 
-### Journey D: Domain Admin
+1. **Login as staff** → `POST /auth/admin/login`
+2. **Assign volunteers to workshop** → `POST /workshops/{id}/volunteers`
+3. **Toggle volunteer scanning** → `PUT /workshops/{id}/volunteers/{user_id}/toggle_scan`
+4. **View workshop participation** → `GET /workshops/{id}/participation`
 
-Identified by: `backend_teams.department` matching `event.event_type`.
+### 8.3 Staff Admin Journey
 
-1. **View Participation:** `GET /events/{event_id}/participation` — Granted for events where `event_type == their department`. Gets full participant list + `event_team` + `total_daily_scans`.
-2. **Cannot:** trigger `allocate_teams`, modify participant teams, create/delete events.
-3. **CSV Export (frontend-only):** Export participation for events in their domain.
-
----
-
-### Journey E: Super Admin
-
-Identified by: `backend_teams.role == "super_admin"`.
-
-1. **Staff Management (CRUD):** `POST/GET/PUT/DELETE /backend_teams`
-   - Create creates a `paradox_id` like `BT<timestamp>` and optionally links to a participant document via `admin_id`.
-2. **Event CRUD:** `POST/PUT/DELETE /events` + `POST /events/{id}/team` (assigns any staff member to event_team with a role).
-3. **Workshop CRUD:** `POST/PUT/DELETE /workshops` + `POST /workshops/{id}/volunteers`.
-4. **Mess & Hostel Setup:** `POST /mess` + `POST /mess/{id}/team`, `POST /hostels` + `POST /hostels/{id}/team`.
-5. **Toggle Scanning:**
-   - `PUT /mess/{id}/team/{uid}/toggle_scan?logging=true|false`
-   - `PUT /hostels/{id}/team/{uid}/toggle_scan?logging=true|false` *(note: takes `logging` query param)*
-   - `PUT /workshops/{id}/volunteers/{uid}/toggle_scan?attendance=true|false`
-6. **Global Allocations:** `POST /mess/allocate` (by mess_preference), `POST /hostels/allocate` (by gender, only participants with `accommodation.registered: true`).
-7. **Statistics:** `GET /mess/{id}/statistics`, `GET /hostels/{id}/statistics`, `GET /workshops/{id}/logs`.
-8. **Audit Logs:** `GET /audit-logs?limit=100` (optional limit param).
-9. **Cannot:** trigger `POST /events/{id}/allocate_teams` or `PUT /events/{id}/participant_teams/{pid}`.
-10. **CSV Export (frontend-only):** All unfiltered analytics views.
+1. **Login** → `POST /auth/admin/login`
+2. **Create event** → `POST /events`
+3. **Assign event teams** → `POST /events/{id}/team`
+4. **Allocate event teams** → `POST /events/{id}/allocate_teams`
+5. **Create workshop slot** → `POST /workshop-slots`
+6. **Create workshop** → `POST /workshops`
+7. **Create mess** → `POST /mess`
+8. **Create hostel** → `POST /hostels`
+9. **Allocate mess/hostel** → `POST /mess/allocate`, `POST /hostels/allocate`
+10. **View audit logs** → `GET /audit-logs/summary`
+11. **Manage backend teams** → `POST /backend_teams`
+12. **Manage query team** → `POST /queries/team`
 
 ---
 
-### Journey F: UHC
+## 9. TypeScript Types & Appendix
 
-Identified by: `backend_teams.department == "uhc"`. House is parsed from their email by taking the part **before the first hyphen**, case-insensitively: `wayanad-sec@ds.study.iitm.ac.in` → house = `"wayanad"`. This is compared against `profile.house` (lowercase) of each participant.
+### 9.1 Core Types
 
-1. **View Participation:** `GET /events/{event_id}/participation`
-   - Backend **automatically filters** response to only include participants whose `profile.house` matches the UHC member's house.
-   - `total_daily_scans` field is **omitted** from UHC responses.
-   - `event_team` details **are included** — use this to surface a contact directory for Event Head & volunteers.
-2. **Cannot:** trigger allocations, modify teams, view cross-house data.
-3. **CSV Export (frontend-only):** Binds to filtered API response — CSV only contains the UHC member's house participants.
+```ts
+// Auth
+interface AuthResponse {
+  id: string;
+  email: string;
+  access_token: string;
+  token_type: "participant" | "staff";
+  full_name: string;
+  dob: string;  // YYYY-MM-DD
+  house: string;
+  gender: "male" | "female";
+  phone: string;
+  country: string;
+  state: string;
+  city: string;
+  address: string;
+  program: "DS" | "MS" | "AE" | "ES";
+  course_stage: "foundational" | "diploma" | "degree";
+  photo: string;
+  public_key?: string;
+}
+
+// Participant
+interface Participant {
+  participant_id: string;
+  email: string;
+  profile: Profile;
+  mess: { registered: boolean; mess_id?: string };
+  accommodation: { hostel_id?: string; room?: string; inside: boolean };
+  created_at: string;
+  updated_at: string;
+  event_count: number;
+  workshop_count: number;
+}
+
+// Event
+interface Event {
+  event_id: string;
+  name: string;
+  type: "technical" | "culturals" | "sports" | "others";
+  date: string;
+  venue: string;
+  registration: {
+    is_open: boolean;
+    allowed: boolean;
+    start: string;
+    end: string;
+  };
+  capacity: number;
+  registered: number;
+  attended_today: number;
+}
+
+// Workshop
+interface Workshop {
+  workshop_id: string;
+  name: string;
+  venue: string;
+  slot_id: string;
+  start_time: string;
+  registration_start: string;
+  registration_end: string;
+  registration_open: boolean;
+  capacity: number;
+  registration_count: number;
+}
+
+// Query
+interface Query {
+  query_id: string;
+  title: string;
+  body: string;
+  category: "mess" | "hostel" | "technical" | "workshops" | "sports" | "culturals" | "uhc" | "general";
+  target_id?: string;
+  status: "open" | "in_progress" | "resolved";
+  created_at: string;
+  replies: QueryReply[];
+}
+
+interface QueryReply {
+  author_id: string;
+  author_type: "participant" | "staff";
+  author_name: string;
+  body: string;
+  timestamp: string;
+}
+
+// Audit Log
+interface AuditLog {
+  log_id: string;
+  action: string;
+  actor_id: string;
+  entity_type: string;
+  entity_id: string;
+  details: Record<string, unknown>;
+  timestamp: string;
+}
+```
+
+### 9.2 API Client Skeleton
+
+```ts
+class ParadoxClient {
+  private baseUrl: string;
+  private token?: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
+
+  setToken(token: string) {
+    this.token = token;
+  }
+
+  private async request<T>(method: string, path: string, body?: any, isSSE = false): Promise<T | ReadableStream> {
+    const url = `${this.baseUrl}${path}`;
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (res.status === 429) {
+      const retry = res.headers.get("Retry-After");
+      throw new Error(`Rate limited. Retry after ${retry}s.`);
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`HTTP ${res.status}: ${text}`);
+    }
+
+    if (isSSE) return res.body as ReadableStream;
+
+    return res.json() as Promise<T>;
+  }
+
+  // Auth
+  async register(data: RegisterRequest) { return this.request<PostResponse>("/auth/register", "POST", data); }
+  async login(data: LoginRequest) { return this.request<AuthResponse>("/auth/login", "POST", data); }
+  async adminLogin(data: AdminLoginRequest) { return this.request<AuthResponse>("/auth/admin/login", "POST", data); }
+
+  // Events
+  async getEvents() { return this.request<Event[]>("/events", "GET"); }
+  async registerForEvent(eventId: string) { return this.request<RegisterResponse>(`/events/${eventId}/register`, "POST"); }
+  async getMyEvents() { return this.request<MyRegistration[]>("/events/my_registrations", "GET"); }
+
+  // Workshops
+  async getWorkshops() { return this.request<Workshop[]>("/workshops", "GET"); }
+  async registerForWorkshop(id: string) { return this.request<WorkshopRegistrationResponse>(`/workshops/${id}/register`, "POST"); }
+
+  // SSE
+  async listenToAnnouncements(eventId: string): Promise<ReadableStream> {
+    return this.request(`/events/${eventId}/announcements/stream`, "GET", undefined, true);
+  }
+}
+```
+
+### 9.3 SSE Helpers
+
+```ts
+function parseSSE(stream: ReadableStream): AsyncGenerator<{ event: string; data: any }> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  return (async function* () {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = JSON.parse(line.slice(6));
+          yield { event: "message", data };
+        }
+      }
+    }
+  })();
+}
+```
+
+### 9.4 QR Generation Sample
+
+```ts
+import CryptoJS from "crypto-js";
+
+const SECRET = process.env.QR_SECRET!;
+
+function generateQR(uid: string): string {
+  const ts = Math.floor(Date.now() / 1000);
+  const payload = JSON.stringify({ uid, ts });
+  const sig = CryptoJS.HmacSHA256(payload, SECRET).toString(CryptoJS.enc.Base64);
+  return btoa(JSON.stringify({ uid, ts, sig }));
+}
+
+function decodeQR(encoded: string): { uid: string; ts: number; sig: string } {
+  const json = atob(encoded);
+  return JSON.parse(json);
+}
+
+// Frontend usage
+function scanQR(scanned: string) {
+  const { uid, ts, sig } = decodeQR(scanned);
+  const now = Math.floor(Date.now() / 1000);
+  if (now - ts > 60) {
+    alert("QR expired");
+    return;
+  }
+  // Submit to backend
+  fetch("/api/v1/workshops/WKSP111/attendance", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` },
+    body: JSON.stringify({ qr_code: scanned, q: { scan_type: "pre-registered" } }),
+  });
+}
+```
 
 ---
 
-## 3. Complete API Reference
+## Known Gaps & Stub Endpoints
 
-### Auth & Profile
-| Method | Path | Auth | Access | Notes |
-|---|---|---|---|---|
-| POST | `/auth/register` | No | Public | IITM email only; returns `participant_id` |
-| POST | `/auth/login` | No | **Participants only** | Returns JWT (`type:"participant"`) + profile + `public_key` |
-| POST | `/auth/admin/login` | No | **Backend Staff only** | Returns JWT (`type:"staff"`) + role/department/designation |
-| POST | `/auth/password/forgot` | No | Public | Always returns success message + dev reset URL |
-| POST | `/auth/password/reset` | No | Public | Token-based reset |
-| POST | `/auth/password/change` | Yes | Any | Returns new `access_token` preserving same `type` claim |
-| PATCH | `/profile/complete` | Yes | Participant only | Full profile fields |
+### Currently Unimplemented (Stubs)
 
-### Events
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| GET | `/events` | All authenticated | Non-staff see same list; admins too |
-| POST | `/events` | Super Admin | Create event |
-| PUT | `/events/{id}` | Super Admin | Update event |
-| DELETE | `/events/{id}` | Super Admin | Also removes participant registrations |
-| POST | `/events/{id}/team` | Super Admin only | Add member to event_team (role: event_head \| event_member \| volunteer) |
-| POST | `/events/{id}/register` | Participant only | Optional body; event_team members blocked |
-| PUT | `/events/{id}/register` | Participant only | Update registration_data |
-| DELETE | `/events/{id}/register` | Participant only | Cancel |
-| GET | `/events/my_registrations` | Participant only | Returns empty list for non-participants |
-| GET | `/events/{id}/participation` | Super Admin, Event Team, UHC, Domain Admin | Payload varies by role |
-| POST | `/events/{id}/allocate_teams` | **Event Head only** | Blocked for Super Admin |
-| PUT | `/events/{id}/participant_teams/{pid}` | **Event Head only** | Blocked for Super Admin |
-| POST | `/events/{id}/scan` | **Event Team member only** | Returns name + email + is_participating |
-| GET | `/events/{id}/my_daily_scans` | **Event Team member only** | Own scan count today |
+| Endpoint | Status | Reason |
+|----------|--------|--------|
+| `POST /auth/password/forgot` | Stub | Email service pending |
+| `POST /auth/password/reset` | Stub | Email service pending |
+| `GET /profile` | Missing | Profile read-only route not yet implemented |
 
-### Workshops
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| GET | `/workshops` | All authenticated | Admins see `workshop_team`; others don't |
-| POST | `/workshops` | Super Admin | |
-| PUT | `/workshops/{id}` | Super Admin | |
-| DELETE | `/workshops/{id}` | Super Admin | Also removes participant registrations |
-| POST | `/workshops/{id}/volunteers` | Super Admin | role + user_id + attendance fields |
-| PUT | `/workshops/{id}/volunteers/{uid}/toggle_scan` | Super Admin | `?attendance=true\|false` |
-| GET | `/workshops/{id}/logs` | Super Admin | |
-| POST | `/workshops/{id}/register` | Participant only | Slot conflict check |
-| GET | `/workshops/{id}/seats/stream` | **No auth required** | SSE — use `EventSource` |
-| POST | `/workshops/{id}/attendance` | **Workshop team member only** (with `attendance: true`) | `?scan_type=pre-registered\|on-spot` |
+### Pending Fixes
 
-### Mess
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| GET | `/mess` | All authenticated | Lists all messes |
-| POST | `/mess` | Super Admin | Create mess |
-| POST | `/mess/{id}/team` | Super Admin | role: volunteer \| other; `other` gets `logging: true` by default |
-| PUT | `/mess/{id}/team/{uid}/toggle_scan` | Super Admin | `?logging=true\|false` query param |
-| POST | `/mess/allocate` | Super Admin | Allocates unassigned participants by `mess_preference` |
-| GET | `/mess/my_mess` | Participant only | Returns `allotted_mess`, `mess_details`, `slots` |
-| POST | `/mess/{id}/scan` | **Mess team member only** (`logging=true`) | `?slot=breakfast\|lunch\|dinner&day=1-5` |
-| GET | `/mess/{id}/statistics` | Super Admin | Returns allocated participants + counts |
-
-### Hostels
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| GET | `/hostels` | All authenticated | Lists all hostels |
-| POST | `/hostels` | Super Admin | Fields: hostel_id, name, capacity, gender, coordinator |
-| POST | `/hostels/{id}/team` | Super Admin | role: volunteer \| other; `other` gets `logging: true` |
-| PUT | `/hostels/{id}/team/{uid}/toggle_scan` | Super Admin | `?logging=true\|false` query param |
-| POST | `/hostels/allocate` | Super Admin | Allocates by gender; only participants with `accommodation.registered: true` |
-| GET | `/hostels/my_hostel` | Participant only | Returns hostel + room + logged_in + masked volunteers |
-| POST | `/hostels/{id}/scan` | **Hostel team member only** (`logging=true`) | `?action=entry\|exit` |
-| GET | `/hostels/{id}/statistics` | Super Admin | Returns inside count + allocated participants |
-
-### Backend Teams & Audit
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| POST | `/backend_teams` | Super Admin | Creates staff; optionally links to participant via email lookup |
-| GET | `/backend_teams` | Super Admin | Excludes `_id` and `password_hash` |
-| PUT | `/backend_teams/{paradox_id}` | Super Admin | Partial update |
-| DELETE | `/backend_teams/{paradox_id}` | Super Admin | |
-| GET | `/audit-logs` | Super Admin | `?limit=100` (default 100), sorted newest first |
+None — all known backend changes are reflected in this guide as of August 2026.
 
 ---
 
-## 4. Key Inferred UI Requirements
+## Appendix A: Full Vocabularies
 
-| Requirement | Source (backend behaviour) |
-|---|---|
-| QR auto-refresh every 30–60s with countdown | Backend rejects QR with timestamp > 60s old |
-| **Two separate login pages** (`/login` and `/admin/login`) | Two endpoints with different JWT `type` claims; tokens are not interchangeable |
-| Use `token_type` from login response to route to correct dashboard | `"participant"` → participant dashboard; `"staff"` → admin/scanner dashboard based on `role` |
-| No manual slot dropdown for mess scanner | Slot/day auto-detected from clock by frontend |
-| Grey-out conflicting workshop slots | Backend rejects duplicate `slot_id` registrations |
-| Show "Registration Closed" badge when `open: false` | `open` flag blocks register/edit/delete |
-| Disable event Register button for event_team members | Backend returns `403` with specific message |
-| Show `is_participating` result after event scan | Scan endpoint returns this field |
-| Live seat counter via SSE (`EventSource`) | `/workshops/{id}/seats/stream` — no auth needed |
-| Inside/Outside state display after hostel scan | `accommodation.logged_in` updated per scan |
-| On-spot scan block at 10% capacity | `400 "Max on-spot capacity (10%) reached"` |
-| Workshop listing hides `workshop_team` for non-admins | Backend strips it for non-super-admins |
-| Mess `my_mess` shows per-slot consumption history | Returns `slots` array with `logged` per slot per day |
-| Hostel `my_hostel` shows masked team (name+phone only) | Backend explicitly masks volunteer details |
-| CSV export — role-scoped | UHC sees only their house; others see their permitted data |
-| Profile completion gate | `profile` is `{}` at register; frontend detects and gates |
+| Field | Values |
+|-------|--------|
+| `houses` | Bandipur, Corbett, Gir, Kanha, Kaziranga, Nallamala, Namdapha, Nilgiri, Pichavaram, Saranda, Sundarbans, Wayanad |
+| `genders` | male, female |
+| `programs` | DS, MS, AE, ES |
+| `course_stages` | foundational, diploma, degree |
+| `event_types` | technical, culturals, sports, others |
+| `event_team_roles` | event_head, member, volunteer |
+| `participant_team_roles` | leader, member |
+| `announcement_priorities` | low, mid, high |
+| `mess_preferences` | jain, north_indian__non_veg, north_indian__veg, south_indian__non_veg, south_indian__veg |
+| `payment_methods` | card, netbanking, upi |
+| `backend_team_roles` | admin, other, super_admin, volunteer |
+| `backend_team_departments` | hostels, mess, technical, workshops, sports, culturals, uhc |
 
 ---
 
-## 5. Error Handling Reference
+## Appendix B: Query Params Reference
 
-| HTTP Code | Meaning | Frontend Action |
-|---|---|---|
-| 400 | Logic/validation block | Display exact `detail` string in Toast |
-| 401 | Invalid credentials or bad token | Redirect to `/login` (participants) or `/admin/login` (staff) based on which page the user was on |
-| 403 | Insufficient role/permissions | Show "Access Denied" toast; hide/disable triggering UI element |
-| 404 | Entity not found | Show appropriate empty/error state |
-| 409 | Duplicate / already registered | Show conflict message from `detail` |
-| 422 | Request schema invalid | Show field-level validation errors |
+| Endpoint | Param | Required | Description |
+|----------|-------|----------|-------------|
+| `/participants` | limit | no | 1–500, default 200 |
+| `/participants` | offset | no | Pagination offset |
+| `/issues` | limit | no | 1–500, default 100 |
+| `/queries` | limit | no | 1–500, default 100 |
+| `/audit-logs` | limit | no | 1–500, default 100 |
+| `/mess/scan` | q:slot | yes | Mess slot ID |
+| `/mess/scan` | q:day | yes | Day identifier |
+| `/hostel/scan` | q:action | yes | entry, exit, permanent_exit |
+| `/workshops/attendance` | q:scan_type | no | pre-registered, on-spot, changes |
+| `/workshops/toggle_scan` | q:attendance | yes | attendance boolean |
+
+---
+
+**End of Guide**
