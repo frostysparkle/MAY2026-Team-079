@@ -401,6 +401,136 @@ def test_the_toggle_flag_is_required(client, admin_headers):
 
 
 # ===========================================================================
+# Opting in
+#
+# Until these two routes existed, nothing in the API set `mess.registered`, so
+# the flag `/mess/allocate` filters on could only ever be False and allocation
+# could not place anybody. They mirror /hostels/register deliberately.
+# ===========================================================================
+
+def mess_of(person):
+    return participant_doc(person)["mess"]
+
+
+def test_a_participant_opts_in(client, participant):
+    response = client.post("/mess/register", headers=auth_headers(participant))
+    assert response.status_code == 200
+    assert response.json() == {"message": "Meal plan requested"}
+    assert mess_of(participant)["registered"] is True
+
+
+def test_asking_twice_is_not_an_error(client, participant):
+    client.post("/mess/register", headers=auth_headers(participant))
+    assert client.post("/mess/register", headers=auth_headers(participant)).status_code == 200
+
+
+def test_opting_in_makes_the_participant_allocatable(client, admin_headers, participant):
+    """The whole point of the route: allocation had nobody to place before it."""
+    veg = make_mess("MESS1", mess_type="north_indian__veg")
+    client.post("/mess/register", headers=auth_headers(participant))
+
+    response = client.post("/mess/allocate", headers=admin_headers)
+    assert response.json() == {"message": "Allocated 1 participants to messes"}
+    assert mess_of(participant)["mess_id"] == veg["_id"]
+
+
+def test_the_request_records_the_preference_allocation_will_use(
+    client, make_participant, audit
+):
+    person = make_participant(profile={"mess_preference": "south_indian__non_veg"})
+    client.post("/mess/register", headers=auth_headers(person))
+
+    row = audit.one("MESS_REGISTER")
+    assert row["target_id"] == person["participant_id"]
+    assert row["details"]["preference"] == "south_indian__non_veg"
+    assert row["details"]["diet"] == "non_veg"
+
+
+def test_the_request_records_an_absent_preference_as_absent(
+    client, make_participant, audit
+):
+    """Allocation defaults these people to veg, which is worth being able to look
+    up rather than infer."""
+    person = make_participant(profile={"mess_preference": None})
+    client.post("/mess/register", headers=auth_headers(person))
+
+    row = audit.one("MESS_REGISTER")
+    assert row["details"]["preference"] is None
+    assert row["details"]["diet"] is None
+
+
+def test_a_request_can_be_withdrawn(client, participant):
+    client.post("/mess/register", headers=auth_headers(participant))
+    response = client.delete("/mess/register", headers=auth_headers(participant))
+    assert response.status_code == 200
+    assert response.json() == {"message": "Meal plan request withdrawn"}
+    assert mess_of(participant)["registered"] is False
+
+
+def test_a_withdrawal_takes_them_back_out_of_allocation(
+    client, admin_headers, participant
+):
+    make_mess("MESS1", mess_type="north_indian__veg")
+    client.post("/mess/register", headers=auth_headers(participant))
+    client.delete("/mess/register", headers=auth_headers(participant))
+
+    client.post("/mess/allocate", headers=admin_headers)
+    assert mess_of(participant)["mess_id"] is None
+
+
+def test_the_withdrawal_records_whether_there_was_a_request_to_withdraw(
+    client, participant, audit
+):
+    client.delete("/mess/register", headers=auth_headers(participant))
+    assert audit.one("MESS_CANCEL")["details"]["was_registered"] is False
+
+
+def test_neither_request_nor_withdrawal_is_allowed_once_seated(client, make_participant):
+    """Releasing a seat somebody has been given is an organiser decision."""
+    hall = make_mess()
+    person = make_participant(mess={"registered": True, "mess_id": hall["_id"]})
+    for method in ("post", "delete"):
+        response = getattr(client, method)("/mess/register", headers=auth_headers(person))
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Mess already allotted"
+
+
+def test_the_refusal_names_the_hall(client, make_participant, audit):
+    hall = make_mess()
+    person = make_participant(mess={"registered": True, "mess_id": hall["_id"]})
+    client.post("/mess/register", headers=auth_headers(person))
+
+    row = audit.latest("MESS_REGISTER_DENIED")
+    assert row["details"]["reason"] == "already_allotted"
+    assert row["details"]["mess_id"] == str(hall["_id"])
+
+
+def test_a_refused_request_does_not_clear_the_seat(client, make_participant):
+    hall = make_mess()
+    person = make_participant(mess={"registered": True, "mess_id": hall["_id"]})
+    client.delete("/mess/register", headers=auth_headers(person))
+
+    assert mess_of(person)["mess_id"] == hall["_id"]
+    assert mess_of(person)["registered"] is True
+
+
+def test_a_staff_token_cannot_request_a_meal_plan(client, admin_headers):
+    for method in ("post", "delete"):
+        assert getattr(client, method)("/mess/register",
+                                       headers=admin_headers).status_code == 403
+
+
+def test_register_is_not_captured_as_a_hall_id(client, participant, admin_headers):
+    """Both `/mess/register` routes are declared above every `/{mess_id}` route,
+    which is the only reason they are reachable — `DELETE /mess/{mess_id}` would
+    otherwise match first and try to delete a hall called "register"."""
+    make_mess("MESS1")
+    assert client.delete("/mess/register",
+                         headers=auth_headers(participant)).status_code == 200
+    assert stored("MESS1") is not None
+
+
+# ===========================================================================
 # Allocation
 # ===========================================================================
 

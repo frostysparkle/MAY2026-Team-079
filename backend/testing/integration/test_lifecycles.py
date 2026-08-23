@@ -297,8 +297,7 @@ def test_solo_registrants_are_allocated_into_teams_by_the_event_head(
 # ===========================================================================
 
 @pytest.mark.slow
-def test_the_full_mess_journey(client, admin, register_participant, make_duty_staff,
-                              opt_into_mess):
+def test_the_full_mess_journey(client, admin, register_participant, make_duty_staff):
     """Hall, menu, allocation, payment, scanning, and the meal figures behind it."""
     assert client.post("/mess", json={"mess_id": "MESS1", "name": "South Hall",
                                      "capacity": 2, "type": "south_indian__veg"},
@@ -320,7 +319,7 @@ def test_the_full_mess_journey(client, admin, register_participant, make_duty_st
     }}}, headers=counter["headers"]).status_code == 200
 
     diner = register_participant(mess_preference="south_indian__veg")
-    opt_into_mess(diner)
+    assert client.post("/mess/register", headers=diner["headers"]).status_code == 200
 
     paid = client.post("/mess/pay", json={"method": "upi"}, headers=diner["headers"])
     assert paid.json()["amount"] == 1200
@@ -340,6 +339,9 @@ def test_the_full_mess_journey(client, admin, register_participant, make_duty_st
         "mess_preference": "jain",
     }, headers=diner["headers"])
     assert locked.status_code == 409
+
+    # And so is the seat: they cannot withdraw the request themselves any more.
+    assert client.delete("/mess/register", headers=diner["headers"]).status_code == 400
 
     admitted = client.post("/mess/MESS1/scan?slot=breakfast&day=1",
                            json=make_qr(diner["document"]), headers=counter["headers"])
@@ -367,7 +369,7 @@ def test_the_full_mess_journey(client, admin, register_participant, make_duty_st
 
 @pytest.mark.slow
 def test_diets_are_matched_and_capacity_respected_across_two_halls(
-    client, admin, register_participant, opt_into_mess
+    client, admin, register_participant
 ):
     client.post("/mess", json={"mess_id": "VEG", "name": "Veg", "capacity": 1,
                               "type": "north_indian__veg"}, headers=admin)
@@ -378,7 +380,7 @@ def test_diets_are_matched_and_capacity_respected_across_two_halls(
     overflow = register_participant(mess_preference="north_indian__veg")
     jain = register_participant(mess_preference="jain")
     for person in (vegetarian, overflow, jain):
-        opt_into_mess(person)
+        client.post("/mess/register", headers=person["headers"])
 
     assert client.post("/mess/allocate", headers=admin).json() == \
         {"message": "Allocated 2 participants to messes"}

@@ -6,9 +6,10 @@ document directly to reach one branch, an integration test builds state the way 
 client would — so a lifecycle test fails if any step in the chain breaks, not only
 the one it is nominally about.
 
-The one exception is `mess.registered`: no endpoint in the API sets it, so a
-participant cannot opt into a meal plan through HTTP at all. It is set directly, with
-a note, rather than papered over.
+There used to be one exception, `mess.registered`: no endpoint set it, so opting
+into a meal plan was impossible over HTTP and an `opt_into_mess` fixture wrote the
+flag directly. `POST /mess/register` now exists, so the whole mess lifecycle is
+built from client calls like everything else and the fixture is gone.
 """
 import pytest
 
@@ -114,22 +115,3 @@ def make_duty_staff(client, admin, register_participant, password):
         }
 
     return _make
-
-
-@pytest.fixture()
-def opt_into_mess():
-    """
-    Mark a participant as wanting a meal plan.
-
-    Written directly because **no endpoint sets `mess.registered`** — unlike
-    accommodation, which has `POST /hostels/register`. Without this, `/mess/allocate`
-    can never place anybody, so a mess lifecycle test cannot be built from HTTP calls
-    alone.
-    """
-    def _opt_in(person):
-        database.participants_collection.update_one(
-            {"_id": person["document"]["_id"]},
-            {"$set": {"mess.registered": True}},
-        )
-
-    return _opt_in

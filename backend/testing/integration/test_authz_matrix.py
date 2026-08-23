@@ -27,6 +27,8 @@ PARTICIPANT_ROUTES = [
     ("put", "/events/EVTEC1111/register", {"registration_data": {}}),
     ("delete", "/events/EVTEC1111/register", None),
     ("post", "/mess/pay", {"method": "upi"}),
+    ("post", "/mess/register", None),
+    ("delete", "/mess/register", None),
     ("get", "/mess/my_mess", None),
     ("post", "/hostels/pay", {"method": "upi"}),
     ("post", "/hostels/register", None),

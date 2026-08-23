@@ -226,6 +226,106 @@ def create_mess(request: MessCreateRequest, current_user: dict = Depends(get_cur
 def list_messes(current_user: dict = Depends(get_current_user)):
     return list(mess_collection.find({}, {"_id": 0}))
 
+
+# ---------------------------------------------------------------------------
+# Opting in
+#
+# `POST /mess/allocate` only considers participants whose `mess.registered` is
+# True, and both `POST /auth/register` and the participant factory store that
+# flag False. Until now nothing in the API ever set it: the flag existed, the
+# allocator filtered on it, and there was no way through HTTP to turn it on —
+# so mess allocation could never place a single person. Accommodation has had
+# `POST /hostels/register` all along; these two are its missing counterparts,
+# and they are deliberately its mirror image, down to the refusal conditions,
+# because a participant meets both flows in the same sitting.
+#
+# Declared here, above every `/{mess_id}` route, so "register" is never
+# captured as a hall id — `DELETE /{mess_id}` in particular would otherwise
+# match first and try to delete a hall called "register".
+# ---------------------------------------------------------------------------
+
+@router.post("/register")
+def register_for_mess(current_user: dict = Depends(get_current_participant)):
+    """
+    Ask for a meal plan during the fest.
+
+    Idempotent: asking twice is not an error, it just stays requested.
+
+    Refused once a hall has been allotted, matching
+    `POST /hostels/register` — moving somebody who has already been seated is an
+    organiser's decision, and re-running allocation will not move them anyway
+    (the allocator only looks at participants with no `mess.mess_id`).
+    """
+    if "participant_id" not in current_user:
+        log_denied(
+            current_user, "MESS_REGISTER_DENIED", None,
+            reason="not_a_participant", details={"status": 400}, audit=False,
+        )
+        raise HTTPException(status_code=400, detail="Only participants can request a meal plan")
+
+    mess = current_user.get("mess") or {}
+    if mess.get("mess_id"):
+        log_denied(
+            current_user, "MESS_REGISTER_DENIED", current_user.get("participant_id"),
+            reason="already_allotted",
+            details={"mess_id": str(mess.get("mess_id")), "status": 400},
+        )
+        raise HTTPException(status_code=400, detail="Mess already allotted")
+
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"mess.registered": True}}
+    )
+    # The stored preference is recorded because it is what decides, whenever
+    # allocation next runs, which halls this person can be seated in — and a
+    # participant who has not chosen one is allocated as `veg` by default, which
+    # is the kind of thing worth being able to look up afterwards rather than
+    # infer.
+    raw_preference = (current_user.get("profile") or {}).get("mess_preference")
+    log_audit(current_user, "MESS_REGISTER", current_user.get("participant_id"), {
+        "preference": raw_preference,
+        "diet": _diet_of(raw_preference) if raw_preference else None,
+        "already_paid": bool(mess.get("payment")),
+        "was_registered": bool(mess.get("registered")),
+    })
+    return {"message": "Meal plan requested"}
+
+
+@router.delete("/register")
+def cancel_mess_request(current_user: dict = Depends(get_current_participant)):
+    """
+    Withdraw a pending meal plan request.
+
+    Refused once a hall has been allotted: releasing a seat somebody has been
+    given is an organiser decision, not a self-service one. Same rule as
+    `DELETE /hostels/register`.
+    """
+    if "participant_id" not in current_user:
+        log_denied(
+            current_user, "MESS_CANCEL_DENIED", None,
+            reason="not_a_participant", details={"status": 400}, audit=False,
+        )
+        raise HTTPException(status_code=400, detail="Only participants can cancel a meal plan")
+
+    mess = current_user.get("mess") or {}
+    if mess.get("mess_id"):
+        log_denied(
+            current_user, "MESS_CANCEL_DENIED", current_user.get("participant_id"),
+            reason="already_allotted",
+            details={"mess_id": str(mess.get("mess_id")), "status": 400},
+        )
+        raise HTTPException(status_code=400, detail="Mess already allotted")
+
+    participants_collection.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"mess.registered": False}}
+    )
+    log_audit(current_user, "MESS_CANCEL", current_user.get("participant_id"), {
+        "was_registered": bool(mess.get("registered")),
+    })
+    return {"message": "Meal plan request withdrawn"}
+
+
 @router.put("/{mess_id}")
 def update_mess(mess_id: str, request: MessUpdateRequest, current_user: dict = Depends(get_current_staff)):
     _require_super_admin(current_user, "update")

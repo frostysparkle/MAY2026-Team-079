@@ -134,10 +134,7 @@ def test_a_refusal_and_its_cause_are_joinable(client, admin, register_participan
                headers=admin)
 
     diner = register_participant()
-    database.participants_collection.update_one(
-        {"_id": diner["document"]["_id"]},
-        {"$set": {"mess.registered": True}},
-    )
+    client.post("/mess/register", headers=diner["headers"])
     client.post("/mess/allocate", headers=admin)
 
     refused = client.post("/mess/MESS1/scan?slot=breakfast&day=1",
@@ -194,7 +191,7 @@ def test_the_summary_and_the_table_never_disagree(client, admin, register_partic
 
 @pytest.mark.slow
 def test_the_dashboard_totals_match_the_per_entity_rosters(
-    client, admin, register_participant, opt_into_mess
+    client, admin, register_participant
 ):
     """
     `/participants/statistics` counts from the participants collection while the
@@ -210,7 +207,7 @@ def test_the_dashboard_totals_match_the_per_entity_rosters(
     seated = [register_participant(gender="male", mess_preference="jain") for _ in range(2)]
     housed_only = register_participant(gender="male")
     for person in seated:
-        opt_into_mess(person)
+        client.post("/mess/register", headers=person["headers"])
     for person in seated + [housed_only]:
         client.post("/hostels/register", headers=person["headers"])
 
