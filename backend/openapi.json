@@ -535,51 +535,6 @@
         }
       }
     },
-    "/workshops/recommendations": {
-      "post": {
-        "tags": [
-          "Workshops"
-        ],
-        "summary": "Recommend Workshops",
-        "description": "The full workshop catalogue, re-ranked by cosine similarity to a query or\nto this participant's saved preference embedding. Mirrors\n`POST /events/recommendations` exactly, except it reads/writes\n`embedding.workshop` instead of `embedding.event` \u2014 a separate slot on the\nsame participant document, so ranking workshops never disturbs whatever\nwas saved for events, and vice versa.\n\nNothing is filtered out: every workshop that exists is returned, only\nreordered, most similar first. `query` omitted/blank reuses the saved\nvector without calling `generate_embedding`; a participant with no saved\npreference and no query gets back the zero vector's similarity (0.0\nagainst everything, per `cosine_similarity`), which still returns the\nfull catalogue rather than erroring.\n\nDeclared before any `/{workshop_id}` route so \"recommendations\" is never\ncaptured as a workshop id.",
-        "operationId": "recommend_workshops_workshops_recommendations_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RecommendationRequest",
-                "default": {}
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/workshops/my_registrations": {
       "get": {
         "tags": [
@@ -1429,51 +1384,6 @@
             }
           }
         }
-      }
-    },
-    "/events/recommendations": {
-      "post": {
-        "tags": [
-          "Events"
-        ],
-        "summary": "Recommend Events",
-        "description": "The full events catalogue, re-ranked by cosine similarity to a query or to\nthis participant's saved preference embedding \u2014 nothing is filtered out,\nevery event that exists is returned, only reordered, most similar first.\n\nA `query` is embedded and persisted to `embedding.event` on this\nparticipant's own document, replacing whatever was saved there before \u2014\nthe same slot `PATCH /profile/complete` writes from `event_preferences`,\nso asking here updates the one profile-wide event preference rather than\ncreating a second, competing copy of it. Omitting `query` (or sending it\nnull/blank) reuses that saved vector as-is and does *not* call\n`generate_embedding` \u2014 there is no text to embed, and embedding an empty\nstring would silently overwrite a real saved preference with a zero\nvector.\n\nA participant who has never set a preference and sends no query has an\nall-zero `embedding.event` (set at `POST /auth/register`); `cosine_similarity`\ndefines that as 0.0 against everything, so this still returns the full\ncatalogue rather than erroring \u2014 just in whatever order Mongo happens to\nreturn it, since every similarity ties.\n\nDeclared here, directly after the two other literal `GET`/`POST /events`\npaths and before `PUT /{event_id}` and its siblings, so \"recommendations\"\nis never captured as an `event_id`.",
-        "operationId": "recommend_events_events_recommendations_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RecommendationRequest",
-                "default": {}
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
       }
     },
     "/events/{event_id}": {
@@ -3130,6 +3040,150 @@
         ]
       }
     },
+    "/hostels/{hostel_id}": {
+      "put": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Update Hostel",
+        "description": "Edit a block's `name` or `capacity`, Super Admin only.\n\nMirrors `mess.update_mess`: every field optional, nothing to update is a\n400, and a `capacity` cut below the block's real bed ceiling\n(`min(capacity, sharing * num_rooms)`, the same ceiling `allocate_hostels`\nenforces) is logged rather than refused \u2014 the residents already assigned\nkeep their beds, and allocation simply stops placing anyone new here until\ncapacity is raised again or beds free up. Rooming (`sharing`/`num_rooms`)\nand `gender` are not editable through this route; see\n`HostelUpdateRequest`.",
+        "operationId": "update_hostel_hostels__hostel_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hostel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Hostel Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostelUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Delete Hostel",
+        "description": "Delete a hostel block, Super Admin only.\n\nCascades: every participant currently pointing at this hostel has their\naccommodation reset (hostel_id, room, inside, arrival, departure) so they\nare no longer marked as living somewhere that no longer exists.\n`registered` is left untouched, since they still want a bed \u2014 just not this\none \u2014 and should be eligible for a future `/allocate` run.",
+        "operationId": "delete_hostel_hostels__hostel_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hostel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Hostel Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Get Hostel",
+        "description": "A single hostel's document. Declared last so it never captures a literal\npath (`/allocate`, `/register`, `/my_hostel`) defined earlier in this file.",
+        "operationId": "get_hostel_hostels__hostel_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hostel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Hostel Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/hostels/{hostel_id}/team": {
       "post": {
         "tags": [
@@ -3432,96 +3486,6 @@
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/hostels/{hostel_id}": {
-      "delete": {
-        "tags": [
-          "Hostels"
-        ],
-        "summary": "Delete Hostel",
-        "description": "Delete a hostel block, Super Admin only.\n\nCascades: every participant currently pointing at this hostel has their\naccommodation reset (hostel_id, room, inside, arrival, departure) so they\nare no longer marked as living somewhere that no longer exists.\n`registered` is left untouched, since they still want a bed \u2014 just not this\none \u2014 and should be eligible for a future `/allocate` run.",
-        "operationId": "delete_hostel_hostels__hostel_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "hostel_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Hostel Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "Hostels"
-        ],
-        "summary": "Get Hostel",
-        "description": "A single hostel's document. Declared last so it never captures a literal\npath (`/allocate`, `/register`, `/my_hostel`) defined earlier in this file.",
-        "operationId": "get_hostel_hostels__hostel_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "hostel_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Hostel Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5175,6 +5139,36 @@
         ],
         "title": "HostelCreateRequest"
       },
+      "HostelUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity"
+          }
+        },
+        "type": "object",
+        "title": "HostelUpdateRequest",
+        "description": "Every field optional: a caller updates only what it names. Mirrors\n`mess.MessUpdateRequest`'s shape and the same reasoning: `PATCH`-like\nsemantics on top of a `PUT`, because the two admin dashboards this backs\n(mess halls, hostel blocks) always edit one field of a body at a time.\n\n`gender` and the rooming fields (`sharing`, `num_rooms`) are deliberately\nabsent \u2014 the same restriction `HostelCreateRequest`'s own doc comment\nalready states for `gender` (\"cannot be changed afterwards by any route in\nthis file\"), extended to rooming for the same reason: `rooms` holds live\n`occupants` arrays keyed by room index, and neither growing nor shrinking\nthat array can be done as a same-shaped `$set` the way `name`/`capacity`\ncan \u2014 it needs a real migration of who is assigned where, which is exactly\nthe \"an organiser's decision, not a seed script's\" judgement `seed.py`\nalready makes about hostel drift in general. Only the two fields with no\nsuch structural entanglement are editable here."
+      },
       "IssueCreateRequest": {
         "properties": {
           "facility_type": {
@@ -5823,24 +5817,6 @@
         },
         "type": "object",
         "title": "QueryUpdateRequest"
-      },
-      "RecommendationRequest": {
-        "properties": {
-          "query": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Query"
-          }
-        },
-        "type": "object",
-        "title": "RecommendationRequest",
-        "description": "`POST /events/recommendations` and `POST /workshops/recommendations`.\n\n`query` is free text to embed and rank the catalogue against. Omitted or\nnull falls back to the participant's already-saved preference embedding\nfor that domain (`embedding.event` / `embedding.workshop` on their own\ndocument) \u2014 set the first time either endpoint is called with a query, or\nby `PATCH /profile/complete`'s `event_preferences`. Shared by both routers\nrather than declared twice, since the shape is identical."
       },
       "RegisterRequest": {
         "properties": {
