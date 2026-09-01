@@ -23,7 +23,7 @@ from similarity import cosine_similarity
 client = TestClient(app)
 
 
-def unit(i: int, n: int = 768) -> list[float]:
+def unit(i: int, n: int = 2048) -> list[float]:
     """A one-hot-ish vector so two different indices are guaranteed dissimilar."""
     v = [0.0] * n
     v[i % n] = 1.0
@@ -152,7 +152,7 @@ def test_workshops_are_all_returned_sorted_and_use_separate_embedding_slot(monke
     # The workshop-side search must not touch the event-side embedding slot.
     doc = participants_collection.find_one({"email": participant["email"]})
     assert doc["embedding"]["workshop"] == unit(2)
-    assert doc["embedding"]["event"] == [0.0] * 768
+    assert doc["embedding"]["event"] == [0.0] * 2048
 
 
 def test_no_query_and_no_saved_preference_still_returns_everything(sa_token, participant):

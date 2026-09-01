@@ -73,7 +73,7 @@ def test_an_event_is_created_with_backend_assigned_ids(client, admin_headers, su
     assert document["event_team"] == []
     assert document["announcements"] == []
     assert document["created_by"] == super_admin["_id"]
-    assert len(document["embedding"]) == 768
+    assert len(document["embedding"]) == 2048
 
 
 def test_only_super_admins_can_create(client, staff_headers):

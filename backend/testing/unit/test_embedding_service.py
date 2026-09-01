@@ -57,10 +57,10 @@ def _install(monkeypatch, client):
 # zero_embedding
 # ---------------------------------------------------------------------------
 
-def test_zero_embedding_is_768_floats():
+def test_zero_embedding_is_the_stored_width():
     vector = zero_embedding()
-    assert EMBEDDING_DIMENSIONS == 768
-    assert len(vector) == 768
+    assert EMBEDDING_DIMENSIONS == 2048
+    assert len(vector) == EMBEDDING_DIMENSIONS
     assert set(vector) == {0.0}
 
 
@@ -75,13 +75,13 @@ def test_zero_embedding_returns_a_fresh_list_each_time():
 # ---------------------------------------------------------------------------
 
 def test_testing_flag_short_circuits_without_touching_the_provider(monkeypatch):
-    client = _install(monkeypatch, _FakeClient(vector=[0.5] * 768))
+    client = _install(monkeypatch, _FakeClient(vector=[0.5] * EMBEDDING_DIMENSIONS))
     assert generate_embedding("a real description") == zero_embedding()
     assert client.embeddings.calls == [], "the provider was called under TESTING=1"
 
 
 def test_the_flag_is_read_per_call_not_at_import(monkeypatch, live):
-    client = _install(monkeypatch, _FakeClient(vector=[0.25] * 768))
+    client = _install(monkeypatch, _FakeClient(vector=[0.25] * EMBEDDING_DIMENSIONS))
     assert generate_embedding("text")[0] == 0.25
     monkeypatch.setenv("TESTING", "1")
     assert generate_embedding("text") == zero_embedding()
@@ -93,7 +93,7 @@ def test_the_flag_is_read_per_call_not_at_import(monkeypatch, live):
 
 @pytest.mark.parametrize("text", ["", "   ", "\n\t", None])
 def test_blank_text_short_circuits_even_when_live(monkeypatch, live, text):
-    client = _install(monkeypatch, _FakeClient(vector=[0.5] * 768))
+    client = _install(monkeypatch, _FakeClient(vector=[0.5] * EMBEDDING_DIMENSIONS))
     assert generate_embedding(text) == zero_embedding()
     assert client.embeddings.calls == []
 
@@ -103,16 +103,17 @@ def test_blank_text_short_circuits_even_when_live(monkeypatch, live, text):
 # ---------------------------------------------------------------------------
 
 def test_a_well_formed_vector_is_returned_verbatim(monkeypatch, live):
-    vector = [i / 1000 for i in range(768)]
+    vector = [i / 1000 for i in range(EMBEDDING_DIMENSIONS)]
     _install(monkeypatch, _FakeClient(vector=vector))
     assert generate_embedding("a description") == vector
 
 
-def test_the_request_pins_model_and_dimensions(monkeypatch, live):
-    client = _install(monkeypatch, _FakeClient(vector=[0.0] * 768))
+def test_the_request_pins_model_and_omits_dimensions(monkeypatch, live):
+    client = _install(monkeypatch, _FakeClient(vector=[0.0] * EMBEDDING_DIMENSIONS))
     generate_embedding("  a description  ")
     call = client.embeddings.calls[0]
-    assert call["dimensions"] == 768
+    assert "dimensions" not in call
+    assert call["encoding_format"] == "float"
     assert call["model"] == embedding_service.EMBEDDINGS_DEFAULT_MODEL
     assert call["input"] == "a description", "text should be stripped before sending"
 
@@ -120,7 +121,7 @@ def test_the_request_pins_model_and_dimensions(monkeypatch, live):
 def test_the_returned_vector_is_a_new_list(monkeypatch, live):
     """`list(...)` copies, so mutating the stored vector cannot reach back into
     the provider's response object."""
-    source = [0.1] * 768
+    source = [0.1] * EMBEDDING_DIMENSIONS
     _install(monkeypatch, _FakeClient(vector=source))
     result = generate_embedding("text")
     result[0] = 9.9
@@ -155,7 +156,7 @@ def test_a_client_that_cannot_even_be_built_yields_zeros(monkeypatch, live):
 # Branch: wrong dimensionality
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("length", [0, 1, 767, 769, 1536])
+@pytest.mark.parametrize("length", [0, 1, 768, 1536, 2047, 2049])
 def test_a_wrongly_sized_vector_is_rejected(monkeypatch, live, length):
     _install(monkeypatch, _FakeClient(vector=[0.1] * length))
     assert generate_embedding("text") == zero_embedding()

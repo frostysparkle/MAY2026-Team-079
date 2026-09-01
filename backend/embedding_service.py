@@ -19,7 +19,9 @@ from routers.embeddings import get_client, EMBEDDINGS_DEFAULT_MODEL
 # caused it.
 logger = log_config.get_logger("paradox.embeddings")
 
-EMBEDDING_DIMENSIONS = 768
+# Native size of nvidia/nemotron-3-embed-1b (OpenRouter). That model rejects
+# the `dimensions` pin; omit it and store the full vector.
+EMBEDDING_DIMENSIONS = 2048
 
 
 def zero_embedding() -> list[float]:
@@ -51,7 +53,7 @@ def generate_embedding(text: str) -> list[float]:
         response = get_client().embeddings.create(
             input=text,
             model=EMBEDDINGS_DEFAULT_MODEL,
-            dimensions=EMBEDDING_DIMENSIONS,
+            encoding_format="float",
         )
         vector = list(response.data[0].embedding)
     except Exception:

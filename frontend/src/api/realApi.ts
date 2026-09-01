@@ -216,14 +216,11 @@ export const realApi: ApiClient = {
 
   // ---- embeddings ----
   generateEmbedding: async (input: string | string[]) => {
-    // `dimensions: 768` matches what the backend asks for when it embeds an
-    // event/workshop description (`embedding_service.EMBEDDING_DIMENSIONS`).
-    // Without it, Gemini returns its default 3072-dim vector, which fails the
-    // length check in `cosineSimilarity` against every stored embedding and
-    // silently scores every item 0 — recommendations then rank nothing.
+    // Do not send `dimensions`: nvidia/nemotron-3-embed-1b is natively 2048-d
+    // and rejects a 768 pin. The backend stores the same native size.
     const response = await request<{ data: Array<{ embedding: number[] }> }>('/embeddings', {
       method: 'POST',
-      body: JSON.stringify({ input, dimensions: 768 }),
+      body: JSON.stringify({ input }),
     });
     return response.data.map((item) => item.embedding);
   },

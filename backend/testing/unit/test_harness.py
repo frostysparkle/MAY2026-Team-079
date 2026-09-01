@@ -142,7 +142,7 @@ def test_participant_factory_matches_registration_shape(make_participant):
     assert set(doc["accommodation"]) == {
         "registered", "hostel_id", "room", "arrival", "inside", "departure", "payment",
     }
-    assert len(doc["embedding"]["workshop"]) == 768
+    assert len(doc["embedding"]["workshop"]) == 2048
 
 
 def test_participant_factory_deep_merges_overrides(make_participant):

@@ -428,7 +428,8 @@ def test_unset_optional_fields_are_absent_rather_than_null(client, participant, 
     """Some local OpenAI-compatible servers reject unrecognised null fields."""
     client.post("/embeddings", json={"input": "hello"}, headers=auth_headers(participant))
     call = provider.embeddings.calls[0]
-    assert set(call) == {"input", "model"}
+    assert set(call) == {"input", "model", "encoding_format"}
+    assert call["encoding_format"] == "float"
 
 
 def test_supplied_optional_fields_are_forwarded(client, participant, provider):

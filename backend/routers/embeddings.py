@@ -113,9 +113,12 @@ def create_embedding(request: EmbeddingRequest, current_user: dict = Depends(rat
     nulls, since some local OpenAI-compatible servers reject unrecognised
     null fields.
     """
-    kwargs = {"input": request.input, "model": request.model or EMBEDDINGS_DEFAULT_MODEL}
-    if request.encoding_format is not None:
-        kwargs["encoding_format"] = request.encoding_format
+    kwargs = {
+        "input": request.input,
+        "model": request.model or EMBEDDINGS_DEFAULT_MODEL,
+        # Nvidia/OpenRouter reject the SDK's base64 default.
+        "encoding_format": request.encoding_format or "float",
+    }
     if request.dimensions is not None:
         kwargs["dimensions"] = request.dimensions
     if request.user is not None:

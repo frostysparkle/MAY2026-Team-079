@@ -30,7 +30,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 # `new_password`, and `hashed_password` are all caught by the one entry.
 #
 # `data` is here because that is the field name `ScanQRRequest` uses for the
-# RSA-OAEP ciphertext, and `embedding` because a 768-float vector is not a
+# RSA-OAEP ciphertext, and `embedding` because a 2048-float vector is not a
 # secret but would drown every other field in the line.
 SENSITIVE_KEY_PARTS = (
     "password",

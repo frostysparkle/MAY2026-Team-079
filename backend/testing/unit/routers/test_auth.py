@@ -79,8 +79,8 @@ def test_registration_writes_the_documented_document(client):
     }
     assert document["events"] == [] and document["workshops"] == []
     assert document["photo"] is None
-    assert len(document["embedding"]["workshop"]) == 768
-    assert len(document["embedding"]["event"]) == 768
+    assert len(document["embedding"]["workshop"]) == 2048
+    assert len(document["embedding"]["event"]) == 2048
     assert document["created_at"] and document["updated_at"]
 
 

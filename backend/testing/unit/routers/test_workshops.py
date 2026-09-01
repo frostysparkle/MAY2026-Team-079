@@ -60,7 +60,7 @@ def test_a_workshop_is_created_from_its_slot(client, admin_headers, slot, super_
     assert document["registration_closed_by_system"] is False
     assert document["workshop_team"] == []
     assert document["created_by"] == super_admin["_id"]
-    assert len(document["embedding"]) == 768
+    assert len(document["embedding"]) == 2048
 
 
 def test_creating_against_a_missing_slot_is_a_404(client, admin_headers):
