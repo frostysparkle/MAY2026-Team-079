@@ -31,6 +31,9 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
     depends_on:
       mongo:
         condition: service_healthy
