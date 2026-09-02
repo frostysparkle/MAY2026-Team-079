@@ -1,8 +1,9 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ChangeEvent, type ClipboardEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
   DEFAULT_PHONE_ISO,
+  INDIA,
   PHONE_COUNTRY_OPTIONS,
   countryByIso,
   digitsOnly,
@@ -32,6 +33,10 @@ export interface PhoneInputProps {
  * that country's digit limit. Emits the canonical `+{code} {national}` string
  * the backend validates, or `''` while the national side is still empty so a
  * required field does not look filled in from the country picker alone.
+ *
+ * Extra digits are clipped in the event handler (and `maxLength` on the input)
+ * because a parent that already holds the capped value will not re-render, and
+ * `type="tel"` ignores `maxLength` in some browsers.
  */
 export function PhoneInput({
   label,
@@ -55,27 +60,47 @@ export function PhoneInput({
   const parsed = parsePhone(value);
   const [pickedIso, setPickedIso] = useState(() => parsed?.country.iso ?? defaultIso);
   const iso = parsed?.country.iso ?? pickedIso;
-  const country = countryByIso(iso) ?? countryByIso(defaultIso);
-  const national = parsed?.national ?? (value.trim() ? digitsOnly(value) : '');
+  const country = countryByIso(iso) ?? countryByIso(defaultIso) ?? INDIA;
+  const maxDigits = country.max;
+  const national = (parsed?.national ?? (value.trim() ? digitsOnly(value) : '')).slice(
+    0,
+    maxDigits,
+  );
 
-  const description =
-    error ?? hint ?? (country ? `${lengthHint(country)} for ${country.name}` : undefined);
+  const description = error ?? hint ?? `${lengthHint(country)} for ${country.name}`;
 
   const options = useMemo(() => PHONE_COUNTRY_OPTIONS, []);
 
   function emit(nextIso: string, nextNational: string) {
-    const nextCountry = countryByIso(nextIso) ?? countryByIso(defaultIso);
-    if (!nextCountry) {
-      onChange('');
-      return;
-    }
-    const capped = nextNational.slice(0, nextCountry.max);
+    const nextCountry = countryByIso(nextIso) ?? countryByIso(defaultIso) ?? INDIA;
+    const capped = digitsOnly(nextNational).slice(0, nextCountry.max);
     setPickedIso(nextCountry.iso);
     onChange(capped ? formatPhone(nextCountry, capped) : '');
+    return capped;
   }
 
-  function onNationalChange(raw: string) {
+  function onNationalChange(e: ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
     const trimmed = raw.trim();
+    if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
+      const pasted = parsePhone(trimmed);
+      if (pasted) {
+        const capped = emit(pasted.country.iso, pasted.national);
+        e.target.value = capped;
+        return;
+      }
+    }
+    const capped = emit(iso, raw);
+    // Clip even when the parent value did not change (already at the limit),
+    // otherwise React skips the render and the extra digit stays in the box.
+    e.target.value = capped;
+  }
+
+  function onPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+    e.preventDefault();
+    const trimmed = text.trim();
     if (trimmed.startsWith('+') || trimmed.startsWith('00')) {
       const pasted = parsePhone(trimmed);
       if (pasted) {
@@ -83,7 +108,10 @@ export function PhoneInput({
         return;
       }
     }
-    emit(iso, digitsOnly(raw));
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? el.value.length;
+    emit(iso, `${el.value.slice(0, start)}${text}${el.value.slice(end)}`);
   }
 
   return (
@@ -103,7 +131,7 @@ export function PhoneInput({
             id={selectId}
             aria-label={`${label} country code`}
             disabled={disabled}
-            value={country?.iso ?? defaultIso}
+            value={country.iso}
             onChange={(e) => emit(e.target.value, national)}
             onBlur={onBlur}
             className={cn(
@@ -127,7 +155,7 @@ export function PhoneInput({
         </div>
         <input
           id={inputId}
-          type="tel"
+          type="text"
           inputMode="numeric"
           autoComplete={autoComplete}
           disabled={disabled}
@@ -136,9 +164,11 @@ export function PhoneInput({
           aria-invalid={error ? true : undefined}
           aria-describedby={description ? errorId : undefined}
           value={national}
-          maxLength={country?.max}
-          placeholder={country ? lengthHint(country) : undefined}
-          onChange={(e) => onNationalChange(e.target.value)}
+          maxLength={maxDigits}
+          pattern="[0-9]*"
+          placeholder={lengthHint(country)}
+          onChange={onNationalChange}
+          onPaste={onPaste}
           onBlur={onBlur}
           className={cn(
             'min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors',
