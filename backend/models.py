@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from typing import Optional, List, Dict, Any, Union, Literal
 from datetime import datetime, timezone
 
+from phone import validate_phone
+
 # Auth models
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -27,6 +29,11 @@ class EmergencyContact(BaseModel):
     name: str
     relation: str  # father | mother | elder_sibling | guardian
     phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def _valid_phone(cls, v):
+        return validate_phone(v)
 
 # Closed vocabularies for every profile field the client can choose from a
 # fixed list, validated here rather than left as free strings. Centralised in
@@ -134,6 +141,11 @@ class ProfileCompleteRequest(BaseModel):
         if v is not None and v not in MESS_PREFERENCE_TYPES:
             raise ValueError(f"mess_preference must be one of {sorted(MESS_PREFERENCE_TYPES)}")
         return v
+
+    @field_validator("phone")
+    @classmethod
+    def _valid_phone(cls, v):
+        return validate_phone(v)
 
 
 class MockPaymentRequest(BaseModel):
@@ -627,3 +639,10 @@ class ParticipantAdminUpdateRequest(BaseModel):
         if v is not None and v not in MESS_PREFERENCE_TYPES:
             raise ValueError(f"mess_preference must be one of {sorted(MESS_PREFERENCE_TYPES)}")
         return v
+
+    @field_validator("phone")
+    @classmethod
+    def _valid_phone(cls, v):
+        if v is None:
+            return v
+        return validate_phone(v)

@@ -84,15 +84,21 @@ def test_the_admin_vocabularies_match_the_participant_ones():
 
 
 def test_free_text_fields_are_unvalidated():
-    request = ParticipantAdminUpdateRequest(full_name="  ", phone="not-a-number", city="")
+    request = ParticipantAdminUpdateRequest(full_name="  ", city="")
     assert request.full_name == "  "
+
+
+def test_admin_phone_uses_the_same_country_limit_as_the_profile():
+    assert ParticipantAdminUpdateRequest(phone="9000000001").phone == "+91 9000000001"
+    with pytest.raises(ValidationError, match="cannot exceed 10 digits"):
+        ParticipantAdminUpdateRequest(phone="+91 98765432101")
 
 
 def test_the_nested_emergency_contact_is_still_validated():
     with pytest.raises(ValidationError):
         ParticipantAdminUpdateRequest(emergency_contact={"name": "Ravi"})
     request = ParticipantAdminUpdateRequest(
-        emergency_contact={"name": "Ravi", "relation": "father", "phone": "9"}
+        emergency_contact={"name": "Ravi", "relation": "father", "phone": "9000000000"}
     )
     assert request.emergency_contact.name == "Ravi"
 

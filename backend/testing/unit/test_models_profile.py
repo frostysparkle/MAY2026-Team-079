@@ -145,7 +145,13 @@ def test_emergency_contact_requires_all_three_fields():
 def test_emergency_contact_relation_is_not_a_closed_set():
     """Documented as a comment in models.py but never validated; pinned so a
     later tightening is a deliberate change."""
-    assert EmergencyContact(name="R", relation="neighbour", phone="9").relation == "neighbour"
+    assert EmergencyContact(name="R", relation="neighbour", phone="9000000000").relation == "neighbour"
+
+
+def test_emergency_contact_phone_uses_the_country_digit_limit():
+    assert EmergencyContact(name="Ravi", relation="father", phone="9000000000").phone == "+91 9000000000"
+    with pytest.raises(ValidationError, match="cannot exceed 10 digits"):
+        EmergencyContact(name="Ravi", relation="father", phone="+91 98765432101")
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +253,7 @@ def test_nested_emergency_contact_is_parsed_into_a_model():
     })
     assert isinstance(request.emergency_contact, EmergencyContact)
     assert request.emergency_contact.model_dump() == {
-        "name": "Ravi", "relation": "father", "phone": "9000000000",
+        "name": "Ravi", "relation": "father", "phone": "+91 9000000000",
     }
 
 
@@ -256,10 +262,25 @@ def test_an_incomplete_emergency_contact_fails_the_whole_request():
         ProfileCompleteRequest(**{**VALID_PROFILE, "emergency_contact": {"name": "Ravi"}})
 
 
-def test_dob_and_phone_are_free_strings():
-    """No format is enforced today; pinned so a future format rule is a decision."""
-    request = ProfileCompleteRequest(**{**VALID_PROFILE, "dob": "not-a-date", "phone": "abc"})
+def test_dob_is_still_a_free_string():
+    """Date-of-birth format is enforced in the form, not here."""
+    request = ProfileCompleteRequest(**{**VALID_PROFILE, "dob": "not-a-date"})
     assert request.dob == "not-a-date"
+
+
+def test_phone_is_canonicalised_to_plus_country_code():
+    request = ProfileCompleteRequest(**VALID_PROFILE)
+    assert request.phone == "+91 9000000001"
+
+
+def test_phone_rejects_more_digits_than_the_country_allows():
+    with pytest.raises(ValidationError, match="cannot exceed 10 digits"):
+        ProfileCompleteRequest(**{**VALID_PROFILE, "phone": "+91 98765432101"})
+
+
+def test_phone_accepts_an_explicit_foreign_country_code():
+    request = ProfileCompleteRequest(**{**VALID_PROFILE, "phone": "+971 501234567"})
+    assert request.phone == "+971 501234567"
 
 
 # ---------------------------------------------------------------------------

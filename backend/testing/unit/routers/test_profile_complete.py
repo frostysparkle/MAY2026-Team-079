@@ -102,8 +102,9 @@ def test_an_omitted_photo_keeps_the_stored_one(client, make_participant):
 def test_a_contact_can_be_saved(client, participant):
     body = client.patch("/profile/complete", json={**PROFILE, "emergency_contact": CONTACT},
                         headers=auth_headers(participant)).json()
-    assert body["emergency_contact"] == CONTACT
-    assert stored(participant)["profile"]["emergency_contact"] == CONTACT
+    saved = {**CONTACT, "phone": "+91 9000000009"}
+    assert body["emergency_contact"] == saved
+    assert stored(participant)["profile"]["emergency_contact"] == saved
 
 
 def test_omitting_the_contact_preserves_a_stored_one(client, make_participant):

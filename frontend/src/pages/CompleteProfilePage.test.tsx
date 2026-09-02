@@ -45,6 +45,19 @@ const returningUser: ParticipantLoginResponse = {
 describe('CompleteProfilePage', () => {
   beforeEach(() => useAuthStore.getState().setParticipantSession(newUser));
 
+  it('defaults the phone country code to India', () => {
+    render(
+      <MemoryRouter>
+        <CompleteProfilePage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('combobox', { name: /phone number country code/i })).toHaveValue('IN');
+    expect(screen.getByRole('textbox', { name: /phone number/i })).toHaveAttribute(
+      'maxLength',
+      '10',
+    );
+  });
+
   it('blocks submission and shows validation errors when empty', async () => {
     render(
       <MemoryRouter>
@@ -72,9 +85,10 @@ describe('CompleteProfilePage', () => {
     );
 
     expect(screen.getByLabelText(/Full Name/i)).toHaveValue('Ananya Raghavan');
-    expect(screen.getByLabelText(/Phone Number/i)).toHaveValue('9876543210');
+    expect(screen.getByRole('textbox', { name: /phone number/i })).toHaveValue('9876543210');
+    expect(screen.getByRole('combobox', { name: /phone number country code/i })).toHaveValue('IN');
     expect(screen.getByLabelText(/Address/i)).toHaveValue('12 Marine Drive');
-    expect(screen.getByLabelText(/Country/i)).toHaveDisplayValue('India');
+    expect(screen.getByRole('combobox', { name: /^Country/ })).toHaveDisplayValue('India');
     expect(screen.getByLabelText(/State/i)).toHaveDisplayValue('Kerala');
     expect(screen.getByLabelText(/City/i)).toHaveDisplayValue('Kochi');
     expect(screen.getByLabelText(/House/i)).toHaveDisplayValue('Wayanad House');

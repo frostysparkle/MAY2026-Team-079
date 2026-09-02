@@ -323,13 +323,13 @@ def test_untouched_profile_fields_survive(client, admin_headers, participant):
     profile = database.participants_collection.find_one(
         {"_id": participant["_id"]}
     )["profile"]
-    assert profile["phone"] == "9111111111"
+    assert profile["phone"] == "+91 9111111111"
     assert profile["full_name"] == "Test Participant"
     assert profile["address"] == "1 Test Street"
 
 
 def test_an_unknown_participant_is_a_404(client, admin_headers):
-    response = client.patch("/participants/DS23F999999", json={"phone": "9"},
+    response = client.patch("/participants/DS23F999999", json={"phone": "9000000001"},
                             headers=admin_headers)
     assert response.status_code == 404
     assert response.json()["detail"] == "Participant not found"
@@ -360,7 +360,7 @@ def test_a_nested_emergency_contact_is_written(client, admin_headers, participan
     contact = {"name": "Ravi", "relation": "father", "phone": "9000000009"}
     body = client.patch(f"/participants/{participant['participant_id']}",
                         json={"emergency_contact": contact}, headers=admin_headers).json()
-    assert body["profile"]["emergency_contact"] == contact
+    assert body["profile"]["emergency_contact"] == {**contact, "phone": "+91 9000000009"}
 
 
 def test_identity_and_allocation_fields_are_unreachable(client, admin_headers, participant):
@@ -391,7 +391,7 @@ def test_the_edit_is_audited_with_field_names_only(client, admin_headers, partic
 
 def test_the_acting_admin_is_named_in_the_row(client, admin_headers, participant, super_admin, audit):
     client.patch(f"/participants/{participant['participant_id']}",
-                 json={"phone": "9"}, headers=admin_headers)
+                 json={"phone": "9000000001"}, headers=admin_headers)
     row = audit.one("UPDATE_PARTICIPANT")
     assert row["actor_id"] == super_admin["paradox_id"]
     assert row["actor_type"] == "staff"
@@ -400,7 +400,7 @@ def test_the_acting_admin_is_named_in_the_row(client, admin_headers, participant
 
 def test_updated_at_is_stamped(client, admin_headers, participant):
     client.patch(f"/participants/{participant['participant_id']}",
-                 json={"phone": "9"}, headers=admin_headers)
+                 json={"phone": "9000000001"}, headers=admin_headers)
     assert database.participants_collection.find_one(
         {"_id": participant["_id"]}
     )["updated_at"] >= participant["updated_at"]
@@ -409,7 +409,7 @@ def test_updated_at_is_stamped(client, admin_headers, participant):
 def test_the_statistics_path_is_not_captured_as_a_participant_id(client, admin_headers):
     """`PATCH /participants/statistics` has no handler of its own, so it routes
     into the id route and reports a missing participant."""
-    response = client.patch("/participants/statistics", json={"phone": "9"},
+    response = client.patch("/participants/statistics", json={"phone": "9000000001"},
                             headers=admin_headers)
     assert response.status_code == 404
     assert response.json()["detail"] == "Participant not found"

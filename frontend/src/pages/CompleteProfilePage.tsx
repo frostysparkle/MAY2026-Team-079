@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm, useWatch, type Control } from 'react-hook-form';
+import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Camera,
@@ -27,10 +27,12 @@ import {
   IconTile,
   ProgressRing,
   ResultBanner,
+  PhoneInput,
   Select,
   StatusBadge,
   TextInput,
 } from '@/components/ui';
+import { phoneFieldError } from '@/lib/phone';
 import type { FieldError } from '@/api/errors';
 import { PhotoUpload } from '@/features/profile/PhotoUpload';
 import { LocationSelect, type LocationValue } from '@/features/profile/LocationSelect';
@@ -658,18 +660,27 @@ export default function CompleteProfilePage() {
                 error={errors.dob?.message}
                 {...register('dob', { required: 'Date of birth is required.' })}
               />
-              <TextInput
-                label="Phone Number"
-                type="tel"
-                required
-                autoComplete="tel"
-                placeholder="10 digits"
-                error={errors.phone?.message}
-                {...register('phone', {
-                  required: 'Phone number is required.',
-                  pattern: { value: /^\d{10}$/, message: 'Enter a 10-digit phone number.' },
-                })}
-              />
+              <Wide>
+                <Controller
+                  name="phone"
+                  control={control}
+                  rules={{
+                    required: 'Phone number is required.',
+                    validate: phoneFieldError,
+                  }}
+                  render={({ field, fieldState }) => (
+                    <PhoneInput
+                      label="Phone Number"
+                      required
+                      autoComplete="tel"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={fieldState.error?.message}
+                    />
+                  )}
+                />
+              </Wide>
               <Select
                 label="House"
                 required
@@ -749,14 +760,23 @@ export default function CompleteProfilePage() {
                 error={errors.emergency_relation?.message}
                 {...register('emergency_relation')}
               />
-              <TextInput
-                label="Phone"
-                type="tel"
-                autoComplete="off"
-                placeholder="e.g. 9876500001"
-                error={customErrors.emergency}
-                {...register('emergency_phone')}
-              />
+              <Wide>
+                <Controller
+                  name="emergency_phone"
+                  control={control}
+                  rules={{ validate: phoneFieldError }}
+                  render={({ field, fieldState }) => (
+                    <PhoneInput
+                      label="Phone"
+                      autoComplete="off"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={fieldState.error?.message || customErrors.emergency}
+                    />
+                  )}
+                />
+              </Wide>
               {isEditing && !session.emergency_contact && (
                 <div className="sm:col-span-2">
                   <p className="text-xs text-warning">

@@ -1,6 +1,8 @@
 export { Button } from './Button';
 export { BUTTON_ICON, BUTTON_ICON_STROKE } from './buttonIcon';
 export { TextInput } from './TextInput';
+export { PhoneInput } from './PhoneInput';
+export type { PhoneInputProps } from './PhoneInput';
 export { TextArea } from './TextArea';
 export { Select } from './Select';
 export type { SelectOption } from './Select';

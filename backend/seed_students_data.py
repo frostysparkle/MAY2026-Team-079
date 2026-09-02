@@ -423,9 +423,8 @@ INDIAN_REGIONS: tuple[NameBank, ...] = (
 # country code is prepended with a space, so what lands in `profile.phone` reads
 # the way somebody from that country would write it.
 #
-# Indian numbers are the exception: they are stored as bare 10 digits with no
-# country code, because that is what the profile form validates
-# (`/^\d{10}$/` in CompleteProfilePage) and what an Indian student types.
+# Indian numbers are stored as bare 10 digits with no country code — the
+# profile form defaults to +91 and still accepts this legacy shape.
 INDIA_MOBILE_PATTERNS: tuple[str, ...] = (
     "6#########", "7#########", "8#########", "9#########",
 )

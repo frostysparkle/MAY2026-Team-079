@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pencil, ShieldAlert, Users } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type { Event, RegistrationField } from '@/api/types';
-import { Button, ResultBanner, Select, TextInput } from '@/components/ui';
+import { Button, PhoneInput, ResultBanner, Select, TextInput } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { currentParticipant } from '@/stores/authStore';
 import { optionsForField, readEventExtras } from './eventExtras';
@@ -358,6 +358,12 @@ function RegistrationFieldInput({
     );
   }
 
+  if (field.type === 'phone') {
+    return (
+      <PhoneInput label={field.label} required={field.required} value={value} onChange={onChange} />
+    );
+  }
+
   return (
     <TextInput
       label={field.label}
@@ -370,14 +376,12 @@ function RegistrationFieldInput({
 }
 
 /** Map the backend's field vocabulary onto real HTML input types. */
-function inputTypeFor(type: string): 'text' | 'number' | 'email' | 'tel' | 'url' {
+function inputTypeFor(type: string): 'text' | 'number' | 'email' | 'url' {
   switch (type) {
     case 'number':
       return 'number';
     case 'email':
       return 'email';
-    case 'phone':
-      return 'tel';
     case 'url':
       return 'url';
     default:

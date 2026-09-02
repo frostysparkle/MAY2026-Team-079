@@ -281,7 +281,7 @@ describe('AdminParticipantsPage', () => {
     await user.paste('9111111111');
     await user.click(screen.getByRole('button', { name: /Save changes/ }));
 
-    expect(updateParticipant).toHaveBeenCalledWith('DS23F1000042', { phone: '9111111111' });
+    expect(updateParticipant).toHaveBeenCalledWith('DS23F1000042', { phone: '+91 9111111111' });
     expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
 

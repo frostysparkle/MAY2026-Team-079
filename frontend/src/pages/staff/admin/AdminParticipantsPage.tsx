@@ -29,6 +29,7 @@ import {
   StatCard,
   StatusBadge,
   TablePager,
+  PhoneInput,
   TextInput,
   ViewToggle,
   sortRows,
@@ -545,6 +546,17 @@ export default function AdminParticipantsPage() {
                   </div>
                 );
               }
+              if (field.key === 'phone') {
+                return (
+                  <PhoneInput
+                    key={field.key}
+                    label={field.label}
+                    value={value}
+                    hint={field.hint}
+                    onChange={(next) => setForm((current) => ({ ...current, [field.key]: next }))}
+                  />
+                );
+              }
               return (
                 <TextInput
                   key={field.key}
@@ -664,7 +676,11 @@ export default function AdminParticipantsPage() {
                 <span aria-hidden className="invisible text-sm font-medium">
                   Clear
                 </span>
-                <Button variant="ghost" className="border border-transparent" onClick={clearToolbar}>
+                <Button
+                  variant="ghost"
+                  className="border border-transparent"
+                  onClick={clearToolbar}
+                >
                   <X size={13} strokeWidth={2.5} /> Clear
                 </Button>
               </div>
