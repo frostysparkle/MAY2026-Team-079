@@ -22,7 +22,7 @@ describe('PhoneInput', () => {
   it('defaults the country code to India', () => {
     render(<PhoneInput label="Phone Number" value="" onChange={() => undefined} />);
     expect(screen.getByRole('combobox', { name: /phone number country code/i })).toHaveValue('IN');
-    expect(screen.getByText('10 digits for India')).toBeInTheDocument();
+    expect(screen.queryByText('10 digits for India')).not.toBeInTheDocument();
   });
 
   it("caps the national field at the selected country's limit", async () => {

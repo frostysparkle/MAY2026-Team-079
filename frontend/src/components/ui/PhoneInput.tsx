@@ -8,7 +8,6 @@ import {
   countryByIso,
   digitsOnly,
   formatPhone,
-  lengthHint,
   parsePhone,
 } from '@/lib/phone';
 
@@ -67,7 +66,7 @@ export function PhoneInput({
     maxDigits,
   );
 
-  const description = error ?? hint ?? `${lengthHint(country)} for ${country.name}`;
+  const description = error ?? hint;
 
   const options = useMemo(() => PHONE_COUNTRY_OPTIONS, []);
 
@@ -166,7 +165,6 @@ export function PhoneInput({
           value={national}
           maxLength={maxDigits}
           pattern="[0-9]*"
-          placeholder={lengthHint(country)}
           onChange={onNationalChange}
           onPaste={onPaste}
           onBlur={onBlur}
