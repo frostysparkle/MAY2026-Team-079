@@ -88,7 +88,7 @@ describe('Event Team panel — create new staff', () => {
     await submitNewStaff();
 
     expect(createBackendTeam).toHaveBeenCalledWith(
-      expect.objectContaining({ department: 'sports', role: 'volunteer' }),
+      expect.objectContaining({ department: 'sports', role: 'other' }),
     );
     expect(assignEventTeam).toHaveBeenCalledWith('22', {
       user_id: 'ADSP1234',

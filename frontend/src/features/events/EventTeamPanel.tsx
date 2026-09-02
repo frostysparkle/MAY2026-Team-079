@@ -192,12 +192,16 @@ export function EventTeamPanel({
       const created = await api.createBackendTeam({
         email: email.trim(),
         password,
-        // `backend_teams.role` is the account's fest-wide role and a separate
-        // vocabulary from the per-event role chosen in the dropdown. `volunteer` is
-        // the non-privileged value: an Event Head's authority comes from being named
-        // on `event_team`, not from their account role, so minting a
-        // `super_admin` here would hand out far more than this panel is for.
-        role: 'volunteer',
+        // `backend_teams.role` is the account's fest-wide role, a separate
+        // vocabulary from the per-event role chosen in the dropdown. "other" is
+        // the non-privileged value an event staffer needs: "volunteer" would
+        // have the backend demand a registered participant with this email
+        // (`POST /backend_teams` 400s otherwise) — event staff usually have no
+        // participant record — and "super_admin"/"admin" would hand out far
+        // more than this panel is for. An Event Head's authority comes from
+        // being named on `event_team`, not from the account's role; this is
+        // also exactly what `seed_staff.py` uses for its event members.
+        role: 'other',
         // `POST /backend_teams` validates `department` against the closed set in
         // `models.BACKEND_TEAM_DEPARTMENTS`, and "events" is not one of the seven
         // allowed values — so every "Create and assign" from this panel failed
