@@ -38,11 +38,15 @@ import { cn } from '@/lib/cn';
  * surface that shows the result still repeats `PAYMENT_DISCLAIMER`: real
  * transaction ids are recorded, but no gateway and no money sit behind them.
  *
- * The accommodation half has a second consequence beyond the payment record:
- * the moment it settles, `POST /hostels/register` is called — the real opt-in
- * flag `POST /hostels/allocate` filters on — so a student who pays here is
- * genuinely in the queue the organisers allocate from. A 400 back from that
- * call is deliberately not fatal: its two error branches both mean "you
+ * Each facility has a second consequence beyond its payment record: the moment
+ * its fee settles, the matching opt-in route is called — `POST /hostels/register`
+ * for accommodation, `POST /mess/register` for meals. Those set the exact flags
+ * the organisers' allocation batches filter on (`accommodation.registered`,
+ * `mess.registered`), so a student who pays here is genuinely in the queue the
+ * organisers allocate from. Paying alone does neither: `/pay` is deliberately
+ * independent of `registered`, so a settlement without the opt-in call leaves
+ * the student paid for and invisible to every allocation run. A 400 back from
+ * either call is deliberately not fatal: its two error branches both mean "you
  * already have this", which is a settled booking, not a failed one.
  *
  * No card fields are rendered, on purpose. A realistic-looking card form is the
@@ -73,7 +77,23 @@ export default function StayPaymentPage() {
 
   const items = stayLineItems(record.choice);
   const total = stayTotal(record.choice);
-  const wantsAccommodation = CHOICE_FACILITIES[record.choice].includes('accommodation');
+
+  /**
+   * Run one opt-in call, tolerating only its "already held" refusal.
+   *
+   * Both register routes answer 400 in exactly two cases — already allotted, or
+   * already registered (both idempotent states, not errors) — so a 400 here
+   * means the student is further along than this screen thought and the booking
+   * still settles. Anything else is real and propagates to the caller's catch,
+   * which keeps the booking unpaid.
+   */
+  async function registerRequested(call: () => Promise<unknown>) {
+    try {
+      await call();
+    } catch (e) {
+      if (!(e instanceof ApiClientError && e.status === 400)) throw e;
+    }
+  }
 
   async function pay() {
     if (!record) return;
@@ -82,25 +102,18 @@ export default function StayPaymentPage() {
     try {
       // One `/pay` call per facility in the choice — the two fees are separate
       // endpoints with separate fixed amounts, so a `both` booking settles both
-      // rather than one call covering the combined total.
+      // rather than one call covering the combined total. Each settlement is
+      // immediately followed by its opt-in: see the header comment for why the
+      // payment alone places nobody in any allocation queue.
       const facilities = CHOICE_FACILITIES[record.choice];
       const payments: Partial<Record<StayFacility, MockPaymentResponse>> = {};
       if (facilities.includes('accommodation')) {
         payments.accommodation = await api.payHostel({ method });
+        await registerRequested(() => api.registerForAccommodation());
       }
       if (facilities.includes('mess')) {
         payments.mess = await api.payMess({ method });
-      }
-
-      if (wantsAccommodation) {
-        try {
-          await api.registerForAccommodation();
-        } catch (e) {
-          // "Accommodation already allotted" means the student is further along
-          // than this screen thought, not that the booking failed.
-          const alreadyHeld = e instanceof ApiClientError && e.status === 400;
-          if (!alreadyHeld) throw e;
-        }
+        await registerRequested(() => api.registerForMess());
       }
 
       saveStayRecord(participantId, {

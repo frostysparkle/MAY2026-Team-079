@@ -8,6 +8,7 @@ import { clearStayRecord, readStayRecord, saveStayRecord } from '@/features/stay
 import type { MockPaymentRequest, MockPaymentResponse } from '@/api/types';
 
 const registerForAccommodation = vi.fn<() => Promise<{ message: string }>>();
+const registerForMess = vi.fn<() => Promise<{ message: string }>>();
 const payHostel = vi.fn<(req: MockPaymentRequest) => Promise<MockPaymentResponse>>();
 const payMess = vi.fn<(req: MockPaymentRequest) => Promise<MockPaymentResponse>>();
 
@@ -27,6 +28,7 @@ vi.mock('@/api', async (importOriginal) => {
     ...actual,
     api: {
       registerForAccommodation: () => registerForAccommodation(),
+      registerForMess: () => registerForMess(),
       payHostel: (req: MockPaymentRequest) => payHostel(req),
       payMess: (req: MockPaymentRequest) => payMess(req),
     },
@@ -62,6 +64,7 @@ describe('StayPaymentPage', () => {
   beforeEach(() => {
     clearStayRecord(PARTICIPANT_ID);
     registerForAccommodation.mockResolvedValue({ message: 'Accommodation requested' });
+    registerForMess.mockResolvedValue({ message: 'Meal plan requested' });
     payHostel.mockImplementation((req) =>
       Promise.resolve(paymentResponse('HOSTEL', 900, req.method ?? 'upi')),
     );
@@ -101,7 +104,7 @@ describe('StayPaymentPage', () => {
     expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument();
   });
 
-  it('settles both facilities against the real API and opts into the hostel queue', async () => {
+  it('settles both facilities against the real API and opts into both queues', async () => {
     pending('both');
     renderPage();
 
@@ -110,7 +113,9 @@ describe('StayPaymentPage', () => {
     expect(await screen.findByText('Stay hub')).toBeInTheDocument();
     expect(payHostel).toHaveBeenCalledWith({ method: 'upi' });
     expect(payMess).toHaveBeenCalledWith({ method: 'upi' });
+    // Both opt-ins fired: paying alone sets no flag the allocation batches read.
     expect(registerForAccommodation).toHaveBeenCalledTimes(1);
+    expect(registerForMess).toHaveBeenCalledTimes(1);
     const record = readStayRecord(PARTICIPANT_ID);
     expect(record?.receipt?.total).toBe(2100);
     expect(record?.receipt?.method).toBe('upi');
@@ -118,7 +123,7 @@ describe('StayPaymentPage', () => {
     expect(record?.receipt?.reference).toMatch(/^PDX-HOSTEL-[0-9A-F]+ · PDX-MESS-[0-9A-F]+$/);
   });
 
-  it('leaves the hostel queue alone, and calls only /mess/pay, for a mess-only booking', async () => {
+  it('leaves both queues alone, and calls only /mess/pay, for a mess-only booking — but still opts into the mess', async () => {
     pending('mess');
     renderPage();
 
@@ -128,12 +133,15 @@ describe('StayPaymentPage', () => {
     expect(payMess).toHaveBeenCalledWith({ method: 'upi' });
     expect(payHostel).not.toHaveBeenCalled();
     expect(registerForAccommodation).not.toHaveBeenCalled();
+    // The mess opt-in is the point of this booking: /mess/allocate filters on
+    // mess.registered, which nothing but POST /mess/register ever sets.
+    expect(registerForMess).toHaveBeenCalledTimes(1);
     const record = readStayRecord(PARTICIPANT_ID);
     expect(record?.receipt?.total).toBe(1200);
     expect(record?.receipt?.reference).toMatch(/^PDX-MESS-[0-9A-F]+$/);
   });
 
-  it('calls only /hostels/pay for an accommodation-only booking', async () => {
+  it('calls only /hostels/pay — and only the accommodation opt-in — for an accommodation-only booking', async () => {
     pending('accommodation');
     renderPage();
 
@@ -142,10 +150,11 @@ describe('StayPaymentPage', () => {
     expect(await screen.findByText('Stay hub')).toBeInTheDocument();
     expect(payHostel).toHaveBeenCalledWith({ method: 'upi' });
     expect(payMess).not.toHaveBeenCalled();
+    expect(registerForMess).not.toHaveBeenCalled();
     expect(readStayRecord(PARTICIPANT_ID)?.receipt?.reference).toMatch(/^PDX-HOSTEL-[0-9A-F]+$/);
   });
 
-  it('does not register for accommodation when the mess payment itself fails', async () => {
+  it('keeps the booking unpaid when the mess payment itself fails mid-way', async () => {
     pending('both');
     payMess.mockRejectedValue(new ApiClientError(503, 'Service unavailable'));
     renderPage();
@@ -153,7 +162,33 @@ describe('StayPaymentPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /Pay ₹2,100/ }));
 
     expect(await screen.findByText('Payment could not be completed')).toBeInTheDocument();
-    expect(registerForAccommodation).not.toHaveBeenCalled();
+    // The hostel half genuinely settled and opted in before the failure; the
+    // mess opt-in, which follows its payment, never ran.
+    expect(registerForAccommodation).toHaveBeenCalledTimes(1);
+    expect(registerForMess).not.toHaveBeenCalled();
+    expect(readStayRecord(PARTICIPANT_ID)?.receipt).toBeNull();
+  });
+
+  // Both 400 branches of POST /mess/register mean "you already have this".
+  it('treats an already-held meal plan as a settled booking, not a failure', async () => {
+    pending('mess');
+    registerForMess.mockRejectedValue(new ApiClientError(400, 'Mess already allotted'));
+    renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /Pay ₹1,200/ }));
+
+    expect(await screen.findByText('Stay hub')).toBeInTheDocument();
+    expect(readStayRecord(PARTICIPANT_ID)?.receipt?.total).toBe(1200);
+  });
+
+  it('keeps the booking unpaid when the mess opt-in call genuinely fails', async () => {
+    pending('mess');
+    registerForMess.mockRejectedValue(new ApiClientError(503, 'Service unavailable'));
+    renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /Pay ₹1,200/ }));
+
+    expect(await screen.findByText('Payment could not be completed')).toBeInTheDocument();
     expect(readStayRecord(PARTICIPANT_ID)?.receipt).toBeNull();
   });
 

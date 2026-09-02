@@ -143,6 +143,8 @@ export const realApi: ApiClient = {
     request(`/mess/${messId}/menu`, { method: 'PUT', body: JSON.stringify(req) }),
   allocateMess: () => request('/mess/allocate', { method: 'POST' }),
   myMess: () => request('/mess/my_mess'),
+  registerForMess: () => request('/mess/register', { method: 'POST' }),
+  cancelMessRequest: () => request('/mess/register', { method: 'DELETE' }),
   payMess: (req: MockPaymentRequest) =>
     request('/mess/pay', { method: 'POST', body: JSON.stringify(req) }),
   scanMess: (messId, slot, day, body: ScanQRRequest) =>

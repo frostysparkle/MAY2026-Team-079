@@ -123,6 +123,10 @@ export interface ApiClient {
   updateMessMenu(messId: string, req: MessMenuRequest): Promise<MessageResponse>;
   allocateMess(): Promise<MessageResponse>;
   myMess(): Promise<MyMessResponse>;
+  /** Ask for a meal plan. Idempotent; refused once a hall is allotted. */
+  registerForMess(): Promise<MessageResponse>;
+  /** Withdraw a pending meal plan request. Refused once one is allotted. */
+  cancelMessRequest(): Promise<MessageResponse>;
   /**
    * Mock-settle the fixed mess fee. Independent of `mess.registered`/
    * `mess_id` — this only records that the fee was paid, in any order relative
