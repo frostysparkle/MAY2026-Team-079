@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
 import type {
+  BackendTeamDepartment,
   Event,
   PrizeMoney,
   RegistrationField,
@@ -105,7 +106,7 @@ export default function AdminEventEditorPage() {
 
   // Basics. No `id` field: `POST /events` mints the event id itself.
   const [name, setName] = useState('');
-  const [eventType, setEventType] = useState('technical');
+  const [eventType, setEventType] = useState<BackendTeamDepartment | 'others'>('technical');
   const [description, setDescription] = useState('');
   const [poster, setPoster] = useState('');
 
@@ -174,7 +175,7 @@ export default function AdminEventEditorPage() {
       const window = readRegistrationWindow(event.registration);
 
       setName(event.name);
-      setEventType(event.event_type);
+      setEventType(event.event_type as typeof eventType);
       setDescription(event.description);
       setPoster(event.poster ?? '');
       setTeamMin(event.team?.min ?? 1);
@@ -352,7 +353,7 @@ export default function AdminEventEditorPage() {
             <Select
               label="Category"
               value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
+              onChange={(e) => setEventType(e.target.value as typeof eventType)}
               options={EVENT_TYPES}
             />
             <TextInput
