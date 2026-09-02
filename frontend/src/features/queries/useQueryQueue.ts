@@ -35,6 +35,26 @@ async function settled<T>(promise: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+/**
+ * Whether a failed queue load is "you have no desk here" rather than "the
+ * screen is broken". `GET /queries` hard-refuses staff outside the query team
+ * and Super Admins (`403 Not authorized to access queries`) — there is no
+ * per-entity scope left to fall back to an empty result with, by explicit
+ * backend decision. An event-team volunteer is on nobody's query team, so every
+ * visit to Support showed them a red "Could not load the queue" for a queue
+ * they can never be part of; the same red state is correct for a genuine
+ * outage, and the two are only distinguishable by the status code. A 403 means
+ * the empty shelf, not the outage.
+ */
+async function settledQueries(): Promise<QueryRecord[]> {
+  try {
+    return await api.listQueries();
+  } catch (e) {
+    if (e instanceof ApiClientError && e.status === 403) return [];
+    throw e;
+  }
+}
+
 interface Loaded {
   queries: QueryRecord[];
   events: Event[];
@@ -58,7 +78,7 @@ export function useQueryQueue(): QueryQueueState {
 
     void (async () => {
       try {
-        const queries = await api.listQueries();
+        const queries = await settledQueries();
         const [events, workshops, hostels, messHalls] = await Promise.all([
           settled(api.listEvents(), [] as Event[]),
           settled(api.listWorkshops(), [] as Workshop[]),

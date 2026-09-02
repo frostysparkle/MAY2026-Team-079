@@ -279,6 +279,21 @@ describe('StaffSupportPage', () => {
       expect(await screen.findByText('Nothing waiting on you')).toBeInTheDocument();
     });
 
+    /**
+     * `GET /queries` refuses staff outside the query team outright — there is no
+     * per-entity scope to fall back to — and an event-team volunteer is on
+     * nobody's query team, so every visit to Support showed them a red "Could
+     * not load the queue" for a queue they can never be part of. The refusal is
+     * the backend's way of saying "not your desk", which is the same answer the
+     * empty state gives: both mean nothing is waiting on you.
+     */
+    it('reads the query-team 403 as an empty queue, not an error', async () => {
+      const { ApiClientError } = await import('@/api');
+      listQueries.mockRejectedValue(new ApiClientError(403, 'Not authorized to access queries'));
+      renderPage();
+      expect(await screen.findByText('Nothing waiting on you')).toBeInTheDocument();
+    });
+
     it('shows a query with who asked it and what it is about', async () => {
       renderPage();
       expect(await screen.findByText('Can I check in a day early?')).toBeInTheDocument();

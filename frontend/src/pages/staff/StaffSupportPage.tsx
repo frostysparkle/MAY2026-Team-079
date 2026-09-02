@@ -50,12 +50,15 @@ import type { StaffSupportTab } from '@/config/routes';
  * a reply in a `QueryThread`, a note on a `DutyIssueCard` — and both stay mounted,
  * because tabs are a change of view where two routes were a remount.
  *
- * **Both tabs are always offered.** An event-team volunteer has queries and can
- * never have faults, so their Faults tab is empty; it still appears, because
- * hiding it would mean deriving team membership in the browser from the catalogue
- * team arrays, which is a second implementation of a rule only the server can
- * mean. `GET /issues` answers an empty list rather than a 403 for exactly this
- * case, and the panel's empty state says so plainly.
+ * **Both tabs are always offered.** An event-team volunteer usually has no
+ * queries *and* no faults — neither queue is theirs — so both tabs show their
+ * empty state; they still appear, because hiding them would mean deriving team
+ * membership in the browser from the catalogue team arrays, which is a second
+ * implementation of a rule only the server can mean. `GET /issues` answers an
+ * empty list rather than a 403 for this case, and the panel's empty state says
+ * so plainly. `GET /queries` refuses instead (there is no per-entity scope to
+ * fall back to), so `useQueryQueue` maps that 403 to the same empty queue —
+ * the shelves stay honest without the screen reading as broken.
  *
  * **The two rows stay different.** A fault carries the reporter's phone and a Call
  * link; a query carries no number, by an explicit backend decision. The lifecycles
