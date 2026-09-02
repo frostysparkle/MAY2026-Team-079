@@ -80,6 +80,24 @@ export const useAuthStore = create<AuthState>()(
   ),
 );
 
+// Keep every open tab on the same session. The API client reads its bearer token
+// straight from `localStorage` (`pc_token`), while the route guards read this
+// store — and without this listener those two disagree the moment a second tab
+// signs somebody else in. Concretely: a Super Admin leaves the event editor open
+// in one tab, signs in as an event volunteer in another to check their dashboard,
+// comes back and clicks "Create and assign" — the page still *renders* as Super
+// Admin, but the request carries the volunteer's token and the backend answers
+// `403 Only Super Admins can manage backend teams`. Rehydrating on the storage
+// event makes the first tab adopt the volunteer session immediately, so the guard
+// bounces the admin route to Access Denied instead of firing doomed requests.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'pc_auth_v2' && e.newValue !== e.oldValue) {
+      void useAuthStore.persist.rehydrate();
+    }
+  });
+}
+
 /* -------- selectors / helpers (kept outside components for reuse) -------- */
 
 export function isAuthenticated(): boolean {
