@@ -40,6 +40,24 @@ HOUSES = (
     "Namdapha", "Nilgiri", "Pichavaram", "Saranda", "Sundarbans", "Wayanad",
 )
 
+#: The profile dropdown labels each house as "Bandipur House" because that is
+#: how students know them. The wire value and the stored value are the bare
+#: name. Accept the labelled form here so a first-time complete-profile submit
+#: that sends the option text (or an older client that used the label as the
+#: value) is stored canonically instead of 422ing with a list of bare names
+#: that do not appear in the dropdown.
+_HOUSE_LABEL_SUFFIX = " House"
+
+
+def canonical_house(value: str) -> str:
+    if value in HOUSES:
+        return value
+    if value.endswith(_HOUSE_LABEL_SUFFIX):
+        bare = value[: -len(_HOUSE_LABEL_SUFFIX)]
+        if bare in HOUSES:
+            return bare
+    raise ValueError(f"house must be one of {sorted(HOUSES)}")
+
 # Strict binary — no "other" bucket.
 GENDERS = ("male", "female")
 
@@ -87,9 +105,7 @@ class ProfileCompleteRequest(BaseModel):
     @field_validator("house")
     @classmethod
     def _valid_house(cls, v):
-        if v not in HOUSES:
-            raise ValueError(f"house must be one of {sorted(HOUSES)}")
-        return v
+        return canonical_house(v)
 
     @field_validator("gender")
     @classmethod
@@ -580,9 +596,9 @@ class ParticipantAdminUpdateRequest(BaseModel):
     @field_validator("house")
     @classmethod
     def _valid_house(cls, v):
-        if v is not None and v not in HOUSES:
-            raise ValueError(f"house must be one of {sorted(HOUSES)}")
-        return v
+        if v is None:
+            return v
+        return canonical_house(v)
 
     @field_validator("gender")
     @classmethod

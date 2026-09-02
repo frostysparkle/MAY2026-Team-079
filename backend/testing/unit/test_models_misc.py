@@ -51,6 +51,10 @@ def test_every_house_is_accepted(house):
     assert ParticipantAdminUpdateRequest(house=house).house == house
 
 
+def test_labelled_house_is_stored_bare():
+    assert ParticipantAdminUpdateRequest(house="Wayanad House").house == "Wayanad"
+
+
 @pytest.mark.parametrize(
     "field,bad_value,message",
     [

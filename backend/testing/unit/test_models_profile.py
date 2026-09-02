@@ -167,11 +167,18 @@ def test_every_core_profile_field_is_required(field):
         ProfileCompleteRequest(**payload)
 
 
-@pytest.mark.parametrize("house", ["Hogwarts", "bandipur", "Bandipur House", ""])
+@pytest.mark.parametrize("house", ["Hogwarts", "bandipur", ""])
 def test_house_must_come_from_the_closed_set(house):
     with pytest.raises(ValidationError) as excinfo:
         ProfileCompleteRequest(**{**VALID_PROFILE, "house": house})
     assert "house must be one of" in str(excinfo.value)
+
+
+def test_labelled_house_is_stored_bare():
+    # The complete-profile dropdown labels each house "Bandipur House". A submit
+    # that sends the label (the option text) must still save, as the bare name.
+    request = ProfileCompleteRequest(**{**VALID_PROFILE, "house": "Bandipur House"})
+    assert request.house == "Bandipur"
 
 
 @pytest.mark.parametrize("gender", ["Male", "other", "unspecified", ""])

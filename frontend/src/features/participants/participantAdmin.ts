@@ -1,5 +1,5 @@
 import type { Hostel, ParticipantAdminUpdateRequest, ParticipantRecord } from '@/api/types';
-import { HOUSES } from '@/config/houses';
+import { HOUSES, bareHouse } from '@/config/houses';
 
 /**
  * Editing somebody else's record — Story 7.3, the pure half.
@@ -76,7 +76,8 @@ export function formFrom(participant: ParticipantRecord): ParticipantForm {
   const form: ParticipantForm = {};
   for (const field of EDITABLE_FIELDS) {
     const value = (profile as Record<string, unknown>)[field.key];
-    form[field.key] = typeof value === 'string' ? value : '';
+    const asString = typeof value === 'string' ? value : '';
+    form[field.key] = field.key === 'house' ? bareHouse(asString) : asString;
   }
   return form;
 }

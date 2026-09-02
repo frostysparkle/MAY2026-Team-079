@@ -16,7 +16,7 @@ import { api, ApiClientError } from '@/api';
 import type { EmergencyContact, ProfileCompleteRequest } from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { GENDER_OPTIONS, PROGRAMS, COURSE_STAGES } from '@/config/constants';
-import { HOUSE_OPTIONS } from '@/config/houses';
+import { HOUSE_OPTIONS, bareHouse } from '@/config/houses';
 import { useAuthStore, currentParticipant } from '@/stores/authStore';
 import { postLoginRoute } from '@/features/auth/postLoginRoute';
 import { AuthLayout } from '@/features/auth/AuthLayout';
@@ -472,7 +472,7 @@ export default function CompleteProfilePage() {
     defaultValues: {
       full_name: participant?.full_name ?? '',
       dob: participant?.dob ?? '',
-      house: participant?.house ?? '',
+      house: bareHouse(participant?.house ?? ''),
       gender: participant?.gender ?? '',
       phone: participant?.phone ?? '',
       address: participant?.address ?? '',
@@ -543,7 +543,7 @@ export default function CompleteProfilePage() {
     const payload: ProfileCompleteRequest = {
       full_name: formValues.full_name.trim(),
       dob: formValues.dob,
-      house: formValues.house,
+      house: bareHouse(formValues.house),
       gender: formValues.gender,
       phone: formValues.phone.trim(),
       // Carried through untouched, like the emergency contact below: this screen
