@@ -954,6 +954,26 @@ export interface BackendTeamMember {
   updated_at?: string;
 }
 
+/**
+ * The closed department vocabulary `POST /backend_teams` accepts — the frontend
+ * mirror of `models.BACKEND_TEAM_DEPARTMENTS` in `backend/models.py`. Values are
+ * lowercase and singular and deliberately overlap `event_type`, which is what
+ * lets the participation route authorise a departmental admin against an
+ * event's own category. There is no "events" value: an account created for an
+ * event carries that event's category (see `departmentForEvent`).
+ */
+export const BACKEND_TEAM_DEPARTMENTS = [
+  'technical',
+  'sports',
+  'culturals',
+  'uhc',
+  'hostels',
+  'mess',
+  'workshops',
+] as const;
+
+export type BackendTeamDepartment = (typeof BACKEND_TEAM_DEPARTMENTS)[number];
+
 export interface BackendTeamCreateRequest {
   email: string;
   password: string;

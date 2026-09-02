@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api, ApiClientError } from '@/api';
-import type { Event, PrizeMoney, RegistrationField, ScheduleRound } from '@/api/types';
+import type {
+  Event,
+  PrizeMoney,
+  RegistrationField,
+  ScheduleRound,
+} from '@/api/types';
 import { ROUTES } from '@/config/routes';
 import { FestivalScreen } from '@/components/layout/FestivalScreen';
 import {
@@ -692,6 +697,7 @@ export default function AdminEventEditorPage() {
           <EventTeamPanel
             eventId={eventId}
             team={record?.event_team}
+            eventType={record?.event_type}
             canManage
             onChanged={refreshRecord}
           />

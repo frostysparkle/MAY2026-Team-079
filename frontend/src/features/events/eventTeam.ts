@@ -15,6 +15,8 @@
  * way there is on messes, blocks, and workshops.
  */
 
+import type { BackendTeamDepartment } from '@/api/types';
+
 export const EVENT_HEAD_ROLE = 'event_head';
 /**
  * The backend's vocabulary is `event_head` | `member` | `volunteer`
@@ -46,6 +48,35 @@ export const EVENT_TEAM_ROLES: { value: EventTeamRole; label: string; blurb: str
     blurb: 'Works the gate: scans attendance for this event.',
   },
 ];
+
+/**
+ * Departments an event's staff account can carry.
+ *
+ * `POST /backend_teams` validates `department` against the closed set in
+ * `models.BACKEND_TEAM_DEPARTMENTS` — there is no "events" value, and a
+ * department is not optional, so a new account minted for this event must name
+ * one. "uhc" is the Upper House Council's own desk and "hostels"/"mess"/
+ * "workshops" belong to their own team panels, leaving the three categories an
+ * event can actually have. Event 22's creator hit exactly this: the panel used
+ * to post `"events"`, which the backend refuses with a 422 naming the whole
+ * accepted set (`Input should be 'technical', 'sports', …`).
+ */
+export const EVENT_STAFF_DEPARTMENTS = ['technical', 'sports', 'culturals'] as const;
+
+/**
+ * The department to write on a staff account created for this event.
+ *
+ * The backend compares `backend_teams.department` straight against the event's
+ * `event_type` (`GET /events/{id}/participation` authorises a departmental
+ * admin that way), and the paradox_id prefix encodes it ("ADSP…" for an admin
+ * in sports), so the account should carry the event's own category. An
+ * "others" event has no matching department — that value exists only on
+ * `event_type` — so those fall back to "technical", the same default the event
+ * editor's own category dropdown opens on.
+ */
+export function departmentForEvent(eventType: string | undefined): BackendTeamDepartment {
+  return EVENT_STAFF_DEPARTMENTS.find((dept) => dept === eventType) ?? 'technical';
+}
 
 /** `event_head` → `Event Head`. An unknown role is shown as stored. */
 export function eventTeamRoleLabel(role: string | undefined): string {

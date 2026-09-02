@@ -16,6 +16,7 @@ import { cn } from '@/lib/cn';
 import {
   EVENT_TEAM_ROLES,
   EVENT_VOLUNTEER_ROLE,
+  departmentForEvent,
   eventTeamRoleLabel,
   isEventHeadRole,
   type EventTeamRole,
@@ -62,6 +63,7 @@ import {
 export function EventTeamPanel({
   eventId,
   team,
+  eventType,
   canManage,
   onChanged,
 }: {
@@ -73,6 +75,8 @@ export function EventTeamPanel({
    * `{ user_id, role }`.
    */
   team: EventTeamMember[] | undefined;
+  /** The event's `event_type`, used to pick a valid `department` for new staff accounts. */
+  eventType?: string;
   canManage: boolean;
   onChanged: () => void;
 }) {
@@ -194,7 +198,16 @@ export function EventTeamPanel({
         // on `event_team`, not from their account role, so minting a
         // `super_admin` here would hand out far more than this panel is for.
         role: 'volunteer',
-        department: 'events',
+        // `POST /backend_teams` validates `department` against the closed set in
+        // `models.BACKEND_TEAM_DEPARTMENTS`, and "events" is not one of the seven
+        // allowed values — so every "Create and assign" from this panel failed
+        // with `422 Input should be 'technical', 'sports', …` and no event head
+        // or volunteer could ever be created. Use the event's own category (the
+        // participation route compares a staff account's department directly
+        // against `event.event_type`, and the paradox_id prefix encodes it),
+        // falling back to "technical" for "others" events, which have no matching
+        // department. Mirrors `WorkshopTeamPanel`, which posts "workshops".
+        department: departmentForEvent(eventType),
         // Derived from the role dropdown rather than collected separately. This
         // used to be a free-text "Designation on record" box sitting directly
         // under that dropdown, pre-filled with this same label — two fields whose
