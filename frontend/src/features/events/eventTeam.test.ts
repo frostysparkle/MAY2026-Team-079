@@ -1,6 +1,7 @@
 import {
   EVENT_HEAD_ROLE,
   EVENT_VOLUNTEER_ROLE,
+  departmentForEvent,
   eventHeads,
   eventTeamRoleLabel,
   eventTeamRoleOf,
@@ -64,6 +65,25 @@ describe('eventTeamRoleLabel', () => {
     // The backend stores `role` unvalidated, so an unknown value must still read.
     expect(eventTeamRoleLabel('stage_manager')).toBe('stage manager');
     expect(eventTeamRoleLabel(undefined)).toBe('Team member');
+  });
+});
+
+describe('departmentForEvent', () => {
+  it('maps each event category onto its matching backend department', () => {
+    expect(departmentForEvent('technical')).toBe('technical');
+    expect(departmentForEvent('sports')).toBe('sports');
+    expect(departmentForEvent('culturals')).toBe('culturals');
+  });
+
+  it('falls back to technical for "others", which has no matching department', () => {
+    // `POST /backend_teams` validates department against a closed set with no
+    // "others" (and no "events") value — the panel used to post "events" and
+    // every new event head or volunteer 422ed on it.
+    expect(departmentForEvent('others')).toBe('technical');
+  });
+
+  it('tolerates a missing event type', () => {
+    expect(departmentForEvent(undefined)).toBe('technical');
   });
 });
 

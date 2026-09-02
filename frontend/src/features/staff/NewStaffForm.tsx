@@ -59,7 +59,7 @@ export function NewStaffForm({
           label="Department"
           value={department}
           onChange={(e) => setDepartment(e.target.value)}
-          hint="technicals, sports, culturals, or UpperHouseCouncil"
+          hint="technical, sports, culturals, uhc, hostels, mess, or workshops"
         />
         <TextInput
           label="Designation"
